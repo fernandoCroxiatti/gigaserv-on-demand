@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
 import { MapPin, Navigation, Clock, DollarSign, X, Check } from 'lucide-react';
+import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest } = useApp();
@@ -26,6 +27,9 @@ export function IncomingRequestCard() {
 
   if (!incomingRequest) return null;
 
+  const serviceConfig = SERVICE_CONFIG[incomingRequest.tipoServico];
+  const hasDestination = incomingRequest.destino !== null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none">
       {/* Backdrop */}
@@ -47,12 +51,17 @@ export function IncomingRequestCard() {
         {/* Header */}
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-provider-primary/10 rounded-full flex items-center justify-center">
-              <Bell className="w-5 h-5 text-provider-primary animate-bounce" />
+            <div className="w-12 h-12 bg-provider-primary/10 rounded-full flex items-center justify-center">
+              <span className="text-2xl">{serviceConfig.icon}</span>
             </div>
             <div>
               <h3 className="font-semibold">Novo chamado!</h3>
-              <p className="text-sm text-muted-foreground">Responda em {timeLeft}s</p>
+              <div className="flex items-center gap-2">
+                <span className="status-badge bg-provider-primary/10 text-provider-primary text-xs">
+                  {serviceConfig.label}
+                </span>
+                <span className="text-sm text-muted-foreground">• {timeLeft}s</span>
+              </div>
             </div>
           </div>
           <button 
@@ -68,18 +77,26 @@ export function IncomingRequestCard() {
           <div className="flex items-start gap-3">
             <div className="flex flex-col items-center gap-1">
               <div className="w-3 h-3 bg-provider-primary rounded-full" />
-              <div className="w-0.5 h-12 bg-border" />
-              <div className="w-3 h-3 bg-foreground rounded-full" />
+              {hasDestination && (
+                <>
+                  <div className="w-0.5 h-12 bg-border" />
+                  <div className="w-3 h-3 bg-foreground rounded-full" />
+                </>
+              )}
             </div>
             <div className="flex-1 space-y-4">
               <div>
-                <p className="text-xs text-muted-foreground">Origem</p>
+                <p className="text-xs text-muted-foreground">
+                  {hasDestination ? 'Buscar veículo em' : 'Atender em'}
+                </p>
                 <p className="font-medium">{incomingRequest.origem.address}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Destino</p>
-                <p className="font-medium">{incomingRequest.destino.address}</p>
-              </div>
+              {hasDestination && incomingRequest.destino && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Levar até</p>
+                  <p className="font-medium">{incomingRequest.destino.address}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -89,12 +106,12 @@ export function IncomingRequestCard() {
           <div className="bg-secondary rounded-xl p-3 text-center">
             <Navigation className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
             <p className="font-semibold">3.5 km</p>
-            <p className="text-xs text-muted-foreground">Distância</p>
+            <p className="text-xs text-muted-foreground">Até cliente</p>
           </div>
           <div className="bg-secondary rounded-xl p-3 text-center">
             <Clock className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="font-semibold">~15 min</p>
-            <p className="text-xs text-muted-foreground">Duração</p>
+            <p className="font-semibold">{serviceConfig.estimatedTime}</p>
+            <p className="text-xs text-muted-foreground">Estimado</p>
           </div>
           <div className="bg-secondary rounded-xl p-3 text-center">
             <DollarSign className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
@@ -102,6 +119,18 @@ export function IncomingRequestCard() {
             <p className="text-xs text-muted-foreground">Valor</p>
           </div>
         </div>
+
+        {/* Service type info */}
+        {!hasDestination && (
+          <div className="px-4 pb-4">
+            <div className="flex items-center gap-2 p-3 bg-provider-primary/5 rounded-xl">
+              <Check className="w-4 h-4 text-provider-primary" />
+              <p className="text-sm text-muted-foreground">
+                Serviço no local - sem necessidade de reboque
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="p-4 pt-0 flex gap-3">
@@ -126,15 +155,5 @@ export function IncomingRequestCard() {
         </div>
       </div>
     </div>
-  );
-}
-
-// Bell icon component
-function Bell({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-    </svg>
   );
 }
