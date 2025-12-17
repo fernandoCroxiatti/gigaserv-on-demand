@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 
-type AuthMode = 'login' | 'register-client' | 'register-provider';
+type ProfileType = 'client' | 'provider';
+type AuthStep = 'select' | 'login' | 'register';
 
 function validateCPF(cpf: string): boolean {
   cpf = cpf.replace(/\D/g, '');
@@ -43,7 +44,8 @@ function formatCPF(value: string): string {
 
 export default function Auth() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<AuthMode>('login');
+  const [step, setStep] = useState<AuthStep>('select');
+  const [profileType, setProfileType] = useState<ProfileType>('client');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
@@ -55,6 +57,24 @@ export default function Auth() {
   const getEmailFromPhone = (phone: string) => {
     const digits = phone.replace(/\D/g, '');
     return `${digits}@gigasos.app`;
+  };
+
+  const handleSelectProfile = (type: ProfileType) => {
+    setProfileType(type);
+    setStep('login');
+    // Clear form
+    setPhone('');
+    setPassword('');
+    setName('');
+    setCpf('');
+  };
+
+  const handleBack = () => {
+    if (step === 'register') {
+      setStep('login');
+    } else {
+      setStep('select');
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -100,7 +120,7 @@ export default function Auth() {
       return;
     }
 
-    if (mode === 'register-provider') {
+    if (profileType === 'provider') {
       if (!cpf) {
         toast({ title: 'Erro', description: 'CPF é obrigatório para prestadores', variant: 'destructive' });
         return;
@@ -114,7 +134,6 @@ export default function Auth() {
     setLoading(true);
     try {
       const email = getEmailFromPhone(phone);
-      const perfilPrincipal = mode === 'register-provider' ? 'provider' : 'client';
       
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -124,8 +143,8 @@ export default function Auth() {
           data: {
             name,
             phone: phone.replace(/\D/g, ''),
-            perfil_principal: perfilPrincipal,
-            cpf: mode === 'register-provider' ? cpf.replace(/\D/g, '') : null,
+            perfil_principal: profileType,
+            cpf: profileType === 'provider' ? cpf.replace(/\D/g, '') : null,
           },
         },
       });
@@ -139,10 +158,7 @@ export default function Auth() {
         return;
       }
 
-      // The profile and provider_data are automatically created by the trigger
-      // Just wait a moment for the trigger to complete
       if (data.user) {
-        // Small delay to ensure trigger has completed
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
@@ -154,6 +170,8 @@ export default function Auth() {
       setLoading(false);
     }
   };
+
+  const isProvider = profileType === 'provider';
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary flex flex-col">
@@ -167,152 +185,216 @@ export default function Auth() {
         <p className="text-muted-foreground text-sm">Serviços automotivos 24h</p>
       </div>
 
-      {/* Form */}
+      {/* Content */}
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <div className="bg-card rounded-3xl shadow-uber-lg p-6 space-y-6">
-            {/* Mode selector */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setMode('login')}
-                className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-                  mode === 'login'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-muted-foreground'
-                }`}
-              >
-                Entrar
-              </button>
-              <button
-                onClick={() => setMode('register-client')}
-                className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-                  mode === 'register-client'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-muted-foreground'
-                }`}
-              >
-                Cliente
-              </button>
-              <button
-                onClick={() => setMode('register-provider')}
-                className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-                  mode === 'register-provider'
-                    ? 'bg-provider-primary text-white'
-                    : 'bg-secondary text-muted-foreground'
-                }`}
-              >
-                Prestador
-              </button>
-            </div>
-
-            <form onSubmit={mode === 'login' ? handleLogin : handleRegister} className="space-y-4">
-              {/* Name (register only) */}
-              {mode !== 'login' && (
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome completo</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Seu nome"
-                      className="pl-10 h-12 rounded-xl"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Phone */}
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telefone</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(formatPhone(e.target.value))}
-                    placeholder="(11) 99999-9999"
-                    className="pl-10 h-12 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              {/* CPF (provider only) */}
-              {mode === 'register-provider' && (
-                <div className="space-y-2">
-                  <Label htmlFor="cpf">CPF</Label>
-                  <div className="relative">
-                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="cpf"
-                      type="text"
-                      value={cpf}
-                      onChange={(e) => setCpf(formatCPF(e.target.value))}
-                      placeholder="000.000.000-00"
-                      className="pl-10 h-12 rounded-xl"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Password */}
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === 'login' ? 'Sua senha' : 'Mínimo 6 caracteres'}
-                    className="pl-10 pr-10 h-12 rounded-xl"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-5 h-5 text-muted-foreground" />
-                    ) : (
-                      <Eye className="w-5 h-5 text-muted-foreground" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-12 rounded-xl"
-                variant={mode === 'register-provider' ? 'provider' : 'default'}
-              >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : mode === 'login' ? (
-                  'Entrar'
-                ) : mode === 'register-client' ? (
-                  'Cadastrar como Cliente'
-                ) : (
-                  'Cadastrar como Prestador'
-                )}
-              </Button>
-            </form>
-
-            {mode === 'login' && (
-              <p className="text-center text-sm text-muted-foreground">
-                Não tem conta?{' '}
-                <button
-                  onClick={() => setMode('register-client')}
-                  className="text-primary font-medium"
+            
+            {/* Step: Select Profile */}
+            {step === 'select' && (
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-center mb-6">Como deseja entrar?</h2>
+                
+                <Button
+                  onClick={() => handleSelectProfile('client')}
+                  className="w-full h-14 rounded-xl text-lg"
+                  variant="default"
                 >
-                  Cadastre-se
-                </button>
-              </p>
+                  Login Cliente
+                </Button>
+                
+                <Button
+                  onClick={() => handleSelectProfile('provider')}
+                  className="w-full h-14 rounded-xl text-lg"
+                  variant="provider"
+                >
+                  Login Prestador
+                </Button>
+              </div>
+            )}
+
+            {/* Step: Login */}
+            {step === 'login' && (
+              <>
+                <div className="flex items-center gap-3">
+                  <button onClick={handleBack} className="p-2 rounded-full hover:bg-secondary transition-colors">
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <h2 className="text-xl font-semibold">
+                    Login {isProvider ? 'Prestador' : 'Cliente'}
+                  </h2>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Telefone</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(formatPhone(e.target.value))}
+                        placeholder="(11) 99999-9999"
+                        className="pl-10 h-12 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Sua senha"
+                        className="pl-10 pr-10 h-12 rounded-xl"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-5 h-5 text-muted-foreground" />
+                        ) : (
+                          <Eye className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-12 rounded-xl"
+                    variant={isProvider ? 'provider' : 'default'}
+                  >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Entrar'}
+                  </Button>
+                </form>
+
+                <p className="text-center text-sm text-muted-foreground">
+                  Não tem conta?{' '}
+                  <button
+                    onClick={() => setStep('register')}
+                    className={`font-medium ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
+                  >
+                    Cadastre-se
+                  </button>
+                </p>
+              </>
+            )}
+
+            {/* Step: Register */}
+            {step === 'register' && (
+              <>
+                <div className="flex items-center gap-3">
+                  <button onClick={handleBack} className="p-2 rounded-full hover:bg-secondary transition-colors">
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <h2 className="text-xl font-semibold">
+                    Cadastro {isProvider ? 'Prestador' : 'Cliente'}
+                  </h2>
+                </div>
+
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome completo</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Seu nome"
+                        className="pl-10 h-12 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Telefone</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(formatPhone(e.target.value))}
+                        placeholder="(11) 99999-9999"
+                        className="pl-10 h-12 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  {isProvider && (
+                    <div className="space-y-2">
+                      <Label htmlFor="cpf">CPF</Label>
+                      <div className="relative">
+                        <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <Input
+                          id="cpf"
+                          type="text"
+                          value={cpf}
+                          onChange={(e) => setCpf(formatCPF(e.target.value))}
+                          placeholder="000.000.000-00"
+                          className="pl-10 h-12 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Mínimo 6 caracteres"
+                        className="pl-10 pr-10 h-12 rounded-xl"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-5 h-5 text-muted-foreground" />
+                        ) : (
+                          <Eye className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-12 rounded-xl"
+                    variant={isProvider ? 'provider' : 'default'}
+                  >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Cadastrar'}
+                  </Button>
+                </form>
+
+                <p className="text-center text-sm text-muted-foreground">
+                  Já tem conta?{' '}
+                  <button
+                    onClick={() => setStep('login')}
+                    className={`font-medium ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
+                  >
+                    Faça login
+                  </button>
+                </p>
+              </>
             )}
           </div>
         </div>
