@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Database } from '@/integrations/supabase/types';
+import { isChamadoWithinRange } from '@/lib/distance';
 
 type DbChamado = Database['public']['Tables']['chamados']['Row'];
 type DbProfile = Database['public']['Tables']['profiles']['Row'];
@@ -356,6 +357,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // CRITICAL: Only listen if user is a registered provider AND active as provider
     if (!authUser || !canAccessProviderFeatures || profile?.active_profile !== 'provider' || !providerData?.is_online || chamado) return;
 
+    // Check for existing searching chamados when provider goes online
+    const checkExistingChamados = async () => {
+      console.log('[Chamados] Checking for existing searching chamados...');
+      
+      const { data: searchingChamados, error } = await supabase
+        .from('chamados')
+        .select('*')
+        .eq('status', 'searching')
+        .is('prestador_id', null);
+
+      if (error) {
+        console.error('[Chamados] Error checking existing chamados:', error);
+        return;
+      }
+
+      if (searchingChamados && searchingChamados.length > 0) {
+        const services = providerData.services_offered || ['guincho'];
+        const radarRange = providerData.radar_range || 15;
+        const providerLat = providerData.current_lat ? Number(providerData.current_lat) : null;
+        const providerLng = providerData.current_lng ? Number(providerData.current_lng) : null;
+
+        console.log(`[Chamados] Found ${searchingChamados.length} searching chamados, checking distance...`);
+
+        for (const dbChamado of searchingChamados) {
+          const chamadoData = mapDbChamadoToChamado(dbChamado);
+          
+          // Check if provider offers this service
+          if (!services.includes(chamadoData.tipoServico)) {
+            console.log(`[Chamados] Skipping chamado ${chamadoData.id}: service ${chamadoData.tipoServico} not offered`);
+            continue;
+          }
+
+          // Check if chamado is within radar range
+          const isWithinRange = isChamadoWithinRange(
+            providerLat,
+            providerLng,
+            chamadoData.origem.lat,
+            chamadoData.origem.lng,
+            radarRange
+          );
+
+          if (isWithinRange) {
+            console.log(`[Chamados] Found chamado within range: ${chamadoData.id}`);
+            setIncomingRequest(chamadoData);
+            toast.info('Novo chamado disponível!', {
+              description: 'Um cliente está procurando atendimento.',
+            });
+            break; // Show one chamado at a time
+          }
+        }
+      }
+    };
+
+    checkExistingChamados();
+
     const channel = supabase
       .channel('incoming-chamados')
       .on(
@@ -370,8 +426,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const newChamado = mapDbChamadoToChamado(payload.new as DbChamado);
           
           const services = providerData.services_offered || ['guincho'];
-          if (services.includes(newChamado.tipoServico)) {
+          const radarRange = providerData.radar_range || 15;
+          const providerLat = providerData.current_lat ? Number(providerData.current_lat) : null;
+          const providerLng = providerData.current_lng ? Number(providerData.current_lng) : null;
+
+          // Check if provider offers this service
+          if (!services.includes(newChamado.tipoServico)) {
+            console.log(`[Chamados] New chamado ${newChamado.id}: service ${newChamado.tipoServico} not offered`);
+            return;
+          }
+
+          // Check if chamado is within radar range
+          const isWithinRange = isChamadoWithinRange(
+            providerLat,
+            providerLng,
+            newChamado.origem.lat,
+            newChamado.origem.lng,
+            radarRange
+          );
+
+          if (isWithinRange) {
+            console.log(`[Chamados] New chamado within range: ${newChamado.id}`);
             setIncomingRequest(newChamado);
+            toast.info('Novo chamado!', {
+              description: 'Um cliente próximo precisa de ajuda.',
+            });
+          } else {
+            console.log(`[Chamados] New chamado ${newChamado.id} is outside radar range`);
           }
         }
       )
@@ -380,7 +461,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, canAccessProviderFeatures, profile?.active_profile, providerData?.is_online, providerData?.services_offered, chamado]);
+  }, [authUser, canAccessProviderFeatures, profile?.active_profile, providerData?.is_online, providerData?.services_offered, providerData?.radar_range, providerData?.current_lat, providerData?.current_lng, chamado]);
 
   const setActiveProfile = useCallback(async (newProfile: UserProfile) => {
     if (!authUser || !profile) return;
