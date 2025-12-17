@@ -1,5 +1,18 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Chamado, ChamadoStatus, User, UserProfile, Provider, Location, ChatMessage } from '@/types/chamado';
+import { 
+  Chamado, 
+  ChamadoStatus, 
+  User, 
+  UserProfile, 
+  Provider, 
+  Location, 
+  ChatMessage,
+  Payment,
+  PaymentMethod,
+  createMockPayment,
+  approveMockPayment
+} from '@/types/chamado';
+import { toast } from 'sonner';
 
 interface AppContextType {
   // User state
@@ -15,6 +28,10 @@ interface AppContextType {
   confirmValue: () => void;
   cancelChamado: () => void;
   finishService: () => void;
+  
+  // Payment methods
+  initiatePayment: (method: PaymentMethod) => void;
+  processPayment: () => void;
   
   // Provider state
   availableProviders: Provider[];
@@ -119,6 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           destino: { lat: -23.5615, lng: -46.6543, address: 'Shopping Ibirapuera, São Paulo' },
           valor: null,
           valorProposto: null,
+          payment: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -149,10 +167,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       destino,
       valor: null,
       valorProposto: null,
+      payment: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     setChamado(newChamado);
+    toast.info('Buscando prestadores na sua região...');
     
     // Simulate provider accepting after 3 seconds
     setTimeout(() => {
@@ -162,6 +182,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         prestadorId: 'provider-1',
         updatedAt: new Date(),
       } : null);
+      toast.success('Um prestador aceitou seu chamado!');
     }, 3000);
   }, [user.id]);
 
@@ -190,15 +211,63 @@ export function AppProvider({ children }: { children: ReactNode }) {
       timestamp: new Date(),
     };
     setChatMessages(prev => [...prev, msg]);
+    toast.info(`Valor de R$ ${value.toFixed(2)} proposto`);
   }, [user.id, user.activeProfile]);
 
+  // Confirm value and move to awaiting_payment
   const confirmValue = useCallback(() => {
+    if (!chamado?.valorProposto) {
+      toast.error('Nenhum valor proposto');
+      return;
+    }
+
+    // Create payment object prepared for future Stripe integration
+    const payment = createMockPayment(chamado.valorProposto, 'pix');
+
     setChamado(prev => prev ? {
       ...prev,
-      status: 'confirmed',
+      status: 'awaiting_payment',
       valor: prev.valorProposto,
+      payment,
       updatedAt: new Date(),
     } : null);
+
+    toast.success('Valor confirmado! Aguardando pagamento.');
+  }, [chamado?.valorProposto]);
+
+  // Initiate payment with selected method
+  const initiatePayment = useCallback((method: PaymentMethod) => {
+    setChamado(prev => {
+      if (!prev || !prev.payment) return prev;
+      return {
+        ...prev,
+        payment: {
+          ...prev.payment,
+          method,
+        },
+        updatedAt: new Date(),
+      };
+    });
+  }, []);
+
+  // Process payment (mock for now, ready for Stripe)
+  const processPayment = useCallback(() => {
+    setChamado(prev => {
+      if (!prev || !prev.payment) return prev;
+
+      // Simulate payment processing
+      // In the future, this would call Stripe API
+      const approvedPayment = approveMockPayment(prev.payment);
+
+      toast.success('Pagamento aprovado! Serviço iniciando...');
+
+      return {
+        ...prev,
+        status: 'in_service',
+        payment: approvedPayment,
+        updatedAt: new Date(),
+      };
+    });
   }, []);
 
   const cancelChamado = useCallback(() => {
@@ -208,6 +277,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date(),
     } : null);
     
+    toast.info('Chamado cancelado');
+
     setTimeout(() => {
       setChamado(null);
       setChatMessages([]);
@@ -221,10 +292,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date(),
     } : null);
     
+    toast.success('Serviço finalizado com sucesso!');
+
     setTimeout(() => {
       setChamado(null);
       setChatMessages([]);
-    }, 3000);
+    }, 5000);
   }, []);
 
   const toggleProviderOnline = useCallback(() => {
@@ -276,14 +349,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...incomingRequest,
         status: 'negotiating',
         prestadorId: user.id,
+        payment: null,
         updatedAt: new Date(),
       });
       setIncomingRequest(null);
+      toast.success('Chamado aceito! Inicie a negociação.');
     }
   }, [incomingRequest, user.id]);
 
   const declineIncomingRequest = useCallback(() => {
     setIncomingRequest(null);
+    toast.info('Chamado recusado');
   }, []);
 
   return (
@@ -298,6 +374,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirmValue,
       cancelChamado,
       finishService,
+      initiatePayment,
+      processPayment,
       availableProviders,
       toggleProviderOnline,
       setProviderRadarRange,

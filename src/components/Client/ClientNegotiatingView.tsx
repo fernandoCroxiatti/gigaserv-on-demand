@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Star, Send, Check, DollarSign, MessageCircle, User } from 'lucide-react';
+import { Star, Send, Check, DollarSign, MessageCircle, User, ArrowRight } from 'lucide-react';
 
 export function ClientNegotiatingView() {
   const { chamado, availableProviders, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
@@ -24,6 +24,11 @@ export function ClientNegotiatingView() {
     if (isNaN(value) || value <= 0) return;
     proposeValue(value);
     setProposedValue('');
+  };
+
+  const handleConfirmAndPay = () => {
+    if (!chamado.valorProposto) return;
+    confirmValue(); // This now moves to awaiting_payment
   };
 
   return (
@@ -125,7 +130,7 @@ export function ClientNegotiatingView() {
 
             {chamado.valorProposto && (
               <div className="mt-3 p-3 bg-primary/10 rounded-xl">
-                <p className="text-sm text-muted-foreground">Último valor proposto:</p>
+                <p className="text-sm text-muted-foreground">Valor acordado:</p>
                 <p className="text-2xl font-bold text-primary">
                   R$ {chamado.valorProposto.toFixed(2)}
                 </p>
@@ -156,12 +161,12 @@ export function ClientNegotiatingView() {
               Cancelar
             </Button>
             <Button 
-              onClick={confirmValue} 
+              onClick={handleConfirmAndPay} 
               disabled={!chamado.valorProposto}
               className="flex-1"
             >
-              <Check className="w-5 h-5" />
-              Confirmar valor
+              <ArrowRight className="w-5 h-5" />
+              Ir para pagamento
             </Button>
           </div>
         </div>

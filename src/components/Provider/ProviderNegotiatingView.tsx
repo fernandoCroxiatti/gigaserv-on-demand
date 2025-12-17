@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Send, DollarSign, MessageCircle, User, Navigation, Clock } from 'lucide-react';
+import { Send, DollarSign, MessageCircle, User, Navigation, Clock, ArrowRight } from 'lucide-react';
 
 export function ProviderNegotiatingView() {
   const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
@@ -22,6 +22,11 @@ export function ProviderNegotiatingView() {
     if (isNaN(value) || value <= 0) return;
     proposeValue(value);
     setProposedValue('');
+  };
+
+  const handleConfirmValue = () => {
+    if (!chamado.valorProposto) return;
+    confirmValue(); // This now moves to awaiting_payment
   };
 
   const suggestedValues = [50, 80, 100, 150];
@@ -147,7 +152,7 @@ export function ProviderNegotiatingView() {
 
             {chamado.valorProposto && (
               <div className="mt-3 p-3 bg-provider-primary/10 rounded-xl">
-                <p className="text-sm text-muted-foreground">Valor atual:</p>
+                <p className="text-sm text-muted-foreground">Valor acordado:</p>
                 <p className="text-2xl font-bold text-provider-primary">
                   R$ {chamado.valorProposto.toFixed(2)}
                 </p>
@@ -179,11 +184,12 @@ export function ProviderNegotiatingView() {
             </Button>
             <Button 
               variant="provider"
-              onClick={confirmValue} 
+              onClick={handleConfirmValue} 
               disabled={!chamado.valorProposto}
               className="flex-1"
             >
-              Confirmar e iniciar
+              <ArrowRight className="w-5 h-5" />
+              Confirmar valor
             </Button>
           </div>
         </div>
