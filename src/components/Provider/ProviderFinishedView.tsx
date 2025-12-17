@@ -1,12 +1,142 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { Check, DollarSign, Clock, Navigation, TrendingUp } from 'lucide-react';
+import { Check, DollarSign, Clock, Navigation, TrendingUp, Star, ThumbsUp, ThumbsDown, MessageCircle } from 'lucide-react';
+
+type FeedbackTag = 'educado' | 'comunicativo' | 'problematico';
 
 export function ProviderFinishedView() {
-  const { chamado, user } = useApp();
+  const { chamado, user, submitReview, resetChamado } = useApp();
+  const [showRating, setShowRating] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [feedback, setFeedback] = useState('');
+  const [selectedTags, setSelectedTags] = useState<FeedbackTag[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!chamado) return null;
+
+  const toggleTag = (tag: FeedbackTag) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    await submitReview(rating, selectedTags, feedback);
+    setIsSubmitting(false);
+  };
+
+  const handleBackToMap = () => {
+    if (showRating) {
+      resetChamado();
+    } else {
+      setShowRating(true);
+    }
+  };
+
+  if (showRating) {
+    return (
+      <div className="h-full bg-gradient-to-b from-provider-primary/10 to-background flex flex-col items-center justify-center p-6 provider-theme">
+        <div className="w-full max-w-md animate-scale-in">
+          {/* Title */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold mb-2">Avaliar cliente</h1>
+            <p className="text-muted-foreground">Como foi a experiência com este cliente?</p>
+          </div>
+
+          {/* Rating card */}
+          <div className="bg-card rounded-2xl shadow-uber p-6 mb-6">
+            {/* Rating stars */}
+            <div className="flex justify-center gap-2 mb-6">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setRating(star)}
+                  className="transition-transform hover:scale-110 active:scale-95"
+                >
+                  <Star 
+                    className={`w-10 h-10 ${
+                      star <= rating 
+                        ? 'text-provider-primary fill-current' 
+                        : 'text-muted'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+
+            {/* Quick feedback tags */}
+            <div className="flex justify-center gap-3 mb-6 flex-wrap">
+              <button 
+                onClick={() => toggleTag('educado')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                  selectedTags.includes('educado')
+                    ? 'bg-provider-primary text-white'
+                    : 'bg-secondary hover:bg-secondary/80'
+                }`}
+              >
+                <ThumbsUp className="w-4 h-4" />
+                Educado
+              </button>
+              <button 
+                onClick={() => toggleTag('comunicativo')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                  selectedTags.includes('comunicativo')
+                    ? 'bg-provider-primary text-white'
+                    : 'bg-secondary hover:bg-secondary/80'
+                }`}
+              >
+                <MessageCircle className="w-4 h-4" />
+                Comunicativo
+              </button>
+              <button 
+                onClick={() => toggleTag('problematico')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                  selectedTags.includes('problematico')
+                    ? 'bg-destructive text-destructive-foreground'
+                    : 'bg-secondary hover:bg-secondary/80'
+                }`}
+              >
+                <ThumbsDown className="w-4 h-4" />
+                Problemático
+              </button>
+            </div>
+
+            {/* Comment input */}
+            <textarea
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Deixe um comentário (opcional)"
+              className="w-full bg-secondary rounded-xl p-4 resize-none focus:outline-none focus:ring-2 focus:ring-provider-primary"
+              rows={3}
+            />
+          </div>
+
+          {/* Submit button */}
+          <Button 
+            variant="provider"
+            className="w-full" 
+            size="lg"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Enviando...' : 'Enviar avaliação'}
+          </Button>
+
+          <button 
+            className="w-full text-center text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors"
+            onClick={resetChamado}
+            disabled={isSubmitting}
+          >
+            Pular
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full bg-gradient-to-b from-provider-primary/10 to-background flex flex-col items-center justify-center p-6 provider-theme">
@@ -63,10 +193,17 @@ export function ProviderFinishedView() {
           </div>
         </div>
 
-        {/* Back button */}
-        <Button variant="provider" className="w-full" size="lg">
-          Voltar para o mapa
+        {/* Continue button */}
+        <Button variant="provider" className="w-full" size="lg" onClick={handleBackToMap}>
+          Avaliar cliente
         </Button>
+
+        <button 
+          className="w-full text-center text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors"
+          onClick={resetChamado}
+        >
+          Pular avaliação
+        </button>
       </div>
     </div>
   );
