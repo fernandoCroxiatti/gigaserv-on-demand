@@ -49,6 +49,7 @@ interface AppContextType {
   availableProviders: Provider[];
   toggleProviderOnline: () => Promise<void>;
   setProviderRadarRange: (range: number) => Promise<void>;
+  setProviderServices: (services: ServiceType[]) => Promise<void>;
   updateProviderLocation: (location: Location) => Promise<void>;
   
   chatMessages: ChatMessage[];
@@ -798,6 +799,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [authUser, canAccessProviderFeatures]);
 
+  const setProviderServices = useCallback(async (services: ServiceType[]) => {
+    if (!authUser || !canAccessProviderFeatures || services.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('provider_data')
+        .update({ services_offered: services })
+        .eq('user_id', authUser.id);
+
+      if (error) throw error;
+
+      setProviderData(prev => prev ? { ...prev, services_offered: services } : null);
+      toast.success('Serviços atualizados!');
+    } catch (error) {
+      console.error('Error setting services:', error);
+      toast.error('Erro ao atualizar serviços');
+    }
+  }, [authUser, canAccessProviderFeatures]);
+
   const updateProviderLocation = useCallback(async (location: Location) => {
     if (!authUser || !canAccessProviderFeatures) return;
 
@@ -871,6 +891,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       availableProviders,
       toggleProviderOnline,
       setProviderRadarRange,
+      setProviderServices,
       updateProviderLocation,
       chatMessages,
       sendChatMessage,
