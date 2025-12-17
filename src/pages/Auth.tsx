@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
+import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
 
 type ProfileType = 'client' | 'provider';
 type AuthStep = 'select' | 'login' | 'register';
+
+const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
 function validateCPF(cpf: string): boolean {
   cpf = cpf.replace(/\D/g, '');
@@ -53,6 +56,15 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [cpf, setCpf] = useState('');
+  const [selectedServices, setSelectedServices] = useState<ServiceType[]>(['guincho']);
+
+  const toggleService = (service: ServiceType) => {
+    setSelectedServices(prev => 
+      prev.includes(service)
+        ? prev.filter(s => s !== service)
+        : [...prev, service]
+    );
+  };
 
   const getEmailFromPhone = (phone: string) => {
     const digits = phone.replace(/\D/g, '');
@@ -62,11 +74,11 @@ export default function Auth() {
   const handleSelectProfile = (type: ProfileType) => {
     setProfileType(type);
     setStep('login');
-    // Clear form
     setPhone('');
     setPassword('');
     setName('');
     setCpf('');
+    setSelectedServices(['guincho']);
   };
 
   const handleBack = () => {
@@ -129,6 +141,10 @@ export default function Auth() {
         toast({ title: 'Erro', description: 'CPF inválido', variant: 'destructive' });
         return;
       }
+      if (selectedServices.length === 0) {
+        toast({ title: 'Erro', description: 'Selecione pelo menos um serviço', variant: 'destructive' });
+        return;
+      }
     }
 
     setLoading(true);
@@ -145,6 +161,7 @@ export default function Auth() {
             phone: phone.replace(/\D/g, ''),
             perfil_principal: profileType,
             cpf: profileType === 'provider' ? cpf.replace(/\D/g, '') : null,
+            services_offered: profileType === 'provider' ? selectedServices : null,
           },
         },
       });
@@ -390,20 +407,51 @@ export default function Auth() {
                   </div>
 
                   {isProvider && (
-                    <div className="space-y-2">
-                      <Label htmlFor="cpf" className="text-foreground">CPF</Label>
-                      <div className="relative">
-                        <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                          id="cpf"
-                          type="text"
-                          value={cpf}
-                          onChange={(e) => setCpf(formatCPF(e.target.value))}
-                          placeholder="000.000.000-00"
-                          className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
-                        />
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="cpf" className="text-foreground">CPF</Label>
+                        <div className="relative">
+                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <Input
+                            id="cpf"
+                            type="text"
+                            value={cpf}
+                            onChange={(e) => setCpf(formatCPF(e.target.value))}
+                            placeholder="000.000.000-00"
+                            className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                          />
+                        </div>
                       </div>
-                    </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-foreground">Serviços oferecidos</Label>
+                        <p className="text-xs text-muted-foreground">Selecione os serviços que você realiza</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {ALL_SERVICES.map((service) => {
+                            const config = SERVICE_CONFIG[service];
+                            const isSelected = selectedServices.includes(service);
+                            return (
+                              <button
+                                key={service}
+                                type="button"
+                                onClick={() => toggleService(service)}
+                                className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                                  isSelected 
+                                    ? 'border-provider-primary bg-provider-primary/10' 
+                                    : 'border-border bg-secondary/50 hover:border-provider-primary/50'
+                                }`}
+                              >
+                                <span className="text-lg">{config.icon}</span>
+                                <span className={`text-sm font-medium ${isSelected ? 'text-provider-primary' : 'text-foreground'}`}>
+                                  {config.label}
+                                </span>
+                                {isSelected && <Check className="w-4 h-4 ml-auto text-provider-primary" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
                   )}
 
                   <div className="space-y-2">
