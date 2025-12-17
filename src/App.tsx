@@ -8,6 +8,7 @@ import { GoogleMapsProvider } from "./components/Map/GoogleMapsProvider";
 import { useAuth } from "./hooks/useAuth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -78,6 +79,14 @@ const App = () => (
                   <PublicRoute>
                     <Auth />
                   </PublicRoute>
+                } 
+              />
+              <Route 
+                path="/profile" 
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
                 } 
               />
               <Route path="*" element={<NotFound />} />

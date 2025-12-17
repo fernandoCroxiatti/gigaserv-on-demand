@@ -1,21 +1,51 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { ProfileSwitch } from './ProfileSwitch';
-import { Menu, Bell } from 'lucide-react';
+import { Menu, Bell, User } from 'lucide-react';
 import { Button } from './ui/button';
+import { useNavigate } from 'react-router-dom';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import { useAuth } from '@/hooks/useAuth';
 
 export function Header() {
   const { user } = useApp();
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
   const isProvider = user?.activeProfile === 'provider';
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
 
   return (
     <header className="absolute top-0 left-0 right-0 z-50 p-4 pointer-events-none">
       <div className="flex items-center justify-between">
         {/* Logo and menu */}
         <div className="flex items-center gap-3 pointer-events-auto">
-          <Button variant="glass" size="icon" className="rounded-full">
-            <Menu className="w-5 h-5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="glass" size="icon" className="rounded-full">
+                <Menu className="w-5 h-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onClick={() => navigate('/profile')}>
+                <User className="w-4 h-4 mr-2" />
+                Minha Conta
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl glass-card ${
             isProvider ? 'provider-theme' : ''
           }`}>
