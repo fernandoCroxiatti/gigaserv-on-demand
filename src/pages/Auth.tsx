@@ -114,7 +114,7 @@ export default function Auth() {
     setLoading(true);
     try {
       const email = getEmailFromPhone(phone);
-      const profileType = mode === 'register-provider' ? 'provider' : 'client';
+      const perfilPrincipal = mode === 'register-provider' ? 'provider' : 'client';
       
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -124,7 +124,7 @@ export default function Auth() {
           data: {
             name,
             phone: phone.replace(/\D/g, ''),
-            profile_type: profileType,
+            perfil_principal: perfilPrincipal,
             cpf: mode === 'register-provider' ? cpf.replace(/\D/g, '') : null,
           },
         },
@@ -139,21 +139,11 @@ export default function Auth() {
         return;
       }
 
-      // Update profile with additional data
+      // The profile and provider_data are automatically created by the trigger
+      // Just wait a moment for the trigger to complete
       if (data.user) {
-        await supabase.from('profiles').update({
-          name,
-          phone: phone.replace(/\D/g, ''),
-          active_profile: profileType,
-        }).eq('user_id', data.user.id);
-
-        // Create provider data if registering as provider
-        if (mode === 'register-provider') {
-          await supabase.from('provider_data').insert({
-            user_id: data.user.id,
-            is_online: false,
-          });
-        }
+        // Small delay to ensure trigger has completed
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
       toast({ title: 'Sucesso', description: 'Cadastro realizado com sucesso!' });

@@ -25,6 +25,8 @@ interface AppContextType {
   user: User | null;
   profile: DbProfile | null;
   providerData: DbProviderData | null;
+  perfilPrincipal: 'client' | 'provider';
+  canAccessProviderFeatures: boolean;
   setActiveProfile: (profile: UserProfile) => void;
   isLoading: boolean;
   
@@ -109,6 +111,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [incomingRequest, setIncomingRequest] = useState<Chamado | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // CRITICAL: Determine if user can access provider features
+  const perfilPrincipal = (profile?.perfil_principal as 'client' | 'provider') || 'client';
+  const canAccessProviderFeatures = perfilPrincipal === 'provider';
+
   const user: User | null = profile ? {
     id: profile.user_id,
     name: profile.name,
@@ -116,7 +122,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     phone: profile.phone || '',
     avatar: profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.name}`,
     activeProfile: (profile.active_profile as UserProfile) || 'client',
-    providerData: providerData ? {
+    providerData: providerData && canAccessProviderFeatures ? {
       online: providerData.is_online || false,
       radarRange: providerData.radar_range || 15,
       rating: Number(providerData.rating) || 5.0,
@@ -145,14 +151,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (profileError) throw profileError;
         setProfile(profileData);
 
-        // Load provider data if exists
-        const { data: provData } = await supabase
-          .from('provider_data')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .maybeSingle();
+        // Only load provider data if user is a registered provider
+        if (profileData?.perfil_principal === 'provider') {
+          const { data: provData } = await supabase
+            .from('provider_data')
+            .select('*')
+            .eq('user_id', authUser.id)
+            .maybeSingle();
 
-        setProviderData(provData);
+          setProviderData(provData);
+        } else {
+          setProviderData(null);
+        }
       } catch (error) {
         console.error('Error loading profile:', error);
         toast.error('Erro ao carregar perfil');
@@ -171,7 +181,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const loadActiveChamado = async () => {
       const activeProfile = profile?.active_profile || 'client';
       
-      const query = activeProfile === 'client'
+      // Only query as provider if user has provider permissions
+      const query = activeProfile === 'client' || !canAccessProviderFeatures
         ? supabase.from('chamados').select('*').eq('cliente_id', authUser.id)
         : supabase.from('chamados').select('*').eq('prestador_id', authUser.id);
 
@@ -192,7 +203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     loadActiveChamado();
-  }, [authUser, profile?.active_profile]);
+  }, [authUser, profile?.active_profile, canAccessProviderFeatures]);
 
   // Subscribe to chamado updates
   useEffect(() => {
@@ -213,7 +224,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const updated = mapDbChamadoToChamado(payload.new as DbChamado);
             setChamado(updated);
             
-            // Notify on status changes
             if (updated.status === 'accepted') {
               toast.success('Um prestador aceitou seu chamado!');
             } else if (updated.status === 'in_service') {
@@ -255,7 +265,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     loadMessages();
 
-    // Subscribe to new messages
     const channel = supabase
       .channel(`chat-${chamado.id}`)
       .on(
@@ -287,7 +296,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('provider_data')
         .select(`
           *,
-          profiles!inner(name, avatar_url)
+          profiles!inner(name, avatar_url, perfil_principal)
         `)
         .eq('is_online', true);
 
@@ -296,28 +305,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const providers: Provider[] = data.map((p: any) => ({
-        id: p.user_id,
-        name: p.profiles.name,
-        avatar: p.profiles.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.profiles.name}`,
-        rating: Number(p.rating) || 5.0,
-        totalServices: p.total_services || 0,
-        online: p.is_online,
-        location: {
-          lat: Number(p.current_lat) || -23.5505,
-          lng: Number(p.current_lng) || -46.6333,
-          address: p.current_address || '',
-        },
-        radarRange: p.radar_range || 15,
-        services: p.services_offered || ['guincho'],
-      }));
+      // Filter to only show users with perfil_principal = 'provider'
+      const providers: Provider[] = data
+        .filter((p: any) => p.profiles.perfil_principal === 'provider')
+        .map((p: any) => ({
+          id: p.user_id,
+          name: p.profiles.name,
+          avatar: p.profiles.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.profiles.name}`,
+          rating: Number(p.rating) || 5.0,
+          totalServices: p.total_services || 0,
+          online: p.is_online,
+          location: {
+            lat: Number(p.current_lat) || -23.5505,
+            lng: Number(p.current_lng) || -46.6333,
+            address: p.current_address || '',
+          },
+          radarRange: p.radar_range || 15,
+          services: p.services_offered || ['guincho'],
+        }));
 
       setAvailableProviders(providers);
     };
 
     loadProviders();
 
-    // Subscribe to provider updates
     const channel = supabase
       .channel('providers-online')
       .on(
@@ -338,9 +349,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [authUser, profile?.active_profile]);
 
-  // Listen for incoming requests (for providers)
+  // Listen for incoming requests (ONLY for registered providers who are online)
   useEffect(() => {
-    if (!authUser || profile?.active_profile !== 'provider' || !providerData?.is_online || chamado) return;
+    // CRITICAL: Only listen if user is a registered provider AND active as provider
+    if (!authUser || !canAccessProviderFeatures || profile?.active_profile !== 'provider' || !providerData?.is_online || chamado) return;
 
     const channel = supabase
       .channel('incoming-chamados')
@@ -355,7 +367,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const newChamado = mapDbChamadoToChamado(payload.new as DbChamado);
           
-          // Check if provider offers this service
           const services = providerData.services_offered || ['guincho'];
           if (services.includes(newChamado.tipoServico)) {
             setIncomingRequest(newChamado);
@@ -367,10 +378,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, profile?.active_profile, providerData?.is_online, providerData?.services_offered, chamado]);
+  }, [authUser, canAccessProviderFeatures, profile?.active_profile, providerData?.is_online, providerData?.services_offered, chamado]);
 
   const setActiveProfile = useCallback(async (newProfile: UserProfile) => {
     if (!authUser || !profile) return;
+
+    // CRITICAL: Client can NEVER switch to provider mode
+    if (!canAccessProviderFeatures && newProfile === 'provider') {
+      toast.error('Você não tem permissão para acessar o modo prestador');
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -384,29 +401,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setChamado(null);
       setChatMessages([]);
       setIncomingRequest(null);
-
-      // Create provider_data if switching to provider and doesn't exist
-      if (newProfile === 'provider' && !providerData) {
-        const { data, error: provError } = await supabase
-          .from('provider_data')
-          .insert({
-            user_id: authUser.id,
-            is_online: false,
-            radar_range: 15,
-            services_offered: ['guincho'],
-          })
-          .select()
-          .single();
-
-        if (!provError && data) {
-          setProviderData(data);
-        }
-      }
     } catch (error) {
       console.error('Error setting profile:', error);
       toast.error('Erro ao alterar perfil');
     }
-  }, [authUser, profile, providerData]);
+  }, [authUser, profile, canAccessProviderFeatures]);
 
   const createChamado = useCallback(async (tipoServico: ServiceType, origem: Location, destino: Location | null) => {
     if (!authUser) {
@@ -450,6 +449,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const acceptChamado = useCallback(async (chamadoId: string) => {
     if (!authUser) return;
 
+    // CRITICAL: Validate provider permission
+    if (!canAccessProviderFeatures) {
+      toast.error('Você não tem permissão para aceitar chamados');
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('chamados')
@@ -470,7 +475,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.error('Error accepting chamado:', error);
       toast.error('Erro ao aceitar chamado');
     }
-  }, [authUser]);
+  }, [authUser, canAccessProviderFeatures]);
 
   const proposeValue = useCallback(async (value: number) => {
     if (!chamado || !authUser) return;
@@ -483,7 +488,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      // Send chat message
       await supabase.from('chat_messages').insert({
         chamado_id: chamado.id,
         sender_id: authUser.id,
@@ -586,6 +590,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const finishService = useCallback(async () => {
     if (!chamado) return;
 
+    // CRITICAL: Only providers can finish services
+    if (!canAccessProviderFeatures) {
+      toast.error('Você não tem permissão para finalizar serviços');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('chamados')
@@ -594,7 +604,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      // Update provider stats
       if (providerData) {
         await supabase
           .from('provider_data')
@@ -614,9 +623,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.error('Error finishing service:', error);
       toast.error('Erro ao finalizar serviço');
     }
-  }, [chamado, providerData, authUser]);
+  }, [chamado, providerData, authUser, canAccessProviderFeatures]);
 
   const toggleProviderOnline = useCallback(async () => {
+    // CRITICAL: Only registered providers can go online
+    if (!canAccessProviderFeatures) {
+      toast.error('Você não tem permissão para ficar online como prestador');
+      return;
+    }
+
     if (!authUser || !providerData) return;
 
     try {
@@ -634,10 +649,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.error('Error toggling online status:', error);
       toast.error('Erro ao alterar status');
     }
-  }, [authUser, providerData]);
+  }, [authUser, providerData, canAccessProviderFeatures]);
 
   const setProviderRadarRange = useCallback(async (range: number) => {
-    if (!authUser) return;
+    if (!authUser || !canAccessProviderFeatures) return;
 
     try {
       const { error } = await supabase
@@ -651,10 +666,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error setting radar range:', error);
     }
-  }, [authUser]);
+  }, [authUser, canAccessProviderFeatures]);
 
   const updateProviderLocation = useCallback(async (location: Location) => {
-    if (!authUser) return;
+    if (!authUser || !canAccessProviderFeatures) return;
 
     try {
       await supabase
@@ -668,7 +683,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error updating location:', error);
     }
-  }, [authUser]);
+  }, [authUser, canAccessProviderFeatures]);
 
   const sendChatMessage = useCallback(async (message: string) => {
     if (!chamado || !authUser) return;
@@ -689,9 +704,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [chamado, authUser, profile?.active_profile]);
 
   const acceptIncomingRequest = useCallback(async () => {
-    if (!incomingRequest) return;
+    if (!incomingRequest || !canAccessProviderFeatures) return;
     await acceptChamado(incomingRequest.id);
-  }, [incomingRequest, acceptChamado]);
+  }, [incomingRequest, acceptChamado, canAccessProviderFeatures]);
 
   const declineIncomingRequest = useCallback(() => {
     setIncomingRequest(null);
@@ -707,6 +722,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       user,
       profile,
       providerData,
+      perfilPrincipal,
+      canAccessProviderFeatures,
       setActiveProfile,
       isLoading: authLoading || isLoading,
       chamado,

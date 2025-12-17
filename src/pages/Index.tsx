@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 
 const Index = () => {
   const { user: authUser, loading: authLoading } = useAuth();
-  const { user, isLoading } = useApp();
+  const { user, isLoading, canAccessProviderFeatures } = useApp();
 
   // Show loading while checking auth
   if (authLoading || isLoading) {
@@ -29,7 +29,10 @@ const Index = () => {
   }
 
   const activeProfile = user?.activeProfile || 'client';
-  const isClient = activeProfile === 'client';
+  
+  // CRITICAL: Force client view if user doesn't have provider permissions
+  const effectiveProfile = !canAccessProviderFeatures ? 'client' : activeProfile;
+  const isClient = effectiveProfile === 'client';
 
   return (
     <div className={`h-full ${!isClient ? 'provider-theme' : ''}`}>
