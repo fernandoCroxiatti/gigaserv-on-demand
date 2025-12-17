@@ -174,30 +174,83 @@ export default function Auth() {
   const isProvider = profileType === 'provider';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary flex flex-col">
-      {/* Header */}
-      <div className="p-6 text-center">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <div className="w-3 h-3 rounded-full bg-primary" />
-          <span className="font-bold text-2xl tracking-tight">GIGA</span>
-          <span className="font-bold text-2xl text-primary">S.O.S</span>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Hero Logo Section - Only show on select step */}
+      {step === 'select' && (
+        <div className="flex-1 flex flex-col items-center justify-center px-8 pt-16 pb-8">
+          {/* Large Logo */}
+          <div className="mb-8 animate-fade-in">
+            <div className="w-28 h-28 rounded-full bg-primary/10 flex items-center justify-center mb-6 mx-auto">
+              <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center">
+                <svg 
+                  viewBox="0 0 24 24" 
+                  className="w-10 h-10 text-primary-foreground"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2.9-5.8A2 2 0 0013.3 3H8.7a2 2 0 00-1.8 1.2L4 10l-2.5 1.1A2 2 0 000 13v3c0 .6.4 1 1 1h2"/>
+                  <circle cx="7" cy="17" r="2"/>
+                  <circle cx="17" cy="17" r="2"/>
+                </svg>
+              </div>
+            </div>
+            
+            {/* Brand Name */}
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <div className="w-4 h-4 rounded-full bg-primary animate-pulse" />
+                <span className="font-black text-4xl tracking-tight text-foreground">GIGA</span>
+                <span className="font-black text-4xl text-primary">S.O.S</span>
+              </div>
+              <p className="text-muted-foreground text-base font-medium">Serviços automotivos 24h</p>
+            </div>
+          </div>
+
+          {/* Features */}
+          <div className="flex items-center justify-center gap-6 mb-12 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+              <span>Guincho</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+              <span>Mecânica</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+              <span>Chaveiro</span>
+            </div>
+          </div>
         </div>
-        <p className="text-muted-foreground text-sm">Serviços automotivos 24h</p>
-      </div>
+      )}
+
+      {/* Compact Header for login/register steps */}
+      {step !== 'select' && (
+        <div className="px-6 pt-12 pb-6">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-primary" />
+            <span className="font-bold text-xl tracking-tight text-foreground">GIGA</span>
+            <span className="font-bold text-xl text-primary">S.O.S</span>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <div className="bg-card rounded-3xl shadow-uber-lg p-6 space-y-6">
+      <div className={`px-6 pb-8 ${step === 'select' ? '' : 'flex-1 flex items-start pt-4'}`}>
+        <div className="w-full max-w-md mx-auto">
+          <div className="bg-card rounded-3xl shadow-uber-lg p-8 space-y-6">
             
             {/* Step: Select Profile */}
             {step === 'select' && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-center mb-6">Como deseja entrar?</h2>
+              <div className="space-y-5">
+                <h2 className="text-xl font-semibold text-center text-foreground">Como deseja entrar?</h2>
                 
                 <Button
                   onClick={() => handleSelectProfile('client')}
-                  className="w-full h-14 rounded-xl text-lg"
+                  className="w-full h-14 rounded-2xl text-lg font-semibold shadow-md"
                   variant="default"
                 >
                   Login Cliente
@@ -205,11 +258,15 @@ export default function Auth() {
                 
                 <Button
                   onClick={() => handleSelectProfile('provider')}
-                  className="w-full h-14 rounded-xl text-lg"
+                  className="w-full h-14 rounded-2xl text-lg font-semibold shadow-md"
                   variant="provider"
                 >
                   Login Prestador
                 </Button>
+
+                <p className="text-center text-xs text-muted-foreground pt-4">
+                  Ao continuar, você concorda com nossos Termos de Uso e Política de Privacidade
+                </p>
               </div>
             )}
 
@@ -217,17 +274,17 @@ export default function Auth() {
             {step === 'login' && (
               <>
                 <div className="flex items-center gap-3">
-                  <button onClick={handleBack} className="p-2 rounded-full hover:bg-secondary transition-colors">
+                  <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors">
                     <ArrowLeft className="w-5 h-5" />
                   </button>
-                  <h2 className="text-xl font-semibold">
+                  <h2 className="text-xl font-semibold text-foreground">
                     Login {isProvider ? 'Prestador' : 'Cliente'}
                   </h2>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone</Label>
+                    <Label htmlFor="phone" className="text-foreground">Telefone</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                       <Input
@@ -236,13 +293,13 @@ export default function Auth() {
                         value={phone}
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(11) 99999-9999"
-                        className="pl-10 h-12 rounded-xl"
+                        className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
+                    <Label htmlFor="password" className="text-foreground">Senha</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                       <Input
@@ -251,7 +308,7 @@ export default function Auth() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Sua senha"
-                        className="pl-10 pr-10 h-12 rounded-xl"
+                        className="pl-10 pr-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
                       />
                       <button
                         type="button"
@@ -270,7 +327,7 @@ export default function Auth() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 rounded-xl"
+                    className="w-full h-12 rounded-xl font-semibold mt-2"
                     variant={isProvider ? 'provider' : 'default'}
                   >
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Entrar'}
@@ -281,7 +338,7 @@ export default function Auth() {
                   Não tem conta?{' '}
                   <button
                     onClick={() => setStep('register')}
-                    className={`font-medium ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
+                    className={`font-semibold ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
                   >
                     Cadastre-se
                   </button>
@@ -293,17 +350,17 @@ export default function Auth() {
             {step === 'register' && (
               <>
                 <div className="flex items-center gap-3">
-                  <button onClick={handleBack} className="p-2 rounded-full hover:bg-secondary transition-colors">
+                  <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors">
                     <ArrowLeft className="w-5 h-5" />
                   </button>
-                  <h2 className="text-xl font-semibold">
+                  <h2 className="text-xl font-semibold text-foreground">
                     Cadastro {isProvider ? 'Prestador' : 'Cliente'}
                   </h2>
                 </div>
 
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Nome completo</Label>
+                    <Label htmlFor="name" className="text-foreground">Nome completo</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                       <Input
@@ -312,13 +369,13 @@ export default function Auth() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Seu nome"
-                        className="pl-10 h-12 rounded-xl"
+                        className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone</Label>
+                    <Label htmlFor="phone" className="text-foreground">Telefone</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                       <Input
@@ -327,14 +384,14 @@ export default function Auth() {
                         value={phone}
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(11) 99999-9999"
-                        className="pl-10 h-12 rounded-xl"
+                        className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
 
                   {isProvider && (
                     <div className="space-y-2">
-                      <Label htmlFor="cpf">CPF</Label>
+                      <Label htmlFor="cpf" className="text-foreground">CPF</Label>
                       <div className="relative">
                         <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                         <Input
@@ -343,14 +400,14 @@ export default function Auth() {
                           value={cpf}
                           onChange={(e) => setCpf(formatCPF(e.target.value))}
                           placeholder="000.000.000-00"
-                          className="pl-10 h-12 rounded-xl"
+                          className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
                         />
                       </div>
                     </div>
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
+                    <Label htmlFor="password" className="text-foreground">Senha</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                       <Input
@@ -359,7 +416,7 @@ export default function Auth() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Mínimo 6 caracteres"
-                        className="pl-10 pr-10 h-12 rounded-xl"
+                        className="pl-10 pr-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
                       />
                       <button
                         type="button"
@@ -378,7 +435,7 @@ export default function Auth() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 rounded-xl"
+                    className="w-full h-12 rounded-xl font-semibold mt-2"
                     variant={isProvider ? 'provider' : 'default'}
                   >
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Cadastrar'}
@@ -389,7 +446,7 @@ export default function Auth() {
                   Já tem conta?{' '}
                   <button
                     onClick={() => setStep('login')}
-                    className={`font-medium ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
+                    className={`font-semibold ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
                   >
                     Faça login
                   </button>
