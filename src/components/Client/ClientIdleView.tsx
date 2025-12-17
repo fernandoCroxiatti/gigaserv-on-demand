@@ -14,23 +14,34 @@ export function ClientIdleView() {
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
   const [origem, setOrigem] = useState<Location | null>(null);
   const [origemText, setOrigemText] = useState<string>('');
+  const [origemManuallySet, setOrigemManuallySet] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
 
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
 
-  // Update origin when user location is available
+  // Auto-fill origin with GPS location ONLY if not manually set
   useEffect(() => {
-    if (userLocation && !origem) {
+    if (userLocation && !origem && !origemManuallySet) {
       setOrigem(userLocation);
       setOrigemText(userLocation.address);
     }
-  }, [userLocation, origem]);
+  }, [userLocation, origem, origemManuallySet]);
 
   const handleOrigemSelect = (location: Location) => {
     setOrigem(location);
     setOrigemText(location.address);
+    setOrigemManuallySet(true); // Mark as manually set to prevent GPS override
+  };
+
+  const handleOrigemTextChange = (text: string) => {
+    setOrigemText(text);
+    // If user clears the field, allow GPS to re-fill
+    if (!text.trim()) {
+      setOrigemManuallySet(false);
+      setOrigem(null);
+    }
   };
 
   const handleDestinoSelect = (location: Location) => {
@@ -53,13 +64,17 @@ export function ClientIdleView() {
       {/* Real Google Map */}
       <RealMapView 
         center={origem || userLocation}
+        origem={origem}
+        destino={needsDestination ? destino : null}
+        showRoute={needsDestination && !!origem && !!destino}
         providers={availableProviders.filter(p => p.online).map(p => ({
           id: p.id,
           location: p.location,
           name: p.name,
         }))}
-        showUserLocation
+        showUserLocation={!origem}
         className="absolute inset-0" 
+        zoom={origem ? 16 : 15}
       />
       
       {/* Providers online indicator */}
@@ -147,7 +162,7 @@ export function ClientIdleView() {
               </div>
               <PlacesAutocomplete
                 value={origemText}
-                onChange={setOrigemText}
+                onChange={handleOrigemTextChange}
                 onSelect={handleOrigemSelect}
                 placeholder={locationLoading ? "Obtendo localização..." : "Digite o endereço"}
                 icon={
