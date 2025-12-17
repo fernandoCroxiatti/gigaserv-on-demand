@@ -1,16 +1,38 @@
 import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { Star, Check, ThumbsUp, ThumbsDown, MessageCircle } from 'lucide-react';
+import { Star, Check, ThumbsUp, ThumbsDown, MessageCircle, Clock } from 'lucide-react';
+
+type FeedbackTag = 'excelente' | 'pontual' | 'melhorar';
 
 export function ClientFinishedView() {
-  const { chamado, availableProviders } = useApp();
+  const { chamado, availableProviders, submitReview, resetChamado } = useApp();
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState('');
+  const [selectedTags, setSelectedTags] = useState<FeedbackTag[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!chamado) return null;
 
   const provider = availableProviders.find(p => p.id === chamado.prestadorId);
+
+  const toggleTag = (tag: FeedbackTag) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    await submitReview(rating, selectedTags, feedback);
+    setIsSubmitting(false);
+  };
+
+  const handleSkip = () => {
+    resetChamado();
+  };
 
   return (
     <div className="h-full bg-gradient-to-b from-primary/10 to-background flex flex-col items-center justify-center p-6">
@@ -58,7 +80,7 @@ export function ClientFinishedView() {
               <button
                 key={star}
                 onClick={() => setRating(star)}
-                className="transition-transform hover:scale-110"
+                className="transition-transform hover:scale-110 active:scale-95"
               >
                 <Star 
                   className={`w-10 h-10 ${
@@ -71,17 +93,38 @@ export function ClientFinishedView() {
             ))}
           </div>
 
-          {/* Quick feedback */}
-          <div className="flex justify-center gap-3 mb-6">
-            <button className="flex items-center gap-2 px-4 py-2 bg-secondary rounded-full text-sm hover:bg-secondary/80 transition-colors">
+          {/* Quick feedback tags */}
+          <div className="flex justify-center gap-3 mb-6 flex-wrap">
+            <button 
+              onClick={() => toggleTag('excelente')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                selectedTags.includes('excelente')
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary hover:bg-secondary/80'
+              }`}
+            >
               <ThumbsUp className="w-4 h-4" />
               Excelente
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-secondary rounded-full text-sm hover:bg-secondary/80 transition-colors">
-              <MessageCircle className="w-4 h-4" />
+            <button 
+              onClick={() => toggleTag('pontual')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                selectedTags.includes('pontual')
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary hover:bg-secondary/80'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
               Pontual
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-secondary rounded-full text-sm hover:bg-secondary/80 transition-colors">
+            <button 
+              onClick={() => toggleTag('melhorar')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                selectedTags.includes('melhorar')
+                  ? 'bg-destructive text-destructive-foreground'
+                  : 'bg-secondary hover:bg-secondary/80'
+              }`}
+            >
               <ThumbsDown className="w-4 h-4" />
               Melhorar
             </button>
@@ -98,11 +141,20 @@ export function ClientFinishedView() {
         </div>
 
         {/* Submit button */}
-        <Button className="w-full" size="lg">
-          Enviar avaliação
+        <Button 
+          className="w-full" 
+          size="lg"
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Enviando...' : 'Enviar avaliação'}
         </Button>
 
-        <button className="w-full text-center text-sm text-muted-foreground mt-4">
+        <button 
+          className="w-full text-center text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors"
+          onClick={handleSkip}
+          disabled={isSubmitting}
+        >
           Pular
         </button>
       </div>

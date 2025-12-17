@@ -38,6 +38,8 @@ interface AppContextType {
   confirmValue: () => Promise<void>;
   cancelChamado: () => Promise<void>;
   finishService: () => Promise<void>;
+  resetChamado: () => void;
+  submitReview: (rating: number, tags: string[], comment: string) => Promise<void>;
   
   initiatePayment: (method: PaymentMethod) => Promise<void>;
   processPayment: () => Promise<void>;
@@ -625,6 +627,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [chamado, providerData, authUser, canAccessProviderFeatures]);
 
+  const resetChamado = useCallback(() => {
+    setChamado(null);
+    setChatMessages([]);
+  }, []);
+
+  const submitReview = useCallback(async (rating: number, tags: string[], comment: string) => {
+    if (!chamado || !authUser) return;
+
+    const isClient = profile?.active_profile === 'client';
+    const reviewedId = isClient ? chamado.prestadorId : chamado.clienteId;
+
+    if (!reviewedId) {
+      toast.error('Erro: não foi possível identificar o avaliado');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('reviews')
+        .insert({
+          chamado_id: chamado.id,
+          reviewer_id: authUser.id,
+          reviewed_id: reviewedId,
+          reviewer_type: isClient ? 'client' : 'provider',
+          rating,
+          tags,
+          comment: comment || null,
+        });
+
+      if (error) throw error;
+
+      toast.success('Avaliação enviada com sucesso!');
+      
+      // Reset chamado after review
+      setTimeout(() => {
+        setChamado(null);
+        setChatMessages([]);
+      }, 1500);
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      toast.error('Erro ao enviar avaliação');
+    }
+  }, [chamado, authUser, profile?.active_profile]);
+
   const toggleProviderOnline = useCallback(async () => {
     // CRITICAL: Only registered providers can go online
     if (!canAccessProviderFeatures) {
@@ -734,6 +780,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirmValue,
       cancelChamado,
       finishService,
+      resetChamado,
+      submitReview,
       initiatePayment,
       processPayment,
       availableProviders,

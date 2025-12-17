@@ -212,6 +212,50 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          chamado_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          rating: number
+          reviewed_id: string
+          reviewer_id: string
+          reviewer_type: Database["public"]["Enums"]["user_profile_type"]
+          tags: string[] | null
+        }
+        Insert: {
+          chamado_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          rating: number
+          reviewed_id: string
+          reviewer_id: string
+          reviewer_type: Database["public"]["Enums"]["user_profile_type"]
+          tags?: string[] | null
+        }
+        Update: {
+          chamado_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          rating?: number
+          reviewed_id?: string
+          reviewer_id?: string
+          reviewer_type?: Database["public"]["Enums"]["user_profile_type"]
+          tags?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_chamado_id_fkey"
+            columns: ["chamado_id"]
+            isOneToOne: false
+            referencedRelation: "chamados"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
