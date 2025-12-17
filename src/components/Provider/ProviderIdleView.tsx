@@ -1,17 +1,32 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin } from 'lucide-react';
+import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin, Settings2, Check } from 'lucide-react';
 import { Slider } from '../ui/slider';
 import { useGeolocation } from '@/hooks/useGeolocation';
+import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
+
+const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
 export function ProviderIdleView() {
-  const { user, toggleProviderOnline, setProviderRadarRange, updateProviderLocation } = useApp();
+  const { user, toggleProviderOnline, setProviderRadarRange, setProviderServices, updateProviderLocation, providerData } = useApp();
   const { location, error: geoError } = useGeolocation(true);
+  const [showServiceConfig, setShowServiceConfig] = useState(false);
   
   const isOnline = user?.providerData?.online || false;
   const radarRange = user?.providerData?.radarRange || 15;
+  const currentServices = (providerData?.services_offered as ServiceType[]) || ['guincho'];
+
+  const toggleService = (service: ServiceType) => {
+    const newServices = currentServices.includes(service)
+      ? currentServices.filter(s => s !== service)
+      : [...currentServices, service];
+    
+    if (newServices.length > 0) {
+      setProviderServices(newServices);
+    }
+  };
 
   // Update provider location when location changes
   useEffect(() => {
@@ -160,6 +175,50 @@ export function ProviderIdleView() {
                 <span>5 km</span>
                 <span>100 km</span>
               </div>
+            </div>
+          )}
+
+          {/* Service selection */}
+          {isOnline && (
+            <div className="space-y-3 animate-fade-in">
+              <button 
+                onClick={() => setShowServiceConfig(!showServiceConfig)}
+                className="w-full flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings2 className="w-5 h-5 text-provider-primary" />
+                  <span className="font-medium">Serviços oferecidos</span>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {currentServices.length} selecionado(s)
+                </span>
+              </button>
+              
+              {showServiceConfig && (
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_SERVICES.map((service) => {
+                    const config = SERVICE_CONFIG[service];
+                    const isSelected = currentServices.includes(service);
+                    return (
+                      <button
+                        key={service}
+                        onClick={() => toggleService(service)}
+                        className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                          isSelected 
+                            ? 'border-provider-primary bg-provider-primary/10' 
+                            : 'border-border bg-secondary hover:border-provider-primary/50'
+                        }`}
+                      >
+                        <span className="text-xl">{config.icon}</span>
+                        <span className={`text-sm font-medium ${isSelected ? 'text-provider-primary' : ''}`}>
+                          {config.label}
+                        </span>
+                        {isSelected && <Check className="w-4 h-4 ml-auto text-provider-primary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
