@@ -82,16 +82,18 @@ export function PlacesAutocomplete({
     setLoading(true);
     try {
       placesService.current.getDetails(
-        { placeId: prediction.place_id, fields: ['geometry', 'formatted_address'] },
+        { placeId: prediction.place_id, fields: ['geometry', 'formatted_address', 'place_id'] },
         (place, status) => {
           if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
             const location: Location = {
               lat: place.geometry.location.lat(),
               lng: place.geometry.location.lng(),
               address: place.formatted_address || prediction.description,
+              placeId: prediction.place_id,
             };
             onChange(location.address);
             onSelect(location);
+            setPredictions([]);
           }
           setIsOpen(false);
           setLoading(false);
