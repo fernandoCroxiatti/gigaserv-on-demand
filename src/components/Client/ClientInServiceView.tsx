@@ -1,63 +1,101 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { MapView } from '../Map/MapView';
+import { NavigationMapView } from '../Map/NavigationMapView';
 import { Button } from '../ui/button';
-import { Phone, MessageCircle, Star, Navigation, Shield, Clock, CheckCircle } from 'lucide-react';
-import { SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
+import { Phone, MessageCircle, Star, Navigation, Shield, Clock, CheckCircle, MapPin, Route, Loader2 } from 'lucide-react';
+import { SERVICE_CONFIG } from '@/types/chamado';
+import { useProviderTracking } from '@/hooks/useProviderTracking';
 
 export function ClientInServiceView() {
   const { chamado, availableProviders, cancelChamado } = useApp();
+  const [eta, setEta] = useState<string>('Calculando...');
+  const [distance, setDistance] = useState<string>('Calculando...');
+
+  // Real-time provider location tracking
+  const { location: providerLocation, loading: trackingLoading } = useProviderTracking(
+    chamado?.prestadorId
+  );
 
   if (!chamado) return null;
 
   const provider = availableProviders.find(p => p.id === chamado.prestadorId);
   const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
   const hasDestination = chamado.destino !== null;
-  const isGuidingToDestination = hasDestination; // For guincho, show full route
+
+  const handleRouteUpdate = useCallback((duration: string, dist: string) => {
+    setEta(duration);
+    setDistance(dist);
+  }, []);
 
   return (
     <div className="relative h-full">
-      {/* Map with active route */}
-      <MapView 
-        origem={chamado.origem}
-        destino={chamado.destino}
-        showRoute={hasDestination}
+      {/* Map with provider tracking */}
+      <NavigationMapView 
+        providerLocation={providerLocation}
+        destination={chamado.origem}
+        onRouteUpdate={handleRouteUpdate}
+        followProvider={false}
         className="absolute inset-0" 
       />
 
-      {/* Status header */}
+      {/* Status header with ETA */}
       <div className="absolute top-24 left-4 right-4 z-10 animate-slide-down">
-        <div className="glass-card rounded-2xl p-4">
+        <div className="glass-card rounded-2xl p-4 bg-white/95 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-12 h-12 bg-status-inService/10 rounded-full flex items-center justify-center">
-                <span className="text-2xl">{serviceConfig.icon}</span>
+                <Navigation className="w-6 h-6 text-status-inService animate-pulse" />
               </div>
+              {providerLocation && (
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
+              )}
             </div>
             <div className="flex-1">
               <p className="font-semibold text-status-inService">
-                {hasDestination ? 'Guincho a caminho' : 'Prestador a caminho'}
+                {providerLocation ? 'Prestador a caminho' : 'Localizando prestador...'}
               </p>
               <p className="text-sm text-muted-foreground">
-                {hasDestination 
-                  ? 'Rebocando até o destino' 
-                  : `${serviceConfig.label} chegando no local`}
+                {serviceConfig.label}
               </p>
             </div>
-            <div className="flex items-center gap-1 text-sm bg-secondary px-3 py-1.5 rounded-full">
-              <Clock className="w-4 h-4" />
-              <span>{serviceConfig.estimatedTime}</span>
-            </div>
           </div>
+
+          {/* ETA and Distance */}
+          {providerLocation && (
+            <div className="mt-3 flex items-center gap-4 pt-3 border-t border-border">
+              <div className="flex items-center gap-2 flex-1">
+                <Clock className="w-5 h-5 text-status-inService" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Chegada em</p>
+                  <p className="font-bold text-lg">{eta}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-1">
+                <Route className="w-5 h-5 text-status-inService" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Distância</p>
+                  <p className="font-bold text-lg">{distance}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Loading indicator when tracking */}
+          {trackingLoading && (
+            <div className="mt-3 flex items-center gap-2 pt-3 border-t border-border">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Conectando ao GPS do prestador...</p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Safety tip */}
-      <div className="absolute top-44 left-4 right-4 z-10 animate-fade-in" style={{ animationDelay: '0.3s' }}>
-        <div className="bg-status-searching/10 rounded-xl p-3 flex items-center gap-3">
+      <div className="absolute top-52 left-4 right-4 z-10 animate-fade-in" style={{ animationDelay: '0.3s' }}>
+        <div className="bg-status-searching/10 backdrop-blur-sm rounded-xl p-3 flex items-center gap-3">
           <Shield className="w-5 h-5 text-status-searching" />
           <p className="text-sm text-status-searching">
-            Compartilhe sua viagem com amigos e família
+            Acompanhe o prestador em tempo real
           </p>
         </div>
       </div>
@@ -93,20 +131,23 @@ export function ClientInServiceView() {
             </div>
           </div>
 
-          {/* Trip progress */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-status-inService rounded-full transition-all duration-1000"
-                  style={{ width: '35%' }}
-                />
+          {/* Live location indicator */}
+          {providerLocation && (
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-3 p-3 bg-green-500/10 rounded-xl">
+                <div className="relative">
+                  <MapPin className="w-5 h-5 text-green-600" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-ping" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-700">GPS ativo em tempo real</p>
+                  <p className="text-xs text-green-600 truncate">{providerLocation.address}</p>
+                </div>
               </div>
-              <span className="text-sm text-muted-foreground">35%</span>
             </div>
-          </div>
+          )}
 
-          {/* Route info - adapts based on service type */}
+          {/* Route info */}
           <div className="p-4 border-b border-border">
             <div className="flex items-start gap-3">
               <div className="flex flex-col items-center gap-1">
