@@ -1,19 +1,37 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { MapView } from '../Map/MapView';
+import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Power, Radar, Star, TrendingUp, Clock, DollarSign } from 'lucide-react';
+import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin } from 'lucide-react';
 import { Slider } from '../ui/slider';
+import { useGeolocation } from '@/hooks/useGeolocation';
 
 export function ProviderIdleView() {
-  const { user, toggleProviderOnline, setProviderRadarRange } = useApp();
-  const isOnline = user.providerData?.online || false;
-  const radarRange = user.providerData?.radarRange || 15;
+  const { user, toggleProviderOnline, setProviderRadarRange, updateProviderLocation } = useApp();
+  const { location, error: geoError } = useGeolocation(true);
+  
+  const isOnline = user?.providerData?.online || false;
+  const radarRange = user?.providerData?.radarRange || 15;
+
+  // Update provider location when location changes
+  useEffect(() => {
+    if (isOnline && location) {
+      updateProviderLocation({
+        lat: location.lat,
+        lng: location.lng,
+        address: location.address,
+      });
+    }
+  }, [isOnline, location, updateProviderLocation]);
 
   return (
     <div className="relative h-full provider-theme">
       {/* Map */}
-      <MapView className="absolute inset-0" />
+      <RealMapView 
+        className="absolute inset-0"
+        center={location || undefined}
+        zoom={15}
+      />
 
       {/* Radar range indicator */}
       {isOnline && (
@@ -30,14 +48,24 @@ export function ProviderIdleView() {
         </div>
       )}
 
+      {/* GPS Error */}
+      {geoError && (
+        <div className="absolute top-24 left-4 right-4 z-10">
+          <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-3 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-destructive" />
+            <p className="text-sm text-destructive">{geoError}</p>
+          </div>
+        </div>
+      )}
+
       {/* Status card */}
-      <div className="absolute top-24 left-4 right-4 z-10 animate-slide-down">
+      <div className={`absolute ${geoError ? 'top-40' : 'top-24'} left-4 right-4 z-10 animate-slide-down`}>
         <div className={`glass-card rounded-2xl p-4 ${isOnline ? 'border-2 border-provider-primary' : ''}`}>
           <div className="flex items-center gap-4">
             <div className="relative">
               <img 
-                src={user.avatar} 
-                alt={user.name}
+                src={user?.avatar} 
+                alt={user?.name}
                 className={`w-14 h-14 rounded-full border-2 ${isOnline ? 'border-provider-primary' : 'border-muted'}`}
               />
               {isOnline && (
@@ -47,12 +75,12 @@ export function ProviderIdleView() {
               )}
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold">{user.name}</h3>
+              <h3 className="font-semibold">{user?.name}</h3>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Star className="w-4 h-4 text-status-searching fill-current" />
-                <span>{user.providerData?.rating}</span>
+                <span>{user?.providerData?.rating?.toFixed(1)}</span>
                 <span>•</span>
-                <span>{user.providerData?.totalServices} serviços</span>
+                <span>{user?.providerData?.totalServices} serviços</span>
               </div>
             </div>
             <span className={`status-badge ${
@@ -68,20 +96,20 @@ export function ProviderIdleView() {
 
       {/* Stats cards */}
       {isOnline && (
-        <div className="absolute top-44 left-4 right-4 z-10 grid grid-cols-3 gap-2 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        <div className={`absolute ${geoError ? 'top-60' : 'top-44'} left-4 right-4 z-10 grid grid-cols-3 gap-2 animate-fade-in`} style={{ animationDelay: '0.2s' }}>
           <div className="glass-card rounded-xl p-3 text-center">
             <TrendingUp className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="text-lg font-bold">12</p>
-            <p className="text-xs text-muted-foreground">Hoje</p>
+            <p className="text-lg font-bold">{user?.providerData?.totalServices || 0}</p>
+            <p className="text-xs text-muted-foreground">Total</p>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <Clock className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="text-lg font-bold">4.5h</p>
+            <p className="text-lg font-bold">--</p>
             <p className="text-xs text-muted-foreground">Online</p>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <DollarSign className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="text-lg font-bold">R$340</p>
+            <p className="text-lg font-bold">--</p>
             <p className="text-xs text-muted-foreground">Ganhos</p>
           </div>
         </div>

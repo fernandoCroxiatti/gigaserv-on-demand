@@ -1,12 +1,35 @@
 import React from 'react';
-import { useApp } from '@/contexts/AppContext';
 import { Header } from '@/components/Header';
 import { ClientView } from '@/components/ClientView';
 import { ProviderView } from '@/components/ProviderView';
+import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/hooks/useAuth';
+import { Navigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 
 const Index = () => {
-  const { user } = useApp();
-  const isClient = user.activeProfile === 'client';
+  const { user: authUser, loading: authLoading } = useAuth();
+  const { user, isLoading } = useApp();
+
+  // Show loading while checking auth
+  if (authLoading || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect to auth if not logged in
+  if (!authUser) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  const activeProfile = user?.activeProfile || 'client';
+  const isClient = activeProfile === 'client';
 
   return (
     <div className={`h-full ${!isClient ? 'provider-theme' : ''}`}>

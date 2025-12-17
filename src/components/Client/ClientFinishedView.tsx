@@ -35,15 +35,15 @@ export function ClientFinishedView() {
         <div className="bg-card rounded-2xl shadow-uber p-6 mb-6">
           <div className="flex items-center gap-4 mb-6">
             <img 
-              src={provider?.avatar} 
-              alt={provider?.name}
+              src={provider?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=Provider`} 
+              alt={provider?.name || 'Prestador'}
               className="w-16 h-16 rounded-full"
             />
             <div className="flex-1">
-              <h3 className="font-semibold text-lg">{provider?.name}</h3>
+              <h3 className="font-semibold text-lg">{provider?.name || 'Prestador'}</h3>
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Star className="w-4 h-4 text-status-searching fill-current" />
-                <span>{provider?.rating}</span>
+                <span>{provider?.rating?.toFixed(1) || '5.0'}</span>
               </div>
             </div>
             <div className="text-right">

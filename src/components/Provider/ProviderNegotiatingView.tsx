@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { MapView } from '../Map/MapView';
+import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Send, DollarSign, MessageCircle, User, Navigation, Clock, ArrowRight, Check } from 'lucide-react';
+import { Send, MessageCircle, User, Navigation, Clock, ArrowRight, Check } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function ProviderNegotiatingView() {
-  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
+  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, availableProviders } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
 
@@ -41,9 +41,9 @@ export function ProviderNegotiatingView() {
   return (
     <div className="relative h-full provider-theme">
       {/* Map with route */}
-      <MapView 
+      <RealMapView 
         origem={chamado.origem}
-        destino={chamado.destino}
+        destino={chamado.destino || undefined}
         showRoute={hasDestination}
         className="absolute inset-0" 
       />
@@ -67,7 +67,7 @@ export function ProviderNegotiatingView() {
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-1">
                 <Navigation className="w-4 h-4 text-provider-primary" />
-                <span>3.5 km</span>
+                <span>--</span>
               </div>
             </div>
           </div>
