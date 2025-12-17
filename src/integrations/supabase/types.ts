@@ -121,10 +121,12 @@ export type Database = {
             | Database["public"]["Enums"]["user_profile_type"]
             | null
           avatar_url: string | null
+          cpf: string | null
           created_at: string
           email: string | null
           id: string
           name: string
+          perfil_principal: string
           phone: string | null
           updated_at: string
           user_id: string
@@ -134,10 +136,12 @@ export type Database = {
             | Database["public"]["Enums"]["user_profile_type"]
             | null
           avatar_url?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
           name: string
+          perfil_principal?: string
           phone?: string | null
           updated_at?: string
           user_id: string
@@ -147,10 +151,12 @@ export type Database = {
             | Database["public"]["Enums"]["user_profile_type"]
             | null
           avatar_url?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
           name?: string
+          perfil_principal?: string
           phone?: string | null
           updated_at?: string
           user_id?: string
@@ -211,7 +217,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_provider: { Args: { _user_id: string }; Returns: boolean }
+      is_provider_active: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       chamado_status:
