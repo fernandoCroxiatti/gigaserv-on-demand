@@ -1,0 +1,159 @@
+import React, { useState } from 'react';
+import { useApp } from '@/contexts/AppContext';
+import { MapView } from '../Map/MapView';
+import { Button } from '../ui/button';
+import { MapPin, Navigation, Search, ChevronRight, Clock } from 'lucide-react';
+import { Location } from '@/types/chamado';
+
+const recentPlaces = [
+  { id: 1, name: 'Casa', address: 'Rua das Flores, 123', icon: '🏠' },
+  { id: 2, name: 'Trabalho', address: 'Av. Paulista, 1578', icon: '💼' },
+  { id: 3, name: 'Academia', address: 'Rua Augusta, 500', icon: '🏋️' },
+];
+
+export function ClientIdleView() {
+  const { createChamado, availableProviders } = useApp();
+  const [origem, setOrigem] = useState<string>('Minha localização atual');
+  const [destino, setDestino] = useState<string>('');
+  const [showDestinationInput, setShowDestinationInput] = useState(false);
+
+  const handleSolicitar = () => {
+    if (!destino) return;
+    
+    const origemLocation: Location = {
+      lat: -23.5505,
+      lng: -46.6333,
+      address: origem,
+    };
+    
+    const destinoLocation: Location = {
+      lat: -23.5615,
+      lng: -46.6543,
+      address: destino,
+    };
+    
+    createChamado(origemLocation, destinoLocation);
+  };
+
+  const onlineProviders = availableProviders.filter(p => p.online).length;
+
+  return (
+    <div className="relative h-full">
+      {/* Map */}
+      <MapView showProviders className="absolute inset-0" />
+      
+      {/* Providers online indicator */}
+      <div className="absolute top-24 left-4 right-4 z-10">
+        <div className="glass-card rounded-2xl p-3 flex items-center gap-3 animate-fade-in">
+          <div className="relative">
+            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+              <Navigation className="w-5 h-5 text-primary" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center text-[10px] text-white font-bold">
+              {onlineProviders}
+            </div>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium">{onlineProviders} prestadores online</p>
+            <p className="text-xs text-muted-foreground">Prontos para atender você</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom card */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
+        <div className="bg-card rounded-t-3xl shadow-uber-lg p-6 space-y-4">
+          {/* Header */}
+          <div className="flex items-center gap-3 pb-2">
+            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+              <Search className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Para onde?</h2>
+              <p className="text-sm text-muted-foreground">Solicite um prestador</p>
+            </div>
+          </div>
+
+          {/* Location inputs */}
+          <div className="space-y-3">
+            {/* Origin */}
+            <div className="flex items-center gap-3 p-3 bg-secondary rounded-xl">
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                <div className="w-2 h-2 bg-white rounded-full" />
+              </div>
+              <input
+                type="text"
+                value={origem}
+                onChange={(e) => setOrigem(e.target.value)}
+                placeholder="Ponto de origem"
+                className="flex-1 bg-transparent text-sm font-medium focus:outline-none"
+              />
+              <MapPin className="w-4 h-4 text-muted-foreground" />
+            </div>
+
+            {/* Destination */}
+            <div 
+              className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                showDestinationInput 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-transparent bg-secondary'
+              }`}
+              onClick={() => setShowDestinationInput(true)}
+            >
+              <div className="w-8 h-8 bg-foreground rounded-full flex items-center justify-center">
+                <div className="w-2 h-2 bg-white rounded-full" />
+              </div>
+              <input
+                type="text"
+                value={destino}
+                onChange={(e) => setDestino(e.target.value)}
+                placeholder="Para onde você vai?"
+                className="flex-1 bg-transparent text-sm font-medium focus:outline-none placeholder:text-muted-foreground"
+                autoFocus={showDestinationInput}
+              />
+              <Navigation className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+
+          {/* Recent places */}
+          {!destino && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="w-4 h-4" />
+                <span>Lugares recentes</span>
+              </div>
+              <div className="space-y-1">
+                {recentPlaces.map((place) => (
+                  <button
+                    key={place.id}
+                    onClick={() => setDestino(place.address)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-secondary transition-colors text-left"
+                  >
+                    <span className="text-xl">{place.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{place.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{place.address}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Submit button */}
+          {destino && (
+            <Button 
+              onClick={handleSolicitar}
+              className="w-full"
+              size="lg"
+            >
+              Solicitar serviço
+              <ChevronRight className="w-5 h-5" />
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
