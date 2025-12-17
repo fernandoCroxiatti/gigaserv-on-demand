@@ -14,33 +14,27 @@ export function ClientIdleView() {
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
   const [origem, setOrigem] = useState<Location | null>(null);
   const [origemText, setOrigemText] = useState<string>('');
-  const [origemManuallySet, setOrigemManuallySet] = useState(false);
+  const [usingGpsLocation, setUsingGpsLocation] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
 
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
 
-  // Auto-fill origin with GPS location ONLY if not manually set
-  useEffect(() => {
-    if (userLocation && !origem && !origemManuallySet) {
-      setOrigem(userLocation);
-      setOrigemText(userLocation.address);
-    }
-  }, [userLocation, origem, origemManuallySet]);
-
   const handleOrigemSelect = (location: Location) => {
     setOrigem(location);
     setOrigemText(location.address);
-    setOrigemManuallySet(true); // Mark as manually set to prevent GPS override
+    setUsingGpsLocation(false); // User typed an address, not using GPS
   };
 
   const handleOrigemTextChange = (text: string) => {
     setOrigemText(text);
-    // If user clears the field, allow GPS to re-fill
     if (!text.trim()) {
-      setOrigemManuallySet(false);
       setOrigem(null);
+      setUsingGpsLocation(false);
+    } else {
+      // User is typing, so not using GPS location anymore
+      setUsingGpsLocation(false);
     }
   };
 
@@ -48,7 +42,7 @@ export function ClientIdleView() {
     if (userLocation) {
       setOrigem(userLocation);
       setOrigemText(userLocation.address);
-      setOrigemManuallySet(true);
+      setUsingGpsLocation(true);
     } else {
       refreshLocation();
     }
@@ -175,21 +169,31 @@ export function ClientIdleView() {
               <button
                 onClick={handleUseMyLocation}
                 disabled={locationLoading}
-                className="w-full flex items-center gap-3 p-3 mb-2 rounded-xl bg-primary/10 hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-50"
+                className={`w-full flex items-center gap-3 p-3 mb-2 rounded-xl transition-colors border disabled:opacity-50 ${
+                  usingGpsLocation 
+                    ? 'bg-primary/20 border-primary' 
+                    : 'bg-secondary hover:bg-secondary/80 border-border'
+                }`}
               >
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  usingGpsLocation ? 'bg-primary' : 'bg-muted-foreground/20'
+                }`}>
                   {locationLoading ? (
                     <Loader2 className="w-4 h-4 text-white animate-spin" />
                   ) : (
-                    <Crosshair className="w-4 h-4 text-white" />
+                    <Crosshair className={`w-4 h-4 ${usingGpsLocation ? 'text-white' : 'text-muted-foreground'}`} />
                   )}
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-medium text-sm text-primary">Usar minha localização</p>
-                  <p className="text-xs text-muted-foreground">Detectar local exato via GPS</p>
+                  <p className={`font-medium text-sm ${usingGpsLocation ? 'text-primary' : 'text-foreground'}`}>
+                    Usar minha localização
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {usingGpsLocation ? 'Localização GPS ativa' : 'Detectar local exato via GPS'}
+                  </p>
                 </div>
-                {userLocation && !locationLoading && (
-                  <Check className="w-4 h-4 text-primary" />
+                {usingGpsLocation && (
+                  <Check className="w-5 h-5 text-primary" />
                 )}
               </button>
 
