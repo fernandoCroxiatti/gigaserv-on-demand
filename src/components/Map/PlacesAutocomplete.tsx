@@ -133,7 +133,7 @@ export function PlacesAutocomplete({
       </div>
 
       {isOpen && predictions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-card rounded-xl shadow-uber-lg border border-border z-50 max-h-60 overflow-y-auto">
+        <div className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] max-h-60 overflow-y-auto">
           {predictions.map((prediction) => (
             <button
               key={prediction.place_id}
