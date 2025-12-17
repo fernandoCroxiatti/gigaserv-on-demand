@@ -4,7 +4,7 @@ import { RealMapView } from '../Map/RealMapView';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { Button } from '../ui/button';
-import { MapPin, Navigation, ChevronRight, Clock, Check, Loader2, RefreshCw } from 'lucide-react';
+import { MapPin, Navigation, ChevronRight, Clock, Check, Loader2, RefreshCw, Crosshair } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 
 export function ClientIdleView() {
@@ -41,6 +41,16 @@ export function ClientIdleView() {
     if (!text.trim()) {
       setOrigemManuallySet(false);
       setOrigem(null);
+    }
+  };
+
+  const handleUseMyLocation = () => {
+    if (userLocation) {
+      setOrigem(userLocation);
+      setOrigemText(userLocation.address);
+      setOrigemManuallySet(true);
+    } else {
+      refreshLocation();
     }
   };
 
@@ -159,18 +169,35 @@ export function ClientIdleView() {
                 {locationLoading && (
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                 )}
-                {locationError && (
-                  <button onClick={refreshLocation} className="flex items-center gap-1 text-xs text-destructive">
-                    <RefreshCw className="w-3 h-3" />
-                    Tentar novamente
-                  </button>
-                )}
               </div>
+
+              {/* My Location Button */}
+              <button
+                onClick={handleUseMyLocation}
+                disabled={locationLoading}
+                className="w-full flex items-center gap-3 p-3 mb-2 rounded-xl bg-primary/10 hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-50"
+              >
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  {locationLoading ? (
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  ) : (
+                    <Crosshair className="w-4 h-4 text-white" />
+                  )}
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-medium text-sm text-primary">Usar minha localização</p>
+                  <p className="text-xs text-muted-foreground">Detectar local exato via GPS</p>
+                </div>
+                {userLocation && !locationLoading && (
+                  <Check className="w-4 h-4 text-primary" />
+                )}
+              </button>
+
               <PlacesAutocomplete
                 value={origemText}
                 onChange={handleOrigemTextChange}
                 onSelect={handleOrigemSelect}
-                placeholder={locationLoading ? "Obtendo localização..." : "Digite o endereço"}
+                placeholder={locationLoading ? "Obtendo localização..." : "Ou digite o endereço"}
                 icon={
                   <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
                     <div className="w-2 h-2 bg-white rounded-full" />
@@ -178,7 +205,10 @@ export function ClientIdleView() {
                 }
               />
               {locationError && (
-                <p className="text-xs text-destructive mt-1">{locationError}</p>
+                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3" />
+                  {locationError}
+                </p>
               )}
             </div>
 
