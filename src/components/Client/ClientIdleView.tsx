@@ -49,6 +49,12 @@ export function ClientIdleView() {
     setDestinoText(location.address);
   };
 
+  const handleDestinoTextChange = (text: string) => {
+    setDestinoText(text);
+    // Ao digitar, invalida coordenadas anteriores até selecionar um endereço real
+    setDestino(null);
+  };
+
   const handleSolicitar = () => {
     if (!origem) return;
     if (needsDestination && !destino) return;
@@ -184,7 +190,7 @@ export function ClientIdleView() {
                 </p>
                 <PlacesAutocomplete
                   value={destinoText}
-                  onChange={setDestinoText}
+                  onChange={handleDestinoTextChange}
                   onSelect={handleDestinoSelect}
                   placeholder="Oficina, casa ou outro destino"
                   icon={
