@@ -28,6 +28,7 @@ export function PlacesAutocomplete({
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const latestRequestId = useRef(0);
 
   useEffect(() => {
     if (isLoaded && !autocompleteService.current) {
@@ -49,31 +50,45 @@ export function PlacesAutocomplete({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
     onChange(inputValue);
 
     if (!inputValue.trim() || !autocompleteService.current) {
+      latestRequestId.current += 1; // invalidate pending callbacks
       setPredictions([]);
       setIsOpen(false);
+      setLoading(false);
       return;
     }
 
     setLoading(true);
-    try {
-      const result = await autocompleteService.current.getPlacePredictions({
+    const requestId = ++latestRequestId.current;
+
+    autocompleteService.current.getPlacePredictions(
+      {
         input: inputValue,
         componentRestrictions: { country: 'br' },
-        types: ['address', 'establishment'],
-      });
-      setPredictions(result?.predictions || []);
-      setIsOpen(true);
-    } catch (error) {
-      console.error('Autocomplete error:', error);
-      setPredictions([]);
-    } finally {
-      setLoading(false);
-    }
+      },
+      (preds, status) => {
+        // Ignore out-of-order responses
+        if (requestId !== latestRequestId.current) return;
+
+        if (status === google.maps.places.PlacesServiceStatus.OK) {
+          setPredictions(preds || []);
+          setIsOpen(true);
+        } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+          setPredictions([]);
+          setIsOpen(false);
+        } else {
+          console.error('Autocomplete status:', status);
+          setPredictions([]);
+          setIsOpen(false);
+        }
+
+        setLoading(false);
+      }
+    );
   };
 
   const handleSelect = async (prediction: google.maps.places.AutocompletePrediction) => {
