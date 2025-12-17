@@ -1,12 +1,35 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
 import { MapPin, Navigation, Clock, DollarSign, X, Check } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
+import { calculateDistance } from '@/lib/distance';
 
 export function IncomingRequestCard() {
-  const { incomingRequest, acceptIncomingRequest, declineIncomingRequest } = useApp();
+  const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
   const [timeLeft, setTimeLeft] = useState(30);
+
+  // Calculate distance from provider to client
+  const distanceToClient = useMemo(() => {
+    if (!incomingRequest || !providerData?.current_lat || !providerData?.current_lng) {
+      return null;
+    }
+    
+    const distance = calculateDistance(
+      Number(providerData.current_lat),
+      Number(providerData.current_lng),
+      incomingRequest.origem.lat,
+      incomingRequest.origem.lng
+    );
+    
+    return distance;
+  }, [incomingRequest, providerData?.current_lat, providerData?.current_lng]);
+
+  const formattedDistance = distanceToClient !== null 
+    ? distanceToClient < 1 
+      ? `${Math.round(distanceToClient * 1000)} m`
+      : `${distanceToClient.toFixed(1)} km`
+    : '--';
 
   useEffect(() => {
     if (!incomingRequest) return;
@@ -105,7 +128,7 @@ export function IncomingRequestCard() {
         <div className="px-4 pb-4 grid grid-cols-3 gap-3">
           <div className="bg-secondary rounded-xl p-3 text-center">
             <Navigation className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="font-semibold">3.5 km</p>
+            <p className="font-semibold">{formattedDistance}</p>
             <p className="text-xs text-muted-foreground">Até cliente</p>
           </div>
           <div className="bg-secondary rounded-xl p-3 text-center">
