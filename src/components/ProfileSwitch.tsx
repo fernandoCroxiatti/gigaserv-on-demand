@@ -4,7 +4,7 @@ import { User, Briefcase } from 'lucide-react';
 
 export function ProfileSwitch() {
   const { user, setActiveProfile } = useApp();
-  const isClient = user.activeProfile === 'client';
+  const isClient = user?.activeProfile === 'client';
 
   return (
     <div className="flex items-center gap-1 p-1 bg-secondary rounded-2xl">

@@ -1,8 +1,8 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { MapView } from '../Map/MapView';
+import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Phone, MessageCircle, Navigation, MapPin, CheckCircle, DollarSign, Clock, Flag } from 'lucide-react';
+import { Phone, MessageCircle, Navigation, CheckCircle, DollarSign, Flag } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function ProviderInServiceView() {
@@ -16,9 +16,9 @@ export function ProviderInServiceView() {
   return (
     <div className="relative h-full provider-theme">
       {/* Map with active route */}
-      <MapView 
+      <RealMapView 
         origem={chamado.origem}
-        destino={chamado.destino}
+        destino={chamado.destino || undefined}
         showRoute={hasDestination}
         className="absolute inset-0" 
       />
@@ -39,24 +39,9 @@ export function ProviderInServiceView() {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-bold">2.3 km</p>
-              <p className="text-sm text-muted-foreground">~8 min</p>
+              <p className="text-lg font-bold">--</p>
+              <p className="text-sm text-muted-foreground">--</p>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Turn-by-turn instruction */}
-      <div className="absolute top-44 left-4 right-4 z-10 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-        <div className="bg-provider-primary text-white rounded-xl p-4 flex items-center gap-4">
-          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold">Vire à direita</p>
-            <p className="text-sm opacity-80">Em 200m na Rua Augusta</p>
           </div>
         </div>
       </div>
@@ -87,12 +72,12 @@ export function ProviderInServiceView() {
           <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">Progresso</span>
-              <span className="text-sm font-medium">35%</span>
+              <span className="text-sm font-medium">Em andamento</span>
             </div>
             <div className="h-2 bg-secondary rounded-full overflow-hidden">
               <div 
-                className="h-full bg-provider-primary rounded-full transition-all duration-1000"
-                style={{ width: '35%' }}
+                className="h-full bg-provider-primary rounded-full transition-all duration-1000 animate-pulse"
+                style={{ width: '50%' }}
               />
             </div>
           </div>

@@ -6,7 +6,7 @@ import { Button } from './ui/button';
 
 export function Header() {
   const { user } = useApp();
-  const isProvider = user.activeProfile === 'provider';
+  const isProvider = user?.activeProfile === 'provider';
 
   return (
     <header className="absolute top-0 left-0 right-0 z-50 p-4 pointer-events-none">

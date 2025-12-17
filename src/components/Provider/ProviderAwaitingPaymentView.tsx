@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { MapView } from '../Map/MapView';
+import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
 import { 
   Clock, 
@@ -19,13 +19,15 @@ export function ProviderAwaitingPaymentView() {
 
   if (!chamado) return null;
 
+  const hasDestination = chamado.destino !== null;
+
   return (
     <div className="relative h-full provider-theme">
       {/* Map with route */}
-      <MapView 
+      <RealMapView 
         origem={chamado.origem}
-        destino={chamado.destino}
-        showRoute
+        destino={chamado.destino || undefined}
+        showRoute={hasDestination}
         className="absolute inset-0" 
       />
 
@@ -96,22 +98,30 @@ export function ProviderAwaitingPaymentView() {
             <div className="flex items-start gap-3">
               <div className="flex flex-col items-center gap-1">
                 <div className="w-3 h-3 bg-provider-primary rounded-full" />
-                <div className="w-0.5 h-8 bg-border" />
-                <div className="w-3 h-3 border-2 border-foreground rounded-full" />
+                {hasDestination && (
+                  <>
+                    <div className="w-0.5 h-8 bg-border" />
+                    <div className="w-3 h-3 border-2 border-foreground rounded-full" />
+                  </>
+                )}
               </div>
               <div className="flex-1 space-y-3">
                 <div>
-                  <p className="text-xs text-muted-foreground">Buscar cliente em</p>
+                  <p className="text-xs text-muted-foreground">
+                    {hasDestination ? 'Buscar cliente em' : 'Local do atendimento'}
+                  </p>
                   <p className="font-medium text-sm">{chamado.origem.address}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Destino final</p>
-                  <p className="font-medium text-sm">{chamado.destino.address}</p>
-                </div>
+                {hasDestination && chamado.destino && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Destino final</p>
+                    <p className="font-medium text-sm">{chamado.destino.address}</p>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Navigation className="w-4 h-4 text-provider-primary" />
-                <span>3.5 km</span>
+                <span>--</span>
               </div>
             </div>
           </div>

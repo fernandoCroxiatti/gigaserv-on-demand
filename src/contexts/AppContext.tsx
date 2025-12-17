@@ -7,369 +7,708 @@ import {
   Provider, 
   Location, 
   ChatMessage,
-  Payment,
   PaymentMethod,
   ServiceType,
-  createMockPayment,
-  approveMockPayment,
   serviceRequiresDestination
 } from '@/types/chamado';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Database } from '@/integrations/supabase/types';
+
+type DbChamado = Database['public']['Tables']['chamados']['Row'];
+type DbProfile = Database['public']['Tables']['profiles']['Row'];
+type DbProviderData = Database['public']['Tables']['provider_data']['Row'];
+type DbChatMessage = Database['public']['Tables']['chat_messages']['Row'];
 
 interface AppContextType {
-  user: User;
+  user: User | null;
+  profile: DbProfile | null;
+  providerData: DbProviderData | null;
   setActiveProfile: (profile: UserProfile) => void;
+  isLoading: boolean;
   
   chamado: Chamado | null;
   setChamadoStatus: (status: ChamadoStatus) => void;
-  createChamado: (tipoServico: ServiceType, origem: Location, destino: Location | null) => void;
-  acceptChamado: (prestadorId: string) => void;
-  proposeValue: (value: number) => void;
-  confirmValue: () => void;
-  cancelChamado: () => void;
-  finishService: () => void;
+  createChamado: (tipoServico: ServiceType, origem: Location, destino: Location | null) => Promise<void>;
+  acceptChamado: (chamadoId: string) => Promise<void>;
+  proposeValue: (value: number) => Promise<void>;
+  confirmValue: () => Promise<void>;
+  cancelChamado: () => Promise<void>;
+  finishService: () => Promise<void>;
   
-  initiatePayment: (method: PaymentMethod) => void;
-  processPayment: () => void;
+  initiatePayment: (method: PaymentMethod) => Promise<void>;
+  processPayment: () => Promise<void>;
   
   availableProviders: Provider[];
-  toggleProviderOnline: () => void;
-  setProviderRadarRange: (range: number) => void;
+  toggleProviderOnline: () => Promise<void>;
+  setProviderRadarRange: (range: number) => Promise<void>;
+  updateProviderLocation: (location: Location) => Promise<void>;
   
   chatMessages: ChatMessage[];
-  sendChatMessage: (message: string) => void;
+  sendChatMessage: (message: string) => Promise<void>;
   
   incomingRequest: Chamado | null;
-  acceptIncomingRequest: () => void;
+  acceptIncomingRequest: () => Promise<void>;
   declineIncomingRequest: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const mockProviders: Provider[] = [
-  {
-    id: 'provider-1',
-    name: 'Carlos Silva',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos',
-    rating: 4.9,
-    totalServices: 342,
-    online: true,
-    location: { lat: -23.5505, lng: -46.6333, address: 'Av. Paulista, 1000' },
-    radarRange: 15,
-    services: ['guincho', 'mecanica'],
-  },
-  {
-    id: 'provider-2',
-    name: 'Ana Oliveira',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ana',
-    rating: 4.8,
-    totalServices: 215,
-    online: true,
-    location: { lat: -23.5515, lng: -46.6343, address: 'Rua Augusta, 500' },
-    radarRange: 20,
-    services: ['borracharia', 'mecanica'],
-  },
-  {
-    id: 'provider-3',
-    name: 'Roberto Santos',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Roberto',
-    rating: 4.7,
-    totalServices: 189,
-    online: true,
-    location: { lat: -23.5525, lng: -46.6353, address: 'Rua Oscar Freire, 200' },
-    radarRange: 25,
-    services: ['chaveiro', 'guincho'],
-  },
-];
+function mapDbChamadoToChamado(db: DbChamado): Chamado {
+  return {
+    id: db.id,
+    status: db.status as ChamadoStatus,
+    tipoServico: db.tipo_servico as ServiceType,
+    clienteId: db.cliente_id || '',
+    prestadorId: db.prestador_id,
+    origem: {
+      lat: Number(db.origem_lat),
+      lng: Number(db.origem_lng),
+      address: db.origem_address,
+    },
+    destino: db.destino_lat && db.destino_lng ? {
+      lat: Number(db.destino_lat),
+      lng: Number(db.destino_lng),
+      address: db.destino_address || '',
+    } : null,
+    valor: db.valor ? Number(db.valor) : null,
+    valorProposto: db.valor_proposto ? Number(db.valor_proposto) : null,
+    payment: db.payment_status ? {
+      id: db.stripe_payment_intent_id || `payment-${db.id}`,
+      status: db.payment_status,
+      method: (db.payment_method as PaymentMethod) || 'pix',
+      amount: db.valor ? Number(db.valor) : 0,
+      currency: 'BRL',
+      provider: (db.payment_provider as 'mock' | 'stripe' | 'mercadopago') || 'mock',
+      stripePaymentIntentId: db.stripe_payment_intent_id || undefined,
+      createdAt: new Date(db.created_at),
+    } : null,
+    createdAt: new Date(db.created_at),
+    updatedAt: new Date(db.updated_at),
+  };
+}
 
-const defaultUser: User = {
-  id: 'user-1',
-  name: 'João Pedro',
-  email: 'joao@email.com',
-  phone: '(11) 99999-9999',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Joao',
-  activeProfile: 'client',
-  providerData: {
-    online: false,
-    radarRange: 15,
-    rating: 4.9,
-    totalServices: 0,
-    services: ['guincho', 'mecanica', 'borracharia'],
-  },
-};
+function mapDbChatMessage(db: DbChatMessage): ChatMessage {
+  return {
+    id: db.id,
+    senderId: db.sender_id || '',
+    senderType: db.sender_type as UserProfile,
+    message: db.message,
+    timestamp: new Date(db.created_at),
+  };
+}
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User>(defaultUser);
+  const { user: authUser, loading: authLoading } = useAuth();
+  const [profile, setProfile] = useState<DbProfile | null>(null);
+  const [providerData, setProviderData] = useState<DbProviderData | null>(null);
   const [chamado, setChamado] = useState<Chamado | null>(null);
-  const [availableProviders, setAvailableProviders] = useState<Provider[]>(mockProviders);
+  const [availableProviders, setAvailableProviders] = useState<Provider[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [incomingRequest, setIncomingRequest] = useState<Chamado | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setAvailableProviders(prev => 
-        prev.map(p => ({
-          ...p,
-          location: {
-            ...p.location,
-            lat: p.location.lat + (Math.random() - 0.5) * 0.001,
-            lng: p.location.lng + (Math.random() - 0.5) * 0.001,
-          }
-        }))
-      );
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+  const user: User | null = profile ? {
+    id: profile.user_id,
+    name: profile.name,
+    email: profile.email || '',
+    phone: profile.phone || '',
+    avatar: profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.name}`,
+    activeProfile: (profile.active_profile as UserProfile) || 'client',
+    providerData: providerData ? {
+      online: providerData.is_online || false,
+      radarRange: providerData.radar_range || 15,
+      rating: Number(providerData.rating) || 5.0,
+      totalServices: providerData.total_services || 0,
+      services: (providerData.services_offered as ServiceType[]) || ['guincho'],
+    } : undefined,
+  } : null;
 
+  // Load profile when auth user changes
   useEffect(() => {
-    if (user.activeProfile === 'provider' && user.providerData?.online && !chamado) {
-      const timeout = setTimeout(() => {
-        // Randomly pick a service type for incoming request
-        const serviceTypes: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
-        const randomService = serviceTypes[Math.floor(Math.random() * serviceTypes.length)];
-        const needsDestination = serviceRequiresDestination(randomService);
-        
-        const mockRequest: Chamado = {
-          id: `chamado-${Date.now()}`,
-          status: 'searching',
-          tipoServico: randomService,
-          clienteId: 'client-mock',
-          prestadorId: null,
-          origem: { lat: -23.5505, lng: -46.6333, address: 'Av. Paulista, 1578, São Paulo' },
-          destino: needsDestination 
-            ? { lat: -23.5615, lng: -46.6543, address: 'Oficina Central, São Paulo' }
-            : null,
-          valor: null,
-          valorProposto: null,
-          payment: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        setIncomingRequest(mockRequest);
-      }, 5000);
-      return () => clearTimeout(timeout);
+    if (!authUser) {
+      setProfile(null);
+      setProviderData(null);
+      setIsLoading(false);
+      return;
     }
-  }, [user.activeProfile, user.providerData?.online, chamado]);
 
-  const setActiveProfile = useCallback((profile: UserProfile) => {
-    setUser(prev => ({ ...prev, activeProfile: profile }));
-    setChamado(null);
-    setChatMessages([]);
-    setIncomingRequest(null);
-  }, []);
+    const loadProfile = async () => {
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', authUser.id)
+          .maybeSingle();
 
-  const setChamadoStatus = useCallback((status: ChamadoStatus) => {
-    setChamado(prev => prev ? { ...prev, status, updatedAt: new Date() } : null);
-  }, []);
+        if (profileError) throw profileError;
+        setProfile(profileData);
 
-  const createChamado = useCallback((tipoServico: ServiceType, origem: Location, destino: Location | null) => {
-    // Validate: guincho requires destination, others don't
+        // Load provider data if exists
+        const { data: provData } = await supabase
+          .from('provider_data')
+          .select('*')
+          .eq('user_id', authUser.id)
+          .maybeSingle();
+
+        setProviderData(provData);
+      } catch (error) {
+        console.error('Error loading profile:', error);
+        toast.error('Erro ao carregar perfil');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, [authUser]);
+
+  // Load active chamado
+  useEffect(() => {
+    if (!authUser) return;
+
+    const loadActiveChamado = async () => {
+      const activeProfile = profile?.active_profile || 'client';
+      
+      const query = activeProfile === 'client'
+        ? supabase.from('chamados').select('*').eq('cliente_id', authUser.id)
+        : supabase.from('chamados').select('*').eq('prestador_id', authUser.id);
+
+      const { data, error } = await query
+        .not('status', 'in', '("finished","canceled","idle")')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading chamado:', error);
+        return;
+      }
+
+      if (data) {
+        setChamado(mapDbChamadoToChamado(data));
+      }
+    };
+
+    loadActiveChamado();
+  }, [authUser, profile?.active_profile]);
+
+  // Subscribe to chamado updates
+  useEffect(() => {
+    if (!chamado) return;
+
+    const channel = supabase
+      .channel(`chamado-${chamado.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'chamados',
+          filter: `id=eq.${chamado.id}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updated = mapDbChamadoToChamado(payload.new as DbChamado);
+            setChamado(updated);
+            
+            // Notify on status changes
+            if (updated.status === 'accepted') {
+              toast.success('Um prestador aceitou seu chamado!');
+            } else if (updated.status === 'in_service') {
+              toast.success('Serviço iniciado!');
+            } else if (updated.status === 'finished') {
+              toast.success('Serviço finalizado!');
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chamado?.id]);
+
+  // Load chat messages for active chamado
+  useEffect(() => {
+    if (!chamado) {
+      setChatMessages([]);
+      return;
+    }
+
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('chamado_id', chamado.id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error loading messages:', error);
+        return;
+      }
+
+      setChatMessages(data.map(mapDbChatMessage));
+    };
+
+    loadMessages();
+
+    // Subscribe to new messages
+    const channel = supabase
+      .channel(`chat-${chamado.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `chamado_id=eq.${chamado.id}`,
+        },
+        (payload) => {
+          const newMsg = mapDbChatMessage(payload.new as DbChatMessage);
+          setChatMessages(prev => [...prev, newMsg]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chamado?.id]);
+
+  // Load available providers (for clients)
+  useEffect(() => {
+    if (!authUser || profile?.active_profile !== 'client') return;
+
+    const loadProviders = async () => {
+      const { data, error } = await supabase
+        .from('provider_data')
+        .select(`
+          *,
+          profiles!inner(name, avatar_url)
+        `)
+        .eq('is_online', true);
+
+      if (error) {
+        console.error('Error loading providers:', error);
+        return;
+      }
+
+      const providers: Provider[] = data.map((p: any) => ({
+        id: p.user_id,
+        name: p.profiles.name,
+        avatar: p.profiles.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.profiles.name}`,
+        rating: Number(p.rating) || 5.0,
+        totalServices: p.total_services || 0,
+        online: p.is_online,
+        location: {
+          lat: Number(p.current_lat) || -23.5505,
+          lng: Number(p.current_lng) || -46.6333,
+          address: p.current_address || '',
+        },
+        radarRange: p.radar_range || 15,
+        services: p.services_offered || ['guincho'],
+      }));
+
+      setAvailableProviders(providers);
+    };
+
+    loadProviders();
+
+    // Subscribe to provider updates
+    const channel = supabase
+      .channel('providers-online')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'provider_data',
+        },
+        () => {
+          loadProviders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authUser, profile?.active_profile]);
+
+  // Listen for incoming requests (for providers)
+  useEffect(() => {
+    if (!authUser || profile?.active_profile !== 'provider' || !providerData?.is_online || chamado) return;
+
+    const channel = supabase
+      .channel('incoming-chamados')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chamados',
+          filter: `status=eq.searching`,
+        },
+        (payload) => {
+          const newChamado = mapDbChamadoToChamado(payload.new as DbChamado);
+          
+          // Check if provider offers this service
+          const services = providerData.services_offered || ['guincho'];
+          if (services.includes(newChamado.tipoServico)) {
+            setIncomingRequest(newChamado);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authUser, profile?.active_profile, providerData?.is_online, providerData?.services_offered, chamado]);
+
+  const setActiveProfile = useCallback(async (newProfile: UserProfile) => {
+    if (!authUser || !profile) return;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ active_profile: newProfile })
+        .eq('user_id', authUser.id);
+
+      if (error) throw error;
+
+      setProfile(prev => prev ? { ...prev, active_profile: newProfile } : null);
+      setChamado(null);
+      setChatMessages([]);
+      setIncomingRequest(null);
+
+      // Create provider_data if switching to provider and doesn't exist
+      if (newProfile === 'provider' && !providerData) {
+        const { data, error: provError } = await supabase
+          .from('provider_data')
+          .insert({
+            user_id: authUser.id,
+            is_online: false,
+            radar_range: 15,
+            services_offered: ['guincho'],
+          })
+          .select()
+          .single();
+
+        if (!provError && data) {
+          setProviderData(data);
+        }
+      }
+    } catch (error) {
+      console.error('Error setting profile:', error);
+      toast.error('Erro ao alterar perfil');
+    }
+  }, [authUser, profile, providerData]);
+
+  const createChamado = useCallback(async (tipoServico: ServiceType, origem: Location, destino: Location | null) => {
+    if (!authUser) {
+      toast.error('Você precisa estar logado');
+      return;
+    }
+
     const needsDestination = serviceRequiresDestination(tipoServico);
     if (needsDestination && !destino) {
       toast.error('Informe o destino para o serviço de guincho');
       return;
     }
 
-    const newChamado: Chamado = {
-      id: `chamado-${Date.now()}`,
-      status: 'searching',
-      tipoServico,
-      clienteId: user.id,
-      prestadorId: null,
-      origem,
-      destino: needsDestination ? destino : null, // Ensure null for non-guincho
-      valor: null,
-      valorProposto: null,
-      payment: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    setChamado(newChamado);
-    toast.info('Buscando prestadores na sua região...');
-    
-    setTimeout(() => {
-      setChamado(prev => prev ? {
-        ...prev,
-        status: 'accepted',
-        prestadorId: 'provider-1',
-        updatedAt: new Date(),
-      } : null);
-      toast.success('Um prestador aceitou seu chamado!');
-    }, 3000);
-  }, [user.id]);
+    try {
+      const { data, error } = await supabase
+        .from('chamados')
+        .insert({
+          cliente_id: authUser.id,
+          tipo_servico: tipoServico,
+          status: 'searching',
+          origem_lat: origem.lat,
+          origem_lng: origem.lng,
+          origem_address: origem.address,
+          destino_lat: needsDestination && destino ? destino.lat : null,
+          destino_lng: needsDestination && destino ? destino.lng : null,
+          destino_address: needsDestination && destino ? destino.address : null,
+        })
+        .select()
+        .single();
 
-  const acceptChamado = useCallback((prestadorId: string) => {
-    setChamado(prev => prev ? {
-      ...prev,
-      status: 'negotiating',
-      prestadorId,
-      updatedAt: new Date(),
-    } : null);
-  }, []);
+      if (error) throw error;
 
-  const proposeValue = useCallback((value: number) => {
-    setChamado(prev => prev ? {
-      ...prev,
-      valorProposto: value,
-      updatedAt: new Date(),
-    } : null);
-    
-    const msg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      senderId: user.id,
-      senderType: user.activeProfile,
-      message: `Valor proposto: R$ ${value.toFixed(2)}`,
-      timestamp: new Date(),
-    };
-    setChatMessages(prev => [...prev, msg]);
-    toast.info(`Valor de R$ ${value.toFixed(2)} proposto`);
-  }, [user.id, user.activeProfile]);
+      setChamado(mapDbChamadoToChamado(data));
+      toast.info('Buscando prestadores na sua região...');
+    } catch (error) {
+      console.error('Error creating chamado:', error);
+      toast.error('Erro ao criar chamado');
+    }
+  }, [authUser]);
 
-  const confirmValue = useCallback(() => {
+  const acceptChamado = useCallback(async (chamadoId: string) => {
+    if (!authUser) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('chamados')
+        .update({
+          prestador_id: authUser.id,
+          status: 'negotiating',
+        })
+        .eq('id', chamadoId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setChamado(mapDbChamadoToChamado(data));
+      setIncomingRequest(null);
+      toast.success('Chamado aceito! Inicie a negociação.');
+    } catch (error) {
+      console.error('Error accepting chamado:', error);
+      toast.error('Erro ao aceitar chamado');
+    }
+  }, [authUser]);
+
+  const proposeValue = useCallback(async (value: number) => {
+    if (!chamado || !authUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('chamados')
+        .update({ valor_proposto: value })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
+
+      // Send chat message
+      await supabase.from('chat_messages').insert({
+        chamado_id: chamado.id,
+        sender_id: authUser.id,
+        sender_type: profile?.active_profile || 'client',
+        message: `Valor proposto: R$ ${value.toFixed(2)}`,
+      });
+
+      toast.info(`Valor de R$ ${value.toFixed(2)} proposto`);
+    } catch (error) {
+      console.error('Error proposing value:', error);
+      toast.error('Erro ao propor valor');
+    }
+  }, [chamado, authUser, profile?.active_profile]);
+
+  const confirmValue = useCallback(async () => {
     if (!chamado?.valorProposto) {
       toast.error('Nenhum valor proposto');
       return;
     }
 
-    const payment = createMockPayment(chamado.valorProposto, 'pix');
+    try {
+      const { error } = await supabase
+        .from('chamados')
+        .update({
+          status: 'awaiting_payment',
+          valor: chamado.valorProposto,
+          payment_status: 'pending',
+        })
+        .eq('id', chamado.id);
 
-    setChamado(prev => prev ? {
-      ...prev,
-      status: 'awaiting_payment',
-      valor: prev.valorProposto,
-      payment,
-      updatedAt: new Date(),
-    } : null);
+      if (error) throw error;
 
-    toast.success('Valor confirmado! Aguardando pagamento.');
-  }, [chamado?.valorProposto]);
+      toast.success('Valor confirmado! Aguardando pagamento.');
+    } catch (error) {
+      console.error('Error confirming value:', error);
+      toast.error('Erro ao confirmar valor');
+    }
+  }, [chamado]);
 
-  const initiatePayment = useCallback((method: PaymentMethod) => {
-    setChamado(prev => {
-      if (!prev || !prev.payment) return prev;
-      return {
-        ...prev,
-        payment: {
-          ...prev.payment,
-          method,
-        },
-        updatedAt: new Date(),
-      };
-    });
-  }, []);
+  const initiatePayment = useCallback(async (method: PaymentMethod) => {
+    if (!chamado) return;
 
-  const processPayment = useCallback(() => {
-    setChamado(prev => {
-      if (!prev || !prev.payment) return prev;
+    try {
+      const { error } = await supabase
+        .from('chamados')
+        .update({ payment_method: method })
+        .eq('id', chamado.id);
 
-      const approvedPayment = approveMockPayment(prev.payment);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error initiating payment:', error);
+      toast.error('Erro ao selecionar método de pagamento');
+    }
+  }, [chamado]);
+
+  const processPayment = useCallback(async () => {
+    if (!chamado) return;
+
+    try {
+      const { error } = await supabase
+        .from('chamados')
+        .update({
+          status: 'in_service',
+          payment_status: 'paid_mock',
+        })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
 
       toast.success('Pagamento aprovado! Serviço iniciando...');
-
-      return {
-        ...prev,
-        status: 'in_service',
-        payment: approvedPayment,
-        updatedAt: new Date(),
-      };
-    });
-  }, []);
-
-  const cancelChamado = useCallback(() => {
-    setChamado(prev => prev ? {
-      ...prev,
-      status: 'canceled',
-      updatedAt: new Date(),
-    } : null);
-    
-    toast.info('Chamado cancelado');
-
-    setTimeout(() => {
-      setChamado(null);
-      setChatMessages([]);
-    }, 2000);
-  }, []);
-
-  const finishService = useCallback(() => {
-    setChamado(prev => prev ? {
-      ...prev,
-      status: 'finished',
-      updatedAt: new Date(),
-    } : null);
-    
-    toast.success('Serviço finalizado com sucesso!');
-
-    setTimeout(() => {
-      setChamado(null);
-      setChatMessages([]);
-    }, 5000);
-  }, []);
-
-  const toggleProviderOnline = useCallback(() => {
-    setUser(prev => ({
-      ...prev,
-      providerData: prev.providerData ? {
-        ...prev.providerData,
-        online: !prev.providerData.online,
-      } : undefined,
-    }));
-  }, []);
-
-  const setProviderRadarRange = useCallback((range: number) => {
-    setUser(prev => ({
-      ...prev,
-      providerData: prev.providerData ? {
-        ...prev.providerData,
-        radarRange: range,
-      } : undefined,
-    }));
-  }, []);
-
-  const sendChatMessage = useCallback((message: string) => {
-    const msg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      senderId: user.id,
-      senderType: user.activeProfile,
-      message,
-      timestamp: new Date(),
-    };
-    setChatMessages(prev => [...prev, msg]);
-    
-    setTimeout(() => {
-      const response: ChatMessage = {
-        id: `msg-${Date.now()}-response`,
-        senderId: user.activeProfile === 'client' ? 'provider-1' : 'client-mock',
-        senderType: user.activeProfile === 'client' ? 'provider' : 'client',
-        message: 'Ok, combinado! 👍',
-        timestamp: new Date(),
-      };
-      setChatMessages(prev => [...prev, response]);
-    }, 1000);
-  }, [user.id, user.activeProfile]);
-
-  const acceptIncomingRequest = useCallback(() => {
-    if (incomingRequest) {
-      setChamado({
-        ...incomingRequest,
-        status: 'negotiating',
-        prestadorId: user.id,
-        payment: null,
-        updatedAt: new Date(),
-      });
-      setIncomingRequest(null);
-      toast.success('Chamado aceito! Inicie a negociação.');
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast.error('Erro ao processar pagamento');
     }
-  }, [incomingRequest, user.id]);
+  }, [chamado]);
+
+  const cancelChamado = useCallback(async () => {
+    if (!chamado) return;
+
+    try {
+      const { error } = await supabase
+        .from('chamados')
+        .update({ status: 'canceled' })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
+
+      toast.info('Chamado cancelado');
+      
+      setTimeout(() => {
+        setChamado(null);
+        setChatMessages([]);
+      }, 2000);
+    } catch (error) {
+      console.error('Error canceling chamado:', error);
+      toast.error('Erro ao cancelar chamado');
+    }
+  }, [chamado]);
+
+  const finishService = useCallback(async () => {
+    if (!chamado) return;
+
+    try {
+      const { error } = await supabase
+        .from('chamados')
+        .update({ status: 'finished' })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
+
+      // Update provider stats
+      if (providerData) {
+        await supabase
+          .from('provider_data')
+          .update({
+            total_services: (providerData.total_services || 0) + 1,
+          })
+          .eq('user_id', authUser?.id);
+      }
+
+      toast.success('Serviço finalizado com sucesso!');
+
+      setTimeout(() => {
+        setChamado(null);
+        setChatMessages([]);
+      }, 5000);
+    } catch (error) {
+      console.error('Error finishing service:', error);
+      toast.error('Erro ao finalizar serviço');
+    }
+  }, [chamado, providerData, authUser]);
+
+  const toggleProviderOnline = useCallback(async () => {
+    if (!authUser || !providerData) return;
+
+    try {
+      const newStatus = !providerData.is_online;
+      const { error } = await supabase
+        .from('provider_data')
+        .update({ is_online: newStatus })
+        .eq('user_id', authUser.id);
+
+      if (error) throw error;
+
+      setProviderData(prev => prev ? { ...prev, is_online: newStatus } : null);
+      toast.success(newStatus ? 'Você está online!' : 'Você está offline');
+    } catch (error) {
+      console.error('Error toggling online status:', error);
+      toast.error('Erro ao alterar status');
+    }
+  }, [authUser, providerData]);
+
+  const setProviderRadarRange = useCallback(async (range: number) => {
+    if (!authUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('provider_data')
+        .update({ radar_range: range })
+        .eq('user_id', authUser.id);
+
+      if (error) throw error;
+
+      setProviderData(prev => prev ? { ...prev, radar_range: range } : null);
+    } catch (error) {
+      console.error('Error setting radar range:', error);
+    }
+  }, [authUser]);
+
+  const updateProviderLocation = useCallback(async (location: Location) => {
+    if (!authUser) return;
+
+    try {
+      await supabase
+        .from('provider_data')
+        .update({
+          current_lat: location.lat,
+          current_lng: location.lng,
+          current_address: location.address,
+        })
+        .eq('user_id', authUser.id);
+    } catch (error) {
+      console.error('Error updating location:', error);
+    }
+  }, [authUser]);
+
+  const sendChatMessage = useCallback(async (message: string) => {
+    if (!chamado || !authUser) return;
+
+    try {
+      const { error } = await supabase.from('chat_messages').insert({
+        chamado_id: chamado.id,
+        sender_id: authUser.id,
+        sender_type: profile?.active_profile || 'client',
+        message,
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Erro ao enviar mensagem');
+    }
+  }, [chamado, authUser, profile?.active_profile]);
+
+  const acceptIncomingRequest = useCallback(async () => {
+    if (!incomingRequest) return;
+    await acceptChamado(incomingRequest.id);
+  }, [incomingRequest, acceptChamado]);
 
   const declineIncomingRequest = useCallback(() => {
     setIncomingRequest(null);
     toast.info('Chamado recusado');
   }, []);
 
+  const setChamadoStatus = useCallback((status: ChamadoStatus) => {
+    setChamado(prev => prev ? { ...prev, status, updatedAt: new Date() } : null);
+  }, []);
+
   return (
     <AppContext.Provider value={{
       user,
+      profile,
+      providerData,
       setActiveProfile,
+      isLoading: authLoading || isLoading,
       chamado,
       setChamadoStatus,
       createChamado,
@@ -383,6 +722,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       availableProviders,
       toggleProviderOnline,
       setProviderRadarRange,
+      updateProviderLocation,
       chatMessages,
       sendChatMessage,
       incomingRequest,
