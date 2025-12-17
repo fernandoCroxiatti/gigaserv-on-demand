@@ -1,43 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { MapView } from '../Map/MapView';
+import { RealMapView } from '../Map/RealMapView';
+import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
+import { useGeolocation } from '@/hooks/useGeolocation';
 import { Button } from '../ui/button';
-import { MapPin, Navigation, ChevronRight, Clock, Check } from 'lucide-react';
+import { MapPin, Navigation, ChevronRight, Clock, Check, Loader2, RefreshCw } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
-
-const recentPlaces = [
-  { id: 1, name: 'Casa', address: 'Rua das Flores, 123', icon: '🏠' },
-  { id: 2, name: 'Trabalho', address: 'Av. Paulista, 1578', icon: '💼' },
-  { id: 3, name: 'Oficina Parceira', address: 'Rua Augusta, 500', icon: '🔧' },
-];
 
 export function ClientIdleView() {
   const { createChamado, availableProviders } = useApp();
+  const { location: userLocation, loading: locationLoading, error: locationError, refresh: refreshLocation } = useGeolocation();
+  
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
-  const [origem, setOrigem] = useState<string>('Minha localização atual');
-  const [destino, setDestino] = useState<string>('');
-  const [showDestinationInput, setShowDestinationInput] = useState(false);
+  const [origem, setOrigem] = useState<Location | null>(null);
+  const [origemText, setOrigemText] = useState<string>('');
+  const [destino, setDestino] = useState<Location | null>(null);
+  const [destinoText, setDestinoText] = useState<string>('');
 
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
+
+  // Update origin when user location is available
+  useEffect(() => {
+    if (userLocation && !origem) {
+      setOrigem(userLocation);
+      setOrigemText(userLocation.address);
+    }
+  }, [userLocation, origem]);
+
+  const handleOrigemSelect = (location: Location) => {
+    setOrigem(location);
+    setOrigemText(location.address);
+  };
+
+  const handleDestinoSelect = (location: Location) => {
+    setDestino(location);
+    setDestinoText(location.address);
+  };
 
   const handleSolicitar = () => {
     if (!origem) return;
     if (needsDestination && !destino) return;
     
-    const origemLocation: Location = {
-      lat: -23.5505,
-      lng: -46.6333,
-      address: origem,
-    };
-    
-    const destinoLocation: Location | null = needsDestination && destino ? {
-      lat: -23.5615,
-      lng: -46.6543,
-      address: destino,
-    } : null;
-    
-    createChamado(selectedService, origemLocation, destinoLocation);
+    createChamado(selectedService, origem, needsDestination ? destino : null);
   };
 
   const onlineProviders = availableProviders.filter(p => p.online).length;
@@ -45,8 +50,17 @@ export function ClientIdleView() {
 
   return (
     <div className="relative h-full">
-      {/* Map */}
-      <MapView showProviders className="absolute inset-0" />
+      {/* Real Google Map */}
+      <RealMapView 
+        center={origem || userLocation}
+        providers={availableProviders.filter(p => p.online).map(p => ({
+          id: p.id,
+          location: p.location,
+          name: p.name,
+        }))}
+        showUserLocation
+        className="absolute inset-0" 
+      />
       
       {/* Providers online indicator */}
       <div className="absolute top-24 left-4 right-4 z-10">
@@ -82,7 +96,8 @@ export function ClientIdleView() {
                     onClick={() => {
                       setSelectedService(serviceType);
                       if (!serviceRequiresDestination(serviceType)) {
-                        setDestino('');
+                        setDestino(null);
+                        setDestinoText('');
                       }
                     }}
                     className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
@@ -114,24 +129,36 @@ export function ClientIdleView() {
 
           {/* Location inputs */}
           <div className="space-y-3">
-            {/* Origin - always shown */}
+            {/* Origin with Places Autocomplete */}
             <div>
-              <p className="text-sm font-medium text-muted-foreground mb-2">
-                🚗 Onde está o veículo?
-              </p>
-              <div className="flex items-center gap-3 p-3 bg-secondary rounded-xl">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full" />
-                </div>
-                <input
-                  type="text"
-                  value={origem}
-                  onChange={(e) => setOrigem(e.target.value)}
-                  placeholder="Endereço do veículo"
-                  className="flex-1 bg-transparent text-sm font-medium focus:outline-none"
-                />
-                <MapPin className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-muted-foreground">
+                  🚗 Onde está o veículo?
+                </p>
+                {locationLoading && (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+                {locationError && (
+                  <button onClick={refreshLocation} className="flex items-center gap-1 text-xs text-destructive">
+                    <RefreshCw className="w-3 h-3" />
+                    Tentar novamente
+                  </button>
+                )}
               </div>
+              <PlacesAutocomplete
+                value={origemText}
+                onChange={setOrigemText}
+                onSelect={handleOrigemSelect}
+                placeholder={locationLoading ? "Obtendo localização..." : "Digite o endereço"}
+                icon={
+                  <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                    <div className="w-2 h-2 bg-white rounded-full" />
+                  </div>
+                }
+              />
+              {locationError && (
+                <p className="text-xs text-destructive mt-1">{locationError}</p>
+              )}
             </div>
 
             {/* Destination - only for guincho */}
@@ -140,27 +167,17 @@ export function ClientIdleView() {
                 <p className="text-sm font-medium text-muted-foreground mb-2">
                   📍 Para onde deseja levar?
                 </p>
-                <div 
-                  className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                    showDestinationInput 
-                      ? 'border-primary bg-primary/5' 
-                      : 'border-transparent bg-secondary'
-                  }`}
-                  onClick={() => setShowDestinationInput(true)}
-                >
-                  <div className="w-8 h-8 bg-foreground rounded-full flex items-center justify-center">
-                    <div className="w-2 h-2 bg-white rounded-full" />
-                  </div>
-                  <input
-                    type="text"
-                    value={destino}
-                    onChange={(e) => setDestino(e.target.value)}
-                    placeholder="Oficina, casa ou outro destino"
-                    className="flex-1 bg-transparent text-sm font-medium focus:outline-none placeholder:text-muted-foreground"
-                    autoFocus={showDestinationInput}
-                  />
-                  <Navigation className="w-4 h-4 text-muted-foreground" />
-                </div>
+                <PlacesAutocomplete
+                  value={destinoText}
+                  onChange={setDestinoText}
+                  onSelect={handleDestinoSelect}
+                  placeholder="Oficina, casa ou outro destino"
+                  icon={
+                    <div className="w-6 h-6 bg-foreground rounded-full flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full" />
+                    </div>
+                  }
+                />
               </div>
             )}
 
@@ -176,32 +193,6 @@ export function ClientIdleView() {
               </div>
             )}
           </div>
-
-          {/* Recent places - only for guincho destination */}
-          {needsDestination && !destino && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                <span>Destinos recentes</span>
-              </div>
-              <div className="space-y-1">
-                {recentPlaces.map((place) => (
-                  <button
-                    key={place.id}
-                    onClick={() => setDestino(place.address)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-secondary transition-colors text-left"
-                  >
-                    <span className="text-xl">{place.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">{place.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{place.address}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Submit button */}
           <Button 
