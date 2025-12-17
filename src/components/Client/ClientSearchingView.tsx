@@ -3,11 +3,15 @@ import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
 import { X, Search, MapPin } from 'lucide-react';
+import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function ClientSearchingView() {
   const { chamado, cancelChamado, availableProviders } = useApp();
 
   if (!chamado) return null;
+
+  const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
+  const hasDestination = chamado.destino !== null;
 
   return (
     <div className="relative h-full">
@@ -16,6 +20,7 @@ export function ClientSearchingView() {
         showProviders 
         origem={chamado.origem}
         destino={chamado.destino}
+        showRoute={hasDestination}
         className="absolute inset-0" 
       />
 
@@ -27,11 +32,11 @@ export function ClientSearchingView() {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Search className="w-6 h-6 text-primary animate-pulse" />
+                  <span className="text-2xl">{serviceConfig.icon}</span>
                 </div>
               </div>
               <div className="flex-1">
-                <p className="font-semibold">Buscando prestadores...</p>
+                <p className="font-semibold">Buscando {serviceConfig.label}...</p>
                 <p className="text-sm text-muted-foreground">
                   {availableProviders.filter(p => p.online).length} prestadores na região
                 </p>
@@ -53,22 +58,36 @@ export function ClientSearchingView() {
       {/* Bottom card */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
         <div className="bg-card rounded-t-3xl shadow-uber-lg p-6 space-y-4">
+          {/* Service type badge */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xl">{serviceConfig.icon}</span>
+            <span className="status-badge bg-primary/10 text-primary">{serviceConfig.label}</span>
+          </div>
+
           {/* Trip info */}
           <div className="flex items-start gap-3">
             <div className="flex flex-col items-center gap-1">
               <div className="w-3 h-3 bg-primary rounded-full" />
-              <div className="w-0.5 h-8 bg-border" />
-              <div className="w-3 h-3 bg-foreground rounded-full" />
+              {hasDestination && (
+                <>
+                  <div className="w-0.5 h-8 bg-border" />
+                  <div className="w-3 h-3 bg-foreground rounded-full" />
+                </>
+              )}
             </div>
             <div className="flex-1 space-y-3">
               <div>
-                <p className="text-xs text-muted-foreground">Origem</p>
+                <p className="text-xs text-muted-foreground">
+                  {hasDestination ? 'Origem' : 'Local do atendimento'}
+                </p>
                 <p className="font-medium text-sm">{chamado.origem.address}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Destino</p>
-                <p className="font-medium text-sm">{chamado.destino.address}</p>
-              </div>
+              {hasDestination && chamado.destino && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Destino</p>
+                  <p className="font-medium text-sm">{chamado.destino.address}</p>
+                </div>
+              )}
             </div>
           </div>
 

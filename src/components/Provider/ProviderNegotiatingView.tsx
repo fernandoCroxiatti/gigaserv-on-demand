@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Send, DollarSign, MessageCircle, User, Navigation, Clock, ArrowRight } from 'lucide-react';
+import { Send, DollarSign, MessageCircle, User, Navigation, Clock, ArrowRight, Check } from 'lucide-react';
+import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function ProviderNegotiatingView() {
   const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
@@ -10,6 +11,9 @@ export function ProviderNegotiatingView() {
   const [proposedValue, setProposedValue] = useState('');
 
   if (!chamado) return null;
+
+  const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
+  const hasDestination = chamado.destino !== null;
 
   const handleSendMessage = () => {
     if (!message.trim()) return;
@@ -26,10 +30,13 @@ export function ProviderNegotiatingView() {
 
   const handleConfirmValue = () => {
     if (!chamado.valorProposto) return;
-    confirmValue(); // This now moves to awaiting_payment
+    confirmValue();
   };
 
-  const suggestedValues = [50, 80, 100, 150];
+  // Suggested values based on service type
+  const suggestedValues = chamado.tipoServico === 'guincho' 
+    ? [150, 200, 250, 300] 
+    : [50, 80, 100, 150];
 
   return (
     <div className="relative h-full provider-theme">
@@ -37,7 +44,7 @@ export function ProviderNegotiatingView() {
       <MapView 
         origem={chamado.origem}
         destino={chamado.destino}
-        showRoute
+        showRoute={hasDestination}
         className="absolute inset-0" 
       />
 
@@ -50,16 +57,17 @@ export function ProviderNegotiatingView() {
             </div>
             <div className="flex-1">
               <h3 className="font-semibold">Cliente</h3>
-              <p className="text-sm text-muted-foreground">Aguardando proposta de valor</p>
+              <div className="flex items-center gap-2">
+                <span className="status-badge bg-provider-primary/10 text-provider-primary text-xs">
+                  <span className="mr-1">{serviceConfig.icon}</span>
+                  {serviceConfig.label}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-1">
                 <Navigation className="w-4 h-4 text-provider-primary" />
                 <span>3.5 km</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Clock className="w-4 h-4 text-provider-primary" />
-                <span>~15 min</span>
               </div>
             </div>
           </div>
@@ -71,32 +79,52 @@ export function ProviderNegotiatingView() {
         <div className="bg-card rounded-t-3xl shadow-uber-lg max-h-[65vh] flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-provider-primary" />
-              <h3 className="font-semibold">Negociação</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <MessageCircle className="w-5 h-5 text-provider-primary" />
+                <h3 className="font-semibold">Negociação</h3>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="w-4 h-4" />
+                <span>{serviceConfig.estimatedTime}</span>
+              </div>
             </div>
           </div>
 
           {/* Trip details */}
-          <div className="p-4 border-b border-border">
+          <div className="p-4 border-b border-border bg-secondary/30">
             <div className="flex items-start gap-3">
               <div className="flex flex-col items-center gap-1">
                 <div className="w-2 h-2 bg-provider-primary rounded-full" />
-                <div className="w-0.5 h-6 bg-border" />
-                <div className="w-2 h-2 bg-foreground rounded-full" />
+                {hasDestination && (
+                  <>
+                    <div className="w-0.5 h-4 bg-border" />
+                    <div className="w-2 h-2 bg-foreground rounded-full" />
+                  </>
+                )}
               </div>
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-1">
                 <p className="text-sm truncate">{chamado.origem.address}</p>
-                <p className="text-sm truncate">{chamado.destino.address}</p>
+                {hasDestination && chamado.destino && (
+                  <p className="text-sm truncate">{chamado.destino.address}</p>
+                )}
               </div>
             </div>
+            
+            {/* Service type indicator */}
+            {!hasDestination && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <Check className="w-3 h-3 text-provider-primary" />
+                <span>Atendimento no local</span>
+              </div>
+            )}
           </div>
 
           {/* Chat messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[100px] max-h-[150px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[80px] max-h-[120px]">
             {chatMessages.length === 0 ? (
-              <div className="text-center text-muted-foreground text-sm py-4">
-                <p>Proponha um valor para o serviço</p>
+              <div className="text-center text-muted-foreground text-sm py-2">
+                <p>Proponha um valor</p>
               </div>
             ) : (
               chatMessages.map((msg) => (
@@ -118,7 +146,7 @@ export function ProviderNegotiatingView() {
 
           {/* Quick value suggestions */}
           <div className="px-4 pb-2">
-            <p className="text-xs text-muted-foreground mb-2">Sugestões rápidas</p>
+            <p className="text-xs text-muted-foreground mb-2">Sugestões para {serviceConfig.label}</p>
             <div className="flex gap-2">
               {suggestedValues.map((value) => (
                 <button

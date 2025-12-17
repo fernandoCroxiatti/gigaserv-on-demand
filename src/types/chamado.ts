@@ -3,7 +3,7 @@ export type ChamadoStatus =
   | 'searching'
   | 'accepted'
   | 'negotiating'
-  | 'awaiting_payment'  // New status for payment flow
+  | 'awaiting_payment'
   | 'confirmed'
   | 'in_service'
   | 'finished'
@@ -11,10 +11,59 @@ export type ChamadoStatus =
 
 export type UserProfile = 'client' | 'provider';
 
+// Service types for automotive services
+export type ServiceType = 
+  | 'guincho'      // Tow truck - requires origin AND destination
+  | 'borracharia'  // Mobile tire service - origin only
+  | 'mecanica'     // Mobile mechanic - origin only
+  | 'chaveiro';    // Locksmith - origin only
+
+export const SERVICE_CONFIG: Record<ServiceType, {
+  label: string;
+  description: string;
+  icon: string;
+  requiresDestination: boolean;
+  estimatedTime: string;
+}> = {
+  guincho: {
+    label: 'Guincho',
+    description: 'Reboque do veículo para oficina ou destino',
+    icon: '🚛',
+    requiresDestination: true,
+    estimatedTime: '30-45 min',
+  },
+  borracharia: {
+    label: 'Borracharia Móvel',
+    description: 'Troca de pneu, calibragem, reparo no local',
+    icon: '🔧',
+    requiresDestination: false,
+    estimatedTime: '20-30 min',
+  },
+  mecanica: {
+    label: 'Mecânica Móvel',
+    description: 'Diagnóstico e reparo no local',
+    icon: '🔩',
+    requiresDestination: false,
+    estimatedTime: '30-60 min',
+  },
+  chaveiro: {
+    label: 'Chaveiro Automotivo',
+    description: 'Abertura de veículo, cópia de chave',
+    icon: '🔑',
+    requiresDestination: false,
+    estimatedTime: '15-25 min',
+  },
+};
+
+// Helper to check if service requires destination
+export function serviceRequiresDestination(serviceType: ServiceType): boolean {
+  return SERVICE_CONFIG[serviceType].requiresDestination;
+}
+
 export type PaymentStatus = 
   | 'pending'
-  | 'paid_mock'      // Mock payment (no real processing)
-  | 'paid_stripe'    // Future: Stripe payment processed
+  | 'paid_mock'
+  | 'paid_stripe'
   | 'failed'
   | 'refunded';
 
@@ -23,12 +72,12 @@ export type PaymentMethod =
   | 'credit_card'
   | 'debit_card'
   | 'cash'
-  | 'stripe';        // Future: Stripe integration
+  | 'stripe';
 
 export type PaymentProvider = 
-  | 'mock'           // Current: simulated payment
-  | 'stripe'         // Future: Stripe integration
-  | 'mercadopago';   // Future: other providers
+  | 'mock'
+  | 'stripe'
+  | 'mercadopago';
 
 export interface Location {
   lat: number;
@@ -36,7 +85,6 @@ export interface Location {
   address: string;
 }
 
-// Payment structure prepared for Stripe integration
 export interface Payment {
   id: string;
   status: PaymentStatus;
@@ -44,28 +92,24 @@ export interface Payment {
   amount: number;
   currency: string;
   provider: PaymentProvider;
-  // Future Stripe fields
   stripePaymentIntentId?: string;
   stripeCustomerId?: string;
-  // Timestamps
   createdAt: Date;
   paidAt?: Date;
-  // Metadata
   metadata?: Record<string, string>;
 }
 
 export interface Chamado {
   id: string;
   status: ChamadoStatus;
+  tipoServico: ServiceType;
   clienteId: string;
   prestadorId: string | null;
   origem: Location;
-  destino: Location;
+  destino: Location | null; // NULL for non-guincho services
   valor: number | null;
   valorProposto: number | null;
-  // Payment integration
   payment: Payment | null;
-  // Timestamps
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,7 +122,8 @@ export interface Provider {
   totalServices: number;
   online: boolean;
   location: Location;
-  radarRange: number; // km
+  radarRange: number;
+  services: ServiceType[]; // Services this provider offers
 }
 
 export interface User {
@@ -93,6 +138,7 @@ export interface User {
     radarRange: number;
     rating: number;
     totalServices: number;
+    services: ServiceType[];
   };
 }
 
@@ -104,7 +150,6 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
-// Helper function to create a mock payment
 export function createMockPayment(amount: number, method: PaymentMethod = 'pix'): Payment {
   return {
     id: `payment-${Date.now()}`,
@@ -117,7 +162,6 @@ export function createMockPayment(amount: number, method: PaymentMethod = 'pix')
   };
 }
 
-// Helper function to simulate payment approval (for mock)
 export function approveMockPayment(payment: Payment): Payment {
   return {
     ...payment,

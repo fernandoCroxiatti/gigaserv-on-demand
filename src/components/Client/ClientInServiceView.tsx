@@ -2,7 +2,8 @@ import React from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Phone, MessageCircle, Star, Navigation, Shield, Clock } from 'lucide-react';
+import { Phone, MessageCircle, Star, Navigation, Shield, Clock, CheckCircle } from 'lucide-react';
+import { SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 
 export function ClientInServiceView() {
   const { chamado, availableProviders, cancelChamado } = useApp();
@@ -10,6 +11,9 @@ export function ClientInServiceView() {
   if (!chamado) return null;
 
   const provider = availableProviders.find(p => p.id === chamado.prestadorId);
+  const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
+  const hasDestination = chamado.destino !== null;
+  const isGuidingToDestination = hasDestination; // For guincho, show full route
 
   return (
     <div className="relative h-full">
@@ -17,7 +21,7 @@ export function ClientInServiceView() {
       <MapView 
         origem={chamado.origem}
         destino={chamado.destino}
-        showRoute
+        showRoute={hasDestination}
         className="absolute inset-0" 
       />
 
@@ -27,16 +31,22 @@ export function ClientInServiceView() {
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-12 h-12 bg-status-inService/10 rounded-full flex items-center justify-center">
-                <Navigation className="w-6 h-6 text-status-inService animate-pulse" />
+                <span className="text-2xl">{serviceConfig.icon}</span>
               </div>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-status-inService">Serviço em andamento</p>
-              <p className="text-sm text-muted-foreground">O prestador está a caminho</p>
+              <p className="font-semibold text-status-inService">
+                {hasDestination ? 'Guincho a caminho' : 'Prestador a caminho'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {hasDestination 
+                  ? 'Rebocando até o destino' 
+                  : `${serviceConfig.label} chegando no local`}
+              </p>
             </div>
             <div className="flex items-center gap-1 text-sm bg-secondary px-3 py-1.5 rounded-full">
               <Clock className="w-4 h-4" />
-              <span>~15 min</span>
+              <span>{serviceConfig.estimatedTime}</span>
             </div>
           </div>
         </div>
@@ -96,26 +106,46 @@ export function ClientInServiceView() {
             </div>
           </div>
 
-          {/* Route info */}
+          {/* Route info - adapts based on service type */}
           <div className="p-4 border-b border-border">
             <div className="flex items-start gap-3">
               <div className="flex flex-col items-center gap-1">
                 <div className="w-3 h-3 bg-status-inService rounded-full" />
-                <div className="w-0.5 h-8 bg-status-inService/30" />
-                <div className="w-3 h-3 border-2 border-foreground rounded-full" />
+                {hasDestination && (
+                  <>
+                    <div className="w-0.5 h-8 bg-status-inService/30" />
+                    <div className="w-3 h-3 border-2 border-foreground rounded-full" />
+                  </>
+                )}
               </div>
               <div className="flex-1 space-y-3">
                 <div>
-                  <p className="text-xs text-muted-foreground">Origem</p>
+                  <p className="text-xs text-muted-foreground">
+                    {hasDestination ? 'Local do veículo' : 'Local do atendimento'}
+                  </p>
                   <p className="font-medium text-sm">{chamado.origem.address}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Destino</p>
-                  <p className="font-medium text-sm">{chamado.destino.address}</p>
-                </div>
+                {hasDestination && chamado.destino && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Destino final</p>
+                    <p className="font-medium text-sm">{chamado.destino.address}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
+
+          {/* Service type info for local services */}
+          {!hasDestination && (
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
+                <CheckCircle className="w-5 h-5 text-primary" />
+                <p className="text-sm">
+                  {serviceConfig.label}: atendimento no local do veículo
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="p-4 flex gap-3">

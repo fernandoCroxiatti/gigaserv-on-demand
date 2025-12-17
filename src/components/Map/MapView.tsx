@@ -6,7 +6,7 @@ import { MapPin, Navigation } from 'lucide-react';
 interface MapViewProps {
   showProviders?: boolean;
   origem?: Location;
-  destino?: Location;
+  destino?: Location | null;
   showRoute?: boolean;
   className?: string;
 }
@@ -20,6 +20,9 @@ export function MapView({
 }: MapViewProps) {
   const { availableProviders, user } = useApp();
   const isProvider = user.activeProfile === 'provider';
+  
+  // Only show route if both origem and destino exist
+  const canShowRoute = showRoute && origem && destino;
 
   return (
     <div className={`relative w-full h-full bg-gradient-to-b from-blue-100 to-blue-50 overflow-hidden ${className}`}>
@@ -43,8 +46,8 @@ export function MapView({
         <div className="absolute top-3/4 left-0 right-0 h-4 bg-white/40" />
       </div>
 
-      {/* Route line */}
-      {showRoute && origem && destino && (
+      {/* Route line - only if destination exists */}
+      {canShowRoute && (
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
             <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -101,7 +104,7 @@ export function MapView({
         </div>
       )}
 
-      {/* Destination marker */}
+      {/* Destination marker - only if destination exists */}
       {destino && (
         <div 
           className="absolute transform -translate-x-1/2 -translate-y-full"

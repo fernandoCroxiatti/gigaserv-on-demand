@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Star, Send, Check, DollarSign, MessageCircle, User, ArrowRight } from 'lucide-react';
+import { Star, Send, Check, DollarSign, MessageCircle, User, ArrowRight, Navigation, Clock } from 'lucide-react';
+import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function ClientNegotiatingView() {
   const { chamado, availableProviders, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
@@ -12,6 +13,8 @@ export function ClientNegotiatingView() {
   if (!chamado) return null;
 
   const provider = availableProviders.find(p => p.id === chamado.prestadorId);
+  const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
+  const hasDestination = chamado.destino !== null;
 
   const handleSendMessage = () => {
     if (!message.trim()) return;
@@ -28,7 +31,7 @@ export function ClientNegotiatingView() {
 
   const handleConfirmAndPay = () => {
     if (!chamado.valorProposto) return;
-    confirmValue(); // This now moves to awaiting_payment
+    confirmValue();
   };
 
   return (
@@ -37,7 +40,7 @@ export function ClientNegotiatingView() {
       <MapView 
         origem={chamado.origem}
         destino={chamado.destino}
-        showRoute
+        showRoute={hasDestination}
         className="absolute inset-0" 
       />
 
@@ -49,7 +52,7 @@ export function ClientNegotiatingView() {
               <img 
                 src={provider?.avatar} 
                 alt={provider?.name}
-                className="w-16 h-16 rounded-full border-2 border-primary"
+                className="w-14 h-14 rounded-full border-2 border-primary"
               />
               <div className="absolute -bottom-1 -right-1 bg-primary text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
                 <Star className="w-3 h-3 fill-current" />
@@ -57,13 +60,13 @@ export function ClientNegotiatingView() {
               </div>
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-lg">{provider?.name}</h3>
-              <p className="text-sm text-muted-foreground">{provider?.totalServices} serviços realizados</p>
+              <h3 className="font-semibold">{provider?.name}</h3>
+              <p className="text-sm text-muted-foreground">{provider?.totalServices} serviços</p>
             </div>
             <div className="text-right">
-              <span className="status-badge bg-status-accepted/10 text-status-accepted">
-                <Check className="w-3 h-3" />
-                Aceito
+              <span className="status-badge bg-primary/10 text-primary">
+                <span className="mr-1">{serviceConfig.icon}</span>
+                {serviceConfig.label}
               </span>
             </div>
           </div>
@@ -75,18 +78,49 @@ export function ClientNegotiatingView() {
         <div className="bg-card rounded-t-3xl shadow-uber-lg max-h-[60vh] flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold">Negociação</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <MessageCircle className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold">Negociação</h3>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="w-4 h-4" />
+                <span>{serviceConfig.estimatedTime}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Route summary */}
+          <div className="p-4 border-b border-border bg-secondary/30">
+            <div className="flex items-start gap-3">
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-2 h-2 bg-primary rounded-full" />
+                {hasDestination && (
+                  <>
+                    <div className="w-0.5 h-4 bg-border" />
+                    <div className="w-2 h-2 bg-foreground rounded-full" />
+                  </>
+                )}
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-sm truncate">{chamado.origem.address}</p>
+                {hasDestination && chamado.destino && (
+                  <p className="text-sm truncate">{chamado.destino.address}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-1 text-sm">
+                <Navigation className="w-4 h-4 text-primary" />
+                <span>3.5 km</span>
+              </div>
             </div>
           </div>
 
           {/* Chat messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[150px] max-h-[200px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[100px] max-h-[150px]">
             {chatMessages.length === 0 ? (
-              <div className="text-center text-muted-foreground text-sm py-8">
-                <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>Inicie a negociação com o prestador</p>
+              <div className="text-center text-muted-foreground text-sm py-4">
+                <MessageCircle className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                <p>Negocie o valor do serviço</p>
               </div>
             ) : (
               chatMessages.map((msg) => (
@@ -108,10 +142,6 @@ export function ClientNegotiatingView() {
 
           {/* Value proposal */}
           <div className="p-4 border-t border-border">
-            <div className="flex items-center gap-2 mb-3">
-              <DollarSign className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Propor valor</span>
-            </div>
             <div className="flex gap-2">
               <div className="flex-1 flex items-center bg-secondary rounded-xl px-4">
                 <span className="text-muted-foreground">R$</span>

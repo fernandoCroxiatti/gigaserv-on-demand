@@ -9,40 +9,36 @@ import {
   ChatMessage,
   Payment,
   PaymentMethod,
+  ServiceType,
   createMockPayment,
-  approveMockPayment
+  approveMockPayment,
+  serviceRequiresDestination
 } from '@/types/chamado';
 import { toast } from 'sonner';
 
 interface AppContextType {
-  // User state
   user: User;
   setActiveProfile: (profile: UserProfile) => void;
   
-  // Chamado state
   chamado: Chamado | null;
   setChamadoStatus: (status: ChamadoStatus) => void;
-  createChamado: (origem: Location, destino: Location) => void;
+  createChamado: (tipoServico: ServiceType, origem: Location, destino: Location | null) => void;
   acceptChamado: (prestadorId: string) => void;
   proposeValue: (value: number) => void;
   confirmValue: () => void;
   cancelChamado: () => void;
   finishService: () => void;
   
-  // Payment methods
   initiatePayment: (method: PaymentMethod) => void;
   processPayment: () => void;
   
-  // Provider state
   availableProviders: Provider[];
   toggleProviderOnline: () => void;
   setProviderRadarRange: (range: number) => void;
   
-  // Chat state
   chatMessages: ChatMessage[];
   sendChatMessage: (message: string) => void;
   
-  // Incoming request for provider
   incomingRequest: Chamado | null;
   acceptIncomingRequest: () => void;
   declineIncomingRequest: () => void;
@@ -50,7 +46,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Mock data
 const mockProviders: Provider[] = [
   {
     id: 'provider-1',
@@ -61,6 +56,7 @@ const mockProviders: Provider[] = [
     online: true,
     location: { lat: -23.5505, lng: -46.6333, address: 'Av. Paulista, 1000' },
     radarRange: 15,
+    services: ['guincho', 'mecanica'],
   },
   {
     id: 'provider-2',
@@ -71,6 +67,7 @@ const mockProviders: Provider[] = [
     online: true,
     location: { lat: -23.5515, lng: -46.6343, address: 'Rua Augusta, 500' },
     radarRange: 20,
+    services: ['borracharia', 'mecanica'],
   },
   {
     id: 'provider-3',
@@ -81,6 +78,7 @@ const mockProviders: Provider[] = [
     online: true,
     location: { lat: -23.5525, lng: -46.6353, address: 'Rua Oscar Freire, 200' },
     radarRange: 25,
+    services: ['chaveiro', 'guincho'],
   },
 ];
 
@@ -96,6 +94,7 @@ const defaultUser: User = {
     radarRange: 15,
     rating: 4.9,
     totalServices: 0,
+    services: ['guincho', 'mecanica', 'borracharia'],
   },
 };
 
@@ -106,7 +105,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [incomingRequest, setIncomingRequest] = useState<Chamado | null>(null);
 
-  // Simulate provider movement
   useEffect(() => {
     const interval = setInterval(() => {
       setAvailableProviders(prev => 
@@ -123,17 +121,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Simulate incoming request for provider
   useEffect(() => {
     if (user.activeProfile === 'provider' && user.providerData?.online && !chamado) {
       const timeout = setTimeout(() => {
+        // Randomly pick a service type for incoming request
+        const serviceTypes: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
+        const randomService = serviceTypes[Math.floor(Math.random() * serviceTypes.length)];
+        const needsDestination = serviceRequiresDestination(randomService);
+        
         const mockRequest: Chamado = {
           id: `chamado-${Date.now()}`,
           status: 'searching',
+          tipoServico: randomService,
           clienteId: 'client-mock',
           prestadorId: null,
           origem: { lat: -23.5505, lng: -46.6333, address: 'Av. Paulista, 1578, São Paulo' },
-          destino: { lat: -23.5615, lng: -46.6543, address: 'Shopping Ibirapuera, São Paulo' },
+          destino: needsDestination 
+            ? { lat: -23.5615, lng: -46.6543, address: 'Oficina Central, São Paulo' }
+            : null,
           valor: null,
           valorProposto: null,
           payment: null,
@@ -157,14 +162,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setChamado(prev => prev ? { ...prev, status, updatedAt: new Date() } : null);
   }, []);
 
-  const createChamado = useCallback((origem: Location, destino: Location) => {
+  const createChamado = useCallback((tipoServico: ServiceType, origem: Location, destino: Location | null) => {
+    // Validate: guincho requires destination, others don't
+    const needsDestination = serviceRequiresDestination(tipoServico);
+    if (needsDestination && !destino) {
+      toast.error('Informe o destino para o serviço de guincho');
+      return;
+    }
+
     const newChamado: Chamado = {
       id: `chamado-${Date.now()}`,
       status: 'searching',
+      tipoServico,
       clienteId: user.id,
       prestadorId: null,
       origem,
-      destino,
+      destino: needsDestination ? destino : null, // Ensure null for non-guincho
       valor: null,
       valorProposto: null,
       payment: null,
@@ -174,7 +187,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setChamado(newChamado);
     toast.info('Buscando prestadores na sua região...');
     
-    // Simulate provider accepting after 3 seconds
     setTimeout(() => {
       setChamado(prev => prev ? {
         ...prev,
@@ -202,7 +214,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date(),
     } : null);
     
-    // Add system message
     const msg: ChatMessage = {
       id: `msg-${Date.now()}`,
       senderId: user.id,
@@ -214,14 +225,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast.info(`Valor de R$ ${value.toFixed(2)} proposto`);
   }, [user.id, user.activeProfile]);
 
-  // Confirm value and move to awaiting_payment
   const confirmValue = useCallback(() => {
     if (!chamado?.valorProposto) {
       toast.error('Nenhum valor proposto');
       return;
     }
 
-    // Create payment object prepared for future Stripe integration
     const payment = createMockPayment(chamado.valorProposto, 'pix');
 
     setChamado(prev => prev ? {
@@ -235,7 +244,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast.success('Valor confirmado! Aguardando pagamento.');
   }, [chamado?.valorProposto]);
 
-  // Initiate payment with selected method
   const initiatePayment = useCallback((method: PaymentMethod) => {
     setChamado(prev => {
       if (!prev || !prev.payment) return prev;
@@ -250,13 +258,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Process payment (mock for now, ready for Stripe)
   const processPayment = useCallback(() => {
     setChamado(prev => {
       if (!prev || !prev.payment) return prev;
 
-      // Simulate payment processing
-      // In the future, this would call Stripe API
       const approvedPayment = approveMockPayment(prev.payment);
 
       toast.success('Pagamento aprovado! Serviço iniciando...');
@@ -330,7 +335,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     setChatMessages(prev => [...prev, msg]);
     
-    // Simulate response after 1 second
     setTimeout(() => {
       const response: ChatMessage = {
         id: `msg-${Date.now()}-response`,
