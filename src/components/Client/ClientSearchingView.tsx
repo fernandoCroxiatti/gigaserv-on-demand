@@ -1,58 +1,80 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { MapView } from '../Map/MapView';
+import { RealMapView, MapProvider } from '../Map/RealMapView';
+import { SearchingIndicator } from './SearchingIndicator';
+import { useProgressiveSearch } from '@/hooks/useProgressiveSearch';
 import { Button } from '../ui/button';
-import { X, Search, MapPin } from 'lucide-react';
+import { X } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function ClientSearchingView() {
-  const { chamado, cancelChamado, availableProviders } = useApp();
+  const { chamado, cancelChamado } = useApp();
+
+  // Progressive search when searching
+  const {
+    searchState,
+    currentRadius,
+    nearbyProviders,
+    radiusIndex,
+    totalRadii,
+  } = useProgressiveSearch({
+    userLocation: chamado?.origem || null,
+    serviceType: chamado?.tipoServico || 'guincho',
+    enabled: !!chamado && chamado.status === 'searching',
+  });
 
   if (!chamado) return null;
 
   const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
   const hasDestination = chamado.destino !== null;
 
+  // Convert providers to map format
+  const mapProviders: MapProvider[] = nearbyProviders.map(p => ({
+    id: p.id,
+    location: p.location,
+    name: p.name,
+    services: p.services,
+    distance: p.distance,
+  }));
+
   return (
     <div className="relative h-full">
-      {/* Full screen map with providers */}
-      <MapView 
-        showProviders 
+      {/* Full screen map with providers and search radius */}
+      <RealMapView 
+        center={chamado.origem}
         origem={chamado.origem}
         destino={chamado.destino}
         showRoute={hasDestination}
+        providers={mapProviders}
+        showSearchRadius={searchState === 'searching' || searchState === 'expanding_radius'}
+        searchRadius={currentRadius}
+        animateProviders={true}
         className="absolute inset-0" 
       />
 
       {/* Search overlay */}
       <div className="absolute inset-0 pointer-events-none">
-        {/* Top info card */}
+        {/* Top search status */}
         <div className="absolute top-24 left-4 right-4 pointer-events-auto">
-          <div className="glass-card rounded-2xl p-4 animate-fade-in">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">{serviceConfig.icon}</span>
-                </div>
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold">Buscando {serviceConfig.label}...</p>
-                <p className="text-sm text-muted-foreground">
-                  {availableProviders.filter(p => p.online).length} prestadores na região
-                </p>
-              </div>
-            </div>
-          </div>
+          <SearchingIndicator
+            state={searchState}
+            currentRadius={currentRadius}
+            providersCount={nearbyProviders.length}
+            radiusIndex={radiusIndex}
+            totalRadii={totalRadii}
+          />
         </div>
 
-        {/* Animated search ring */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="relative w-48 h-48">
-            <div className="absolute inset-0 rounded-full border-4 border-primary/30 animate-ping" style={{ animationDuration: '2s' }} />
-            <div className="absolute inset-4 rounded-full border-4 border-primary/40 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
-            <div className="absolute inset-8 rounded-full border-4 border-primary/50 animate-ping" style={{ animationDuration: '2s', animationDelay: '1s' }} />
+        {/* Animated search ring - only when actively searching */}
+        {(searchState === 'searching' || searchState === 'expanding_radius') && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div className="relative w-48 h-48">
+              <div className="absolute inset-0 rounded-full border-4 border-primary/30 animate-ping" style={{ animationDuration: '2s' }} />
+              <div className="absolute inset-4 rounded-full border-4 border-primary/40 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+              <div className="absolute inset-8 rounded-full border-4 border-primary/50 animate-ping" style={{ animationDuration: '2s', animationDelay: '1s' }} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Bottom card */}
@@ -102,7 +124,11 @@ export function ClientSearchingView() {
                 />
               ))}
             </div>
-            <span className="text-sm text-muted-foreground">Aguardando resposta</span>
+            <span className="text-sm text-muted-foreground">
+              {searchState === 'timeout' 
+                ? 'Nenhum prestador encontrado'
+                : 'Aguardando resposta'}
+            </span>
           </div>
 
           {/* Cancel button */}
