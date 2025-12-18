@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '../ui/button';
@@ -13,10 +13,93 @@ import {
   Edit, 
   LogOut,
   Plus,
-  Trash2
+  Trash2,
+  Loader2,
+  RefreshCw,
+  CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ClientRequestsList } from './ClientRequestsList';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
+
+interface SavedCard {
+  id: string;
+  brand: string;
+  last4: string;
+  exp_month?: number;
+  exp_year?: number;
+}
+
+function AddCardForm({ 
+  clientSecret,
+  onSuccess,
+  onCancel
+}: {
+  clientSecret: string;
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setIsProcessing(true);
+
+    try {
+      const { error, setupIntent } = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/profile`,
+        },
+        redirect: 'if_required',
+      });
+
+      if (error) {
+        toast.error(error.message || 'Erro ao salvar cartão');
+      } else if (setupIntent && setupIntent.status === 'succeeded') {
+        toast.success('Cartão adicionado com sucesso!');
+        onSuccess();
+      }
+    } catch (err) {
+      toast.error('Erro ao processar cartão');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <PaymentElement />
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isProcessing}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={!stripe || isProcessing}>
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Salvar Cartão
+            </>
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 export function ClientProfile() {
   const { user, profile } = useApp();
@@ -26,12 +109,105 @@ export function ClientProfile() {
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
 
-  const [savedCards, setSavedCards] = useState<Array<{id: string; last4: string; brand: string}>>([]);
+  // Payment methods state
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [loadingCards, setLoadingCards] = useState(true);
   const [showAddCard, setShowAddCard] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [loadingSetup, setLoadingSetup] = useState(false);
+  const [deletingCard, setDeletingCard] = useState<string | null>(null);
+
+  // Load saved cards on mount
+  useEffect(() => {
+    fetchPaymentMethods();
+  }, []);
+
+  const fetchPaymentMethods = async () => {
+    setLoadingCards(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('list-payment-methods');
+      
+      if (error) {
+        console.error('Error fetching payment methods:', error);
+        return;
+      }
+
+      if (data?.payment_methods) {
+        setSavedCards(data.payment_methods);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+    } finally {
+      setLoadingCards(false);
+    }
+  };
+
+  const handleAddCard = async () => {
+    setLoadingSetup(true);
+    setShowAddCard(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('create-setup-intent');
+      
+      if (error) {
+        console.error('Error creating setup intent:', error);
+        toast.error('Erro ao iniciar cadastro de cartão');
+        setShowAddCard(false);
+        return;
+      }
+
+      if (data?.client_secret) {
+        setClientSecret(data.client_secret);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      toast.error('Erro ao conectar com Stripe');
+      setShowAddCard(false);
+    } finally {
+      setLoadingSetup(false);
+    }
+  };
+
+  const handleCardAdded = () => {
+    setShowAddCard(false);
+    setClientSecret(null);
+    fetchPaymentMethods();
+  };
+
+  const handleDeleteCard = async (cardId: string) => {
+    setDeletingCard(cardId);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-payment-method', {
+        body: { payment_method_id: cardId }
+      });
+      
+      if (error || data?.error) {
+        toast.error('Erro ao remover cartão');
+        return;
+      }
+
+      toast.success('Cartão removido');
+      setSavedCards(prev => prev.filter(c => c.id !== cardId));
+    } catch (err) {
+      console.error('Error:', err);
+      toast.error('Erro ao remover cartão');
+    } finally {
+      setDeletingCard(null);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
+  };
+
+  const getBrandIcon = (brand: string) => {
+    const brandLower = brand.toLowerCase();
+    if (brandLower === 'visa') return '💳 Visa';
+    if (brandLower === 'mastercard') return '💳 Mastercard';
+    if (brandLower === 'amex') return '💳 Amex';
+    if (brandLower === 'elo') return '💳 Elo';
+    return `💳 ${brand}`;
   };
 
   return (
@@ -161,13 +337,35 @@ export function ClientProfile() {
           <div className="bg-card rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-lg">Formas de pagamento</h3>
-              <Button variant="outline" size="sm" onClick={() => setShowAddCard(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Adicionar
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={fetchPaymentMethods} 
+                  disabled={loadingCards}
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingCards ? 'animate-spin' : ''}`} />
+                </Button>
+                {!showAddCard && (
+                  <Button variant="outline" size="sm" onClick={handleAddCard} disabled={loadingSetup}>
+                    {loadingSetup ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Adicionar
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
 
-            {savedCards.length === 0 ? (
+            {loadingCards ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : savedCards.length === 0 && !showAddCard ? (
               <div className="text-center py-8">
                 <CreditCard className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground">Nenhum cartão cadastrado</p>
@@ -181,15 +379,27 @@ export function ClientProfile() {
                   <div key={card.id} className="flex items-center gap-4 p-4 bg-secondary rounded-xl">
                     <CreditCard className="w-8 h-8 text-primary" />
                     <div className="flex-1">
-                      <p className="font-medium">{card.brand}</p>
-                      <p className="text-sm text-muted-foreground">**** **** **** {card.last4}</p>
+                      <p className="font-medium capitalize">{card.brand}</p>
+                      <p className="text-sm text-muted-foreground">
+                        **** **** **** {card.last4}
+                        {card.exp_month && card.exp_year && (
+                          <span className="ml-2">
+                            {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)}
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <Button 
                       variant="ghost" 
                       size="icon"
-                      onClick={() => setSavedCards(prev => prev.filter(c => c.id !== card.id))}
+                      disabled={deletingCard === card.id}
+                      onClick={() => handleDeleteCard(card.id)}
                     >
-                      <Trash2 className="w-4 h-4 text-destructive" />
+                      {deletingCard === card.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      )}
                     </Button>
                   </div>
                 ))}
@@ -199,15 +409,49 @@ export function ClientProfile() {
             {showAddCard && (
               <div className="mt-4 p-4 border border-border rounded-xl space-y-4">
                 <h4 className="font-medium">Adicionar novo cartão</h4>
-                <p className="text-sm text-muted-foreground">
-                  A integração com Stripe será ativada em breve para pagamentos seguros.
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setShowAddCard(false)}>
-                    Cancelar
-                  </Button>
-                  <Button disabled>Em breve</Button>
-                </div>
+                
+                {loadingSetup ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : clientSecret ? (
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{ 
+                      clientSecret,
+                      appearance: {
+                        theme: 'stripe',
+                        variables: {
+                          colorPrimary: '#22c55e',
+                        }
+                      }
+                    }}
+                  >
+                    <AddCardForm 
+                      clientSecret={clientSecret}
+                      onSuccess={handleCardAdded}
+                      onCancel={() => {
+                        setShowAddCard(false);
+                        setClientSecret(null);
+                      }}
+                    />
+                  </Elements>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-destructive">Erro ao carregar formulário</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={() => {
+                        setShowAddCard(false);
+                        handleAddCard();
+                      }}
+                    >
+                      Tentar novamente
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
