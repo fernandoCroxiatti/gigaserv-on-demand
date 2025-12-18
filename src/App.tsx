@@ -10,6 +10,7 @@ import { useAdmin } from "./hooks/useAdmin";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
+import StripeCallback from "./pages/StripeCallback";
 import NotFound from "./pages/NotFound";
 import { AdminLayout } from "./components/Admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -120,6 +121,15 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Profile />
+                  </ProtectedRoute>
+                } 
+              />
+              {/* Stripe callback routes */}
+              <Route 
+                path="/stripe/callback" 
+                element={
+                  <ProtectedRoute>
+                    <StripeCallback />
                   </ProtectedRoute>
                 } 
               />
