@@ -18,13 +18,11 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { PaymentMethod } from '@/types/chamado';
-import { loadStripe, Stripe } from '@stripe/stripe-js';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
+import { getStripePromise } from '@/lib/stripe';
 
 const paymentMethods: { id: PaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean }[] = [
   { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento via Stripe', available: true },
@@ -122,10 +120,12 @@ function PixPaymentForm({
   const [checking, setChecking] = useState(false);
   const [stripe, setStripe] = useState<Stripe | null>(null);
 
-  // Initialize Stripe
+  // Initialize Stripe lazily (avoid calling Stripe() with empty key at import time)
   useEffect(() => {
-    stripePromise.then(s => setStripe(s));
-  }, []);
+    getStripePromise()
+      .then((s) => setStripe(s))
+      .catch((e) => onError(e?.message || 'Stripe não configurado'));
+  }, [onError]);
 
   // Confirm PIX payment and get QR code
   useEffect(() => {
@@ -290,6 +290,11 @@ export function ClientAwaitingPaymentView() {
   const [loadingPayment, setLoadingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+
+  useEffect(() => {
+    setStripePromise(getStripePromise());
+  }, []);
 
   const provider = availableProviders.find(p => p.id === chamado?.prestadorId);
 
@@ -488,25 +493,31 @@ export function ClientAwaitingPaymentView() {
 
             {/* Card Payment */}
             {clientSecret && !loadingPayment && currentPaymentMethod === 'credit_card' && (
-              <Elements 
-                stripe={stripePromise} 
-                options={{ 
-                  clientSecret,
-                  appearance: {
-                    theme: 'stripe',
-                    variables: {
-                      colorPrimary: '#22c55e',
-                    }
-                  }
-                }}
-              >
-                <CardPaymentForm 
-                  clientSecret={clientSecret}
-                  onSuccess={handlePaymentSuccess}
-                  onError={handlePaymentError}
-                  amount={paymentAmount}
-                />
-              </Elements>
+              stripePromise ? (
+                <Elements 
+                  stripe={stripePromise} 
+                  options={{ 
+                    clientSecret,
+                    appearance: {
+                      theme: 'stripe',
+                      variables: {
+                        colorPrimary: 'hsl(var(--primary))',
+                      },
+                    },
+                  }}
+                >
+                  <CardPaymentForm 
+                    clientSecret={clientSecret}
+                    onSuccess={handlePaymentSuccess}
+                    onError={handlePaymentError}
+                    amount={paymentAmount}
+                  />
+                </Elements>
+              ) : (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              )
             )}
 
             {/* PIX Payment */}
