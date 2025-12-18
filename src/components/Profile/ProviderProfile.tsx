@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useProviderEarnings } from '@/hooks/useProviderEarnings';
 import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { 
@@ -17,12 +18,17 @@ import {
   AlertCircle,
   CheckCircle,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  TrendingUp
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderRidesList } from './ProviderRidesList';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
 
 interface StripeAccountStatus {
   has_account: boolean;
@@ -45,6 +51,9 @@ export function ProviderProfile() {
   const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
   const [loadingStripe, setLoadingStripe] = useState(true);
   const [connectingStripe, setConnectingStripe] = useState(false);
+  
+  // Earnings hook
+  const { earnings, loading: loadingEarnings, refetch: refetchEarnings } = useProviderEarnings();
 
   // Check for Stripe return
   useEffect(() => {
@@ -372,25 +381,48 @@ export function ProviderProfile() {
 
           {/* Earnings summary */}
           <div className="bg-card rounded-2xl p-6">
-            <h3 className="font-semibold text-lg mb-4">Resumo de ganhos</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-secondary rounded-xl text-center">
-                <p className="text-sm text-muted-foreground">Hoje</p>
-                <p className="text-2xl font-bold text-provider-primary">R$ --</p>
-              </div>
-              <div className="p-4 bg-secondary rounded-xl text-center">
-                <p className="text-sm text-muted-foreground">Esta semana</p>
-                <p className="text-2xl font-bold text-provider-primary">R$ --</p>
-              </div>
-              <div className="p-4 bg-secondary rounded-xl text-center">
-                <p className="text-sm text-muted-foreground">Este mês</p>
-                <p className="text-2xl font-bold text-provider-primary">R$ --</p>
-              </div>
-              <div className="p-4 bg-secondary rounded-xl text-center">
-                <p className="text-sm text-muted-foreground">Total</p>
-                <p className="text-2xl font-bold text-provider-primary">R$ --</p>
-              </div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-provider-primary" />
+                Resumo de ganhos
+              </h3>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={refetchEarnings} 
+                disabled={loadingEarnings}
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingEarnings ? 'animate-spin' : ''}`} />
+              </Button>
             </div>
+            {loadingEarnings ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-secondary rounded-xl text-center">
+                  <p className="text-sm text-muted-foreground">Hoje</p>
+                  <p className="text-2xl font-bold text-provider-primary">{formatCurrency(earnings.today)}</p>
+                  <p className="text-xs text-muted-foreground">{earnings.todayRides} corrida{earnings.todayRides !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="p-4 bg-secondary rounded-xl text-center">
+                  <p className="text-sm text-muted-foreground">Esta semana</p>
+                  <p className="text-2xl font-bold text-provider-primary">{formatCurrency(earnings.week)}</p>
+                  <p className="text-xs text-muted-foreground">{earnings.weekRides} corrida{earnings.weekRides !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="p-4 bg-secondary rounded-xl text-center">
+                  <p className="text-sm text-muted-foreground">Este mês</p>
+                  <p className="text-2xl font-bold text-provider-primary">{formatCurrency(earnings.month)}</p>
+                  <p className="text-xs text-muted-foreground">{earnings.monthRides} corrida{earnings.monthRides !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="p-4 bg-secondary rounded-xl text-center">
+                  <p className="text-sm text-muted-foreground">Total</p>
+                  <p className="text-2xl font-bold text-provider-primary">{formatCurrency(earnings.total)}</p>
+                  <p className="text-xs text-muted-foreground">{earnings.totalRides} corrida{earnings.totalRides !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
+            )}
           </div>
         </TabsContent>
       </Tabs>
