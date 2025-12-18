@@ -122,8 +122,9 @@ export function ProviderInServiceView() {
 
   return (
     <div className="relative h-full provider-theme">
-      {/* Full screen navigation map */}
+      {/* Full screen navigation map - key forces recalculation when step changes */}
       <NavigationMapView 
+        key={`nav-${navigationStep}`}
         providerLocation={providerLocation}
         destination={currentDestination}
         onRouteUpdate={handleRouteUpdate}

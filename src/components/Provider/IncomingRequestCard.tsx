@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { MapPin, Navigation, Clock, DollarSign, X, Check } from 'lucide-react';
+import { MapPin, Navigation, Clock, DollarSign, X, Check, Route } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
 
@@ -25,10 +25,32 @@ export function IncomingRequestCard() {
     return distance;
   }, [incomingRequest, providerData?.current_lat, providerData?.current_lng]);
 
+  // Calculate total distance from origin to destination (for transport services)
+  const distanceToDestination = useMemo(() => {
+    if (!incomingRequest || !incomingRequest.destino) {
+      return null;
+    }
+    
+    const distance = calculateDistance(
+      incomingRequest.origem.lat,
+      incomingRequest.origem.lng,
+      incomingRequest.destino.lat,
+      incomingRequest.destino.lng
+    );
+    
+    return distance;
+  }, [incomingRequest]);
+
   const formattedDistance = distanceToClient !== null 
     ? distanceToClient < 1 
       ? `${Math.round(distanceToClient * 1000)} m`
       : `${distanceToClient.toFixed(1)} km`
+    : '--';
+
+  const formattedDistanceToDestination = distanceToDestination !== null 
+    ? distanceToDestination < 1 
+      ? `${Math.round(distanceToDestination * 1000)} m`
+      : `${distanceToDestination.toFixed(1)} km`
     : '--';
 
   useEffect(() => {
@@ -125,12 +147,19 @@ export function IncomingRequestCard() {
         </div>
 
         {/* Stats */}
-        <div className="px-4 pb-4 grid grid-cols-3 gap-3">
+        <div className={`px-4 pb-4 grid gap-3 ${hasDestination ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <div className="bg-secondary rounded-xl p-3 text-center">
             <Navigation className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
             <p className="font-semibold">{formattedDistance}</p>
             <p className="text-xs text-muted-foreground">Até cliente</p>
           </div>
+          {hasDestination && (
+            <div className="bg-secondary rounded-xl p-3 text-center">
+              <Route className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
+              <p className="font-semibold">{formattedDistanceToDestination}</p>
+              <p className="text-xs text-muted-foreground">Até entrega</p>
+            </div>
+          )}
           <div className="bg-secondary rounded-xl p-3 text-center">
             <Clock className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
             <p className="font-semibold">{serviceConfig.estimatedTime}</p>
