@@ -8,32 +8,49 @@ export function useAdmin() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     async function checkAdminStatus() {
       if (!user) {
+        if (!mounted) return;
         setIsAdmin(false);
         setLoading(false);
         return;
       }
 
       try {
+        // Query user_roles directly (RLS allows users to read their own roles)
         const { data, error } = await supabase
-          .rpc('is_admin', { _user_id: user.id });
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .limit(1);
+
+        if (!mounted) return;
 
         if (error) {
           console.error('Error checking admin status:', error);
           setIsAdmin(false);
-        } else {
-          setIsAdmin(!!data);
+          return;
         }
+
+        setIsAdmin((data?.length ?? 0) > 0);
       } catch (err) {
+        if (!mounted) return;
         console.error('Error checking admin status:', err);
         setIsAdmin(false);
       } finally {
+        if (!mounted) return;
         setLoading(false);
       }
     }
 
     checkAdminStatus();
+
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   return { isAdmin, loading };
