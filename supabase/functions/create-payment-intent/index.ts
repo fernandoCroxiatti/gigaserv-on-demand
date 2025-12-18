@@ -82,27 +82,61 @@ serve(async (req) => {
       .single();
 
     if (providerError || !providerData) {
-      throw new Error("Provider not found");
+      throw new Error("Prestador não encontrado");
     }
 
     if (!providerData.stripe_account_id) {
-      throw new Error("Provider has not connected Stripe account");
-    }
-
-    if (!providerData.stripe_charges_enabled) {
-      throw new Error("Provider's Stripe account is not ready to receive payments");
+      throw new Error("Prestador ainda não configurou conta Stripe. Aguarde a configuração.");
     }
 
     if (providerData.is_blocked) {
-      throw new Error("Provider is blocked");
+      throw new Error("Prestador está bloqueado");
     }
 
     if (providerData.payout_enabled === false) {
-      throw new Error("Provider payouts are suspended");
+      throw new Error("Pagamentos ao prestador estão suspensos");
+    }
+
+    logStep("Provider Stripe account found", { 
+      stripeAccountId: providerData.stripe_account_id 
+    });
+
+    // Initialize Stripe early to verify account capabilities
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+    // Verify account capabilities from Stripe directly
+    const stripeAccount = await stripe.accounts.retrieve(providerData.stripe_account_id);
+    logStep("Stripe account retrieved", {
+      chargesEnabled: stripeAccount.charges_enabled,
+      payoutsEnabled: stripeAccount.payouts_enabled,
+      detailsSubmitted: stripeAccount.details_submitted,
+      capabilities: stripeAccount.capabilities,
+    });
+
+    // Update database with real status from Stripe
+    await supabaseClient
+      .from('provider_data')
+      .update({
+        stripe_charges_enabled: stripeAccount.charges_enabled,
+        stripe_payouts_enabled: stripeAccount.payouts_enabled,
+        stripe_details_submitted: stripeAccount.details_submitted,
+        stripe_connected: stripeAccount.charges_enabled && stripeAccount.payouts_enabled,
+        stripe_onboarding_completed: stripeAccount.details_submitted,
+      })
+      .eq('user_id', chamado.prestador_id);
+
+    // Check if account can receive transfers
+    if (!stripeAccount.capabilities?.transfers || stripeAccount.capabilities.transfers !== 'active') {
+      throw new Error("O prestador precisa completar a verificação da conta Stripe para receber pagamentos. Peça ao prestador para acessar o perfil e clicar em 'Configurar Stripe'.");
+    }
+
+    if (!stripeAccount.charges_enabled) {
+      throw new Error("A conta Stripe do prestador ainda não está habilitada para receber pagamentos. O prestador precisa completar o cadastro.");
     }
 
     logStep("Provider Stripe account verified", { 
-      stripeAccountId: providerData.stripe_account_id 
+      stripeAccountId: providerData.stripe_account_id,
+      transfersEnabled: stripeAccount.capabilities?.transfers
     });
 
     // Get app commission percentage
@@ -125,7 +159,7 @@ serve(async (req) => {
       providerReceives: totalAmountCentavos - applicationFeeAmount,
     });
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    // Stripe already initialized above
 
     // Check if customer exists or create new
     let customerId: string | undefined;
