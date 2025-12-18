@@ -87,13 +87,16 @@ export type Database = {
           origem_address: string
           origem_lat: number
           origem_lng: number
+          payment_completed_at: string | null
           payment_method: string | null
           payment_provider: string | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
           prestador_id: string | null
           provider_amount: number | null
           status: Database["public"]["Enums"]["chamado_status"]
+          stripe_application_fee_amount: number | null
           stripe_payment_intent_id: string | null
+          stripe_transfer_id: string | null
           tipo_servico: Database["public"]["Enums"]["service_type"]
           updated_at: string
           valor: number | null
@@ -111,13 +114,16 @@ export type Database = {
           origem_address: string
           origem_lat: number
           origem_lng: number
+          payment_completed_at?: string | null
           payment_method?: string | null
           payment_provider?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           prestador_id?: string | null
           provider_amount?: number | null
           status?: Database["public"]["Enums"]["chamado_status"]
+          stripe_application_fee_amount?: number | null
           stripe_payment_intent_id?: string | null
+          stripe_transfer_id?: string | null
           tipo_servico: Database["public"]["Enums"]["service_type"]
           updated_at?: string
           valor?: number | null
@@ -135,13 +141,16 @@ export type Database = {
           origem_address?: string
           origem_lat?: number
           origem_lng?: number
+          payment_completed_at?: string | null
           payment_method?: string | null
           payment_provider?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           prestador_id?: string | null
           provider_amount?: number | null
           status?: Database["public"]["Enums"]["chamado_status"]
+          stripe_application_fee_amount?: number | null
           stripe_payment_intent_id?: string | null
+          stripe_transfer_id?: string | null
           tipo_servico?: Database["public"]["Enums"]["service_type"]
           updated_at?: string
           valor?: number | null
@@ -260,7 +269,12 @@ export type Database = {
           radar_range: number | null
           rating: number | null
           services_offered: Database["public"]["Enums"]["service_type"][] | null
+          stripe_account_id: string | null
+          stripe_charges_enabled: boolean | null
           stripe_connected: boolean | null
+          stripe_details_submitted: boolean | null
+          stripe_onboarding_completed: boolean | null
+          stripe_payouts_enabled: boolean | null
           total_services: number | null
           updated_at: string
           user_id: string
@@ -282,7 +296,12 @@ export type Database = {
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
+          stripe_account_id?: string | null
+          stripe_charges_enabled?: boolean | null
           stripe_connected?: boolean | null
+          stripe_details_submitted?: boolean | null
+          stripe_onboarding_completed?: boolean | null
+          stripe_payouts_enabled?: boolean | null
           total_services?: number | null
           updated_at?: string
           user_id: string
@@ -304,7 +323,12 @@ export type Database = {
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
+          stripe_account_id?: string | null
+          stripe_charges_enabled?: boolean | null
           stripe_connected?: boolean | null
+          stripe_details_submitted?: boolean | null
+          stripe_onboarding_completed?: boolean | null
+          stripe_payouts_enabled?: boolean | null
           total_services?: number | null
           updated_at?: string
           user_id?: string

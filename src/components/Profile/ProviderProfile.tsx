@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '../ui/button';
@@ -15,31 +15,114 @@ import {
   Star,
   ExternalLink,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderRidesList } from './ProviderRidesList';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+interface StripeAccountStatus {
+  has_account: boolean;
+  account_id?: string;
+  onboarding_completed: boolean;
+  charges_enabled: boolean;
+  payouts_enabled: boolean;
+}
 
 export function ProviderProfile() {
   const { user, profile, providerData } = useApp();
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
 
-  // Stripe onboarding state (placeholder)
-  const [stripeStatus, setStripeStatus] = useState<'not_started' | 'pending' | 'complete'>('not_started');
+  // Stripe Connect state
+  const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
+  const [loadingStripe, setLoadingStripe] = useState(true);
+  const [connectingStripe, setConnectingStripe] = useState(false);
+
+  // Check for Stripe return
+  useEffect(() => {
+    const stripeParam = searchParams.get('stripe');
+    if (stripeParam === 'success') {
+      toast.success('Conta Stripe configurada! Verificando status...');
+      checkStripeStatus();
+    } else if (stripeParam === 'refresh') {
+      toast.info('Complete o cadastro Stripe para receber pagamentos');
+      checkStripeStatus();
+    }
+  }, [searchParams]);
+
+  // Load Stripe status on mount
+  useEffect(() => {
+    checkStripeStatus();
+  }, []);
+
+  const checkStripeStatus = async () => {
+    setLoadingStripe(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('check-connect-status');
+      
+      if (error) {
+        console.error('Error checking Stripe status:', error);
+        toast.error('Erro ao verificar status Stripe');
+        return;
+      }
+
+      setStripeStatus(data as StripeAccountStatus);
+    } catch (err) {
+      console.error('Error:', err);
+    } finally {
+      setLoadingStripe(false);
+    }
+  };
+
+  const handleStripeOnboarding = async () => {
+    setConnectingStripe(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account');
+      
+      if (error) {
+        console.error('Error creating Stripe account:', error);
+        toast.error('Erro ao iniciar configuração Stripe');
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      toast.error('Erro ao conectar com Stripe');
+    } finally {
+      setConnectingStripe(false);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
   };
 
-  const handleStripeOnboarding = () => {
-    // Placeholder for Stripe Connect onboarding
-    setStripeStatus('pending');
+  const getStripeStatusInfo = () => {
+    if (!stripeStatus?.has_account) {
+      return { status: 'not_started', label: 'Não configurada', color: 'muted' };
+    }
+    if (stripeStatus.charges_enabled && stripeStatus.payouts_enabled) {
+      return { status: 'complete', label: 'Ativa', color: 'status-finished' };
+    }
+    if (stripeStatus.onboarding_completed) {
+      return { status: 'pending', label: 'Em análise', color: 'status-searching' };
+    }
+    return { status: 'incomplete', label: 'Cadastro incompleto', color: 'status-searching' };
   };
+
+  const statusInfo = getStripeStatusInfo();
 
   return (
     <div className="min-h-screen bg-background provider-theme">
@@ -201,15 +284,17 @@ export function ProviderProfile() {
           <div className="bg-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                stripeStatus === 'complete' 
+                statusInfo.status === 'complete' 
                   ? 'bg-status-finished/10' 
-                  : stripeStatus === 'pending'
+                  : statusInfo.status === 'pending' || statusInfo.status === 'incomplete'
                   ? 'bg-status-searching/10'
                   : 'bg-muted'
               }`}>
-                {stripeStatus === 'complete' ? (
+                {loadingStripe ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                ) : statusInfo.status === 'complete' ? (
                   <CheckCircle className="w-5 h-5 text-status-finished" />
-                ) : stripeStatus === 'pending' ? (
+                ) : statusInfo.status === 'pending' || statusInfo.status === 'incomplete' ? (
                   <AlertCircle className="w-5 h-5 text-status-searching" />
                 ) : (
                   <Landmark className="w-5 h-5 text-muted-foreground" />
@@ -217,46 +302,69 @@ export function ProviderProfile() {
               </div>
               <div className="flex-1">
                 <h3 className="font-semibold text-lg">Conta Stripe</h3>
-                <p className="text-sm text-muted-foreground">
-                  {stripeStatus === 'complete' 
-                    ? 'Configurada' 
-                    : stripeStatus === 'pending'
-                    ? 'Aguardando finalização'
-                    : 'Não configurada'}
-                </p>
+                <p className="text-sm text-muted-foreground">{statusInfo.label}</p>
               </div>
+              <Button variant="ghost" size="icon" onClick={checkStripeStatus} disabled={loadingStripe}>
+                <RefreshCw className={`w-4 h-4 ${loadingStripe ? 'animate-spin' : ''}`} />
+              </Button>
             </div>
 
-            {stripeStatus === 'not_started' && (
+            {!loadingStripe && statusInfo.status === 'not_started' && (
               <>
                 <p className="text-muted-foreground mb-4">
                   Configure sua conta Stripe para receber pagamentos dos serviços realizados.
                 </p>
-                <Button variant="provider" className="w-full" onClick={handleStripeOnboarding}>
-                  <ExternalLink className="w-4 h-4 mr-2" />
+                <Button 
+                  variant="provider" 
+                  className="w-full" 
+                  onClick={handleStripeOnboarding}
+                  disabled={connectingStripe}
+                >
+                  {connectingStripe ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                  )}
                   Configurar conta Stripe
                 </Button>
               </>
             )}
 
-            {stripeStatus === 'pending' && (
+            {!loadingStripe && statusInfo.status === 'incomplete' && (
               <>
                 <div className="bg-status-searching/10 rounded-xl p-4 mb-4">
                   <p className="text-sm text-status-searching">
-                    Sua conta está em análise. Complete todas as informações para começar a receber.
+                    Complete o cadastro Stripe para começar a receber pagamentos.
                   </p>
                 </div>
-                <Button variant="provider" className="w-full">
-                  <ExternalLink className="w-4 h-4 mr-2" />
+                <Button 
+                  variant="provider" 
+                  className="w-full"
+                  onClick={handleStripeOnboarding}
+                  disabled={connectingStripe}
+                >
+                  {connectingStripe ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                  )}
                   Completar cadastro
                 </Button>
               </>
             )}
 
-            {stripeStatus === 'complete' && (
+            {!loadingStripe && statusInfo.status === 'pending' && (
+              <div className="bg-status-searching/10 rounded-xl p-4">
+                <p className="text-sm text-status-searching">
+                  Sua conta está em análise pela Stripe. Isso pode levar alguns minutos.
+                </p>
+              </div>
+            )}
+
+            {!loadingStripe && statusInfo.status === 'complete' && (
               <div className="bg-status-finished/10 rounded-xl p-4">
                 <p className="text-sm text-status-finished">
-                  Sua conta está ativa! Os pagamentos serão transferidos automaticamente.
+                  ✓ Sua conta está ativa! Os pagamentos serão transferidos automaticamente.
                 </p>
               </div>
             )}
