@@ -98,16 +98,25 @@ export function ProviderProfile() {
       
       if (error) {
         console.error('Error creating Stripe account:', error);
-        toast.error('Erro ao iniciar configuração Stripe');
+        toast.error('Não foi possível iniciar a configuração da Stripe. Tente novamente.');
+        return;
+      }
+
+      if (data?.error) {
+        console.error('Stripe error:', data.error);
+        toast.error(data.user_message || data.error);
         return;
       }
 
       if (data?.url) {
+        // Redirect to Stripe onboarding
         window.location.href = data.url;
+      } else {
+        toast.error('Erro ao obter link de cadastro. Tente novamente.');
       }
     } catch (err) {
       console.error('Error:', err);
-      toast.error('Erro ao conectar com Stripe');
+      toast.error('Erro ao conectar com Stripe. Verifique sua conexão e tente novamente.');
     } finally {
       setConnectingStripe(false);
     }
