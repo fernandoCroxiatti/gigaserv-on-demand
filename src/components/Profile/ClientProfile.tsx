@@ -25,7 +25,9 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
+// Stripe publishable key - this is a PUBLIC key and safe to include in code
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51OnAPHDIcI8BuxJXQBntSvg6exbUcG1pLtGQNqlXg0lGrOjJ1M6LZb4AjqVk7XlQBrCdnHKaXFDT6Ar56CspGlvS00cYUJMxzI';
+const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
 interface SavedCard {
   id: string;
