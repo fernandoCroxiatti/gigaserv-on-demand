@@ -14,9 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_logs: {
+        Row: {
+          action: string
+          admin_id: string
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: string | null
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       chamados: {
         Row: {
           cliente_id: string | null
+          commission_amount: number | null
+          commission_percentage: number | null
           created_at: string
           destino_address: string | null
           destino_lat: number | null
@@ -29,6 +91,7 @@ export type Database = {
           payment_provider: string | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
           prestador_id: string | null
+          provider_amount: number | null
           status: Database["public"]["Enums"]["chamado_status"]
           stripe_payment_intent_id: string | null
           tipo_servico: Database["public"]["Enums"]["service_type"]
@@ -38,6 +101,8 @@ export type Database = {
         }
         Insert: {
           cliente_id?: string | null
+          commission_amount?: number | null
+          commission_percentage?: number | null
           created_at?: string
           destino_address?: string | null
           destino_lat?: number | null
@@ -50,6 +115,7 @@ export type Database = {
           payment_provider?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           prestador_id?: string | null
+          provider_amount?: number | null
           status?: Database["public"]["Enums"]["chamado_status"]
           stripe_payment_intent_id?: string | null
           tipo_servico: Database["public"]["Enums"]["service_type"]
@@ -59,6 +125,8 @@ export type Database = {
         }
         Update: {
           cliente_id?: string | null
+          commission_amount?: number | null
+          commission_percentage?: number | null
           created_at?: string
           destino_address?: string | null
           destino_lat?: number | null
@@ -71,6 +139,7 @@ export type Database = {
           payment_provider?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           prestador_id?: string | null
+          provider_amount?: number | null
           status?: Database["public"]["Enums"]["chamado_status"]
           stripe_payment_intent_id?: string | null
           tipo_servico?: Database["public"]["Enums"]["service_type"]
@@ -121,10 +190,14 @@ export type Database = {
             | Database["public"]["Enums"]["user_profile_type"]
             | null
           avatar_url: string | null
+          block_reason: string | null
+          blocked_at: string | null
+          blocked_by: string | null
           cpf: string | null
           created_at: string
           email: string | null
           id: string
+          is_blocked: boolean | null
           name: string
           perfil_principal: string
           phone: string | null
@@ -136,10 +209,14 @@ export type Database = {
             | Database["public"]["Enums"]["user_profile_type"]
             | null
           avatar_url?: string | null
+          block_reason?: string | null
+          blocked_at?: string | null
+          blocked_by?: string | null
           cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          is_blocked?: boolean | null
           name: string
           perfil_principal?: string
           phone?: string | null
@@ -151,10 +228,14 @@ export type Database = {
             | Database["public"]["Enums"]["user_profile_type"]
             | null
           avatar_url?: string | null
+          block_reason?: string | null
+          blocked_at?: string | null
+          blocked_by?: string | null
           cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          is_blocked?: boolean | null
           name?: string
           perfil_principal?: string
           phone?: string | null
@@ -165,47 +246,65 @@ export type Database = {
       }
       provider_data: {
         Row: {
+          block_reason: string | null
+          blocked_at: string | null
+          blocked_by: string | null
           created_at: string
           current_address: string | null
           current_lat: number | null
           current_lng: number | null
           id: string
+          is_blocked: boolean | null
           is_online: boolean | null
+          payout_enabled: boolean | null
           radar_range: number | null
           rating: number | null
           services_offered: Database["public"]["Enums"]["service_type"][] | null
+          stripe_connected: boolean | null
           total_services: number | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          block_reason?: string | null
+          blocked_at?: string | null
+          blocked_by?: string | null
           created_at?: string
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
           id?: string
+          is_blocked?: boolean | null
           is_online?: boolean | null
+          payout_enabled?: boolean | null
           radar_range?: number | null
           rating?: number | null
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
+          stripe_connected?: boolean | null
           total_services?: number | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          block_reason?: string | null
+          blocked_at?: string | null
+          blocked_by?: string | null
           created_at?: string
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
           id?: string
+          is_blocked?: boolean | null
           is_online?: boolean | null
+          payout_enabled?: boolean | null
           radar_range?: number | null
           rating?: number | null
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
+          stripe_connected?: boolean | null
           total_services?: number | null
           updated_at?: string
           user_id?: string
@@ -256,15 +355,72 @@ export type Database = {
           },
         ]
       }
+      settings_history: {
+        Row: {
+          changed_at: string
+          changed_by: string
+          id: string
+          new_value: Json
+          old_value: Json | null
+          setting_key: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by: string
+          id?: string
+          new_value: Json
+          old_value?: Json | null
+          setting_key: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string
+          id?: string
+          new_value?: Json
+          old_value?: Json | null
+          setting_key?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_provider: { Args: { _user_id: string }; Returns: boolean }
       is_provider_active: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
+      app_role: "admin" | "moderator" | "user"
       chamado_status:
         | "idle"
         | "searching"
@@ -409,6 +565,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "moderator", "user"],
       chamado_status: [
         "idle",
         "searching",
