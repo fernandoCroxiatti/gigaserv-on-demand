@@ -27,14 +27,14 @@ export function Header() {
   };
 
   return (
-    <header className="absolute top-0 left-0 right-0 z-50 p-4 pointer-events-none">
-      <div className="flex items-center justify-between">
+    <header className="absolute top-0 left-0 right-0 z-50 px-3 py-3 sm:p-4 pointer-events-none">
+      <div className="flex items-center justify-between gap-2">
         {/* Logo and menu */}
-        <div className="flex items-center gap-3 pointer-events-auto">
+        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto flex-shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="glass" size="icon" className="rounded-full">
-                <Menu className="w-5 h-5" />
+              <Button variant="glass" size="icon" className="rounded-full w-9 h-9 sm:w-10 sm:h-10">
+                <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
@@ -57,28 +57,22 @@ export function Header() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl glass-card ${
+          <div className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl glass-card ${
             isProvider ? 'provider-theme' : ''
           }`}>
-            <div className={`w-2 h-2 rounded-full ${
+            <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
               isProvider ? 'bg-provider-primary' : 'bg-primary'
             }`} />
-            <span className="font-bold text-lg tracking-tight">GIGA</span>
-            <span className={`font-bold text-lg ${
+            <span className="font-bold text-sm sm:text-lg tracking-tight">GIGA</span>
+            <span className={`font-bold text-sm sm:text-lg ${
               isProvider ? 'text-provider-primary' : 'text-primary'
             }`}>S.O.S</span>
           </div>
         </div>
 
         {/* Profile switch and notifications */}
-        <div className="flex items-center gap-3 pointer-events-auto">
+        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto flex-shrink-0">
           <ProfileSwitch />
-          <Button variant="glass" size="icon" className="rounded-full relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full text-[10px] text-white flex items-center justify-center">
-              2
-            </span>
-          </Button>
         </div>
       </div>
     </header>
