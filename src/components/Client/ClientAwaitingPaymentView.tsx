@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
@@ -12,10 +12,13 @@ import {
   Shield, 
   Lock,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  QrCode,
+  CheckCircle
 } from 'lucide-react';
 import { PaymentMethod } from '@/types/chamado';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -23,13 +26,13 @@ import { toast } from 'sonner';
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
 
-const paymentMethods: { id: PaymentMethod; name: string; icon: React.ElementType; description: string }[] = [
-  { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento via Stripe' },
-  { id: 'pix', name: 'PIX', icon: Wallet, description: 'Pagamento instantâneo (em breve)' },
-  { id: 'cash', name: 'Dinheiro', icon: Banknote, description: 'Pagar ao prestador (em breve)' },
+const paymentMethods: { id: PaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean }[] = [
+  { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento via Stripe', available: true },
+  { id: 'pix', name: 'PIX', icon: Wallet, description: 'Pagamento instantâneo', available: true },
+  { id: 'cash', name: 'Dinheiro', icon: Banknote, description: 'Pagar ao prestador (em breve)', available: false },
 ];
 
-function PaymentForm({ 
+function CardPaymentForm({ 
   clientSecret, 
   onSuccess, 
   onError,
@@ -96,6 +99,188 @@ function PaymentForm({
   );
 }
 
+interface PixPaymentInfo {
+  qrCode: string;
+  qrCodeUrl: string;
+  expiresAt: Date;
+}
+
+function PixPaymentForm({
+  clientSecret,
+  onSuccess,
+  onError,
+  amount,
+}: {
+  clientSecret: string;
+  onSuccess: () => void;
+  onError: (error: string) => void;
+  amount: number;
+}) {
+  const [pixInfo, setPixInfo] = useState<PixPaymentInfo | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [stripe, setStripe] = useState<Stripe | null>(null);
+
+  // Initialize Stripe
+  useEffect(() => {
+    stripePromise.then(s => setStripe(s));
+  }, []);
+
+  // Confirm PIX payment and get QR code
+  useEffect(() => {
+    if (!stripe || !clientSecret) return;
+
+    const confirmPix = async () => {
+      setIsProcessing(true);
+      try {
+        const { paymentIntent, error } = await stripe.confirmPixPayment(clientSecret, {
+          payment_method: {},
+        });
+
+        if (error) {
+          onError(error.message || 'Erro ao gerar PIX');
+          return;
+        }
+
+        // Access next_action with type assertion for PIX
+        const nextAction = paymentIntent?.next_action as any;
+        if (nextAction?.pix_display_qr_code) {
+          const pixData = nextAction.pix_display_qr_code;
+          setPixInfo({
+            qrCode: pixData.data || '',
+            qrCodeUrl: pixData.image_url_png || '',
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
+          });
+        }
+      } catch (err) {
+        onError('Erro ao iniciar pagamento PIX');
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
+    confirmPix();
+  }, [stripe, clientSecret]);
+
+  // Poll for payment confirmation
+  useEffect(() => {
+    if (!stripe || !clientSecret || !pixInfo) return;
+
+    const interval = setInterval(async () => {
+      setChecking(true);
+      try {
+        const { paymentIntent } = await stripe.retrievePaymentIntent(clientSecret);
+        if (paymentIntent?.status === 'succeeded') {
+          clearInterval(interval);
+          onSuccess();
+        }
+      } catch (err) {
+        console.error('Error checking payment status:', err);
+      } finally {
+        setChecking(false);
+      }
+    }, 3000); // Check every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [stripe, clientSecret, pixInfo, onSuccess]);
+
+  const handleCopyCode = async () => {
+    if (!pixInfo?.qrCode) return;
+    
+    try {
+      await navigator.clipboard.writeText(pixInfo.qrCode);
+      setCopied(true);
+      toast.success('Código PIX copiado!');
+      setTimeout(() => setCopied(false), 3000);
+    } catch (err) {
+      toast.error('Erro ao copiar código');
+    }
+  };
+
+  if (isProcessing) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Gerando QR Code PIX...</p>
+      </div>
+    );
+  }
+
+  if (!pixInfo) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 space-y-4">
+        <AlertCircle className="w-8 h-8 text-destructive" />
+        <p className="text-sm text-muted-foreground">Erro ao gerar PIX. Tente outro método.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* QR Code */}
+      <div className="flex flex-col items-center p-6 bg-white rounded-xl">
+        {pixInfo.qrCodeUrl ? (
+          <img 
+            src={pixInfo.qrCodeUrl} 
+            alt="QR Code PIX" 
+            className="w-48 h-48"
+          />
+        ) : (
+          <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center">
+            <QrCode className="w-16 h-16 text-muted-foreground" />
+          </div>
+        )}
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Escaneie o QR Code com o app do seu banco
+        </p>
+      </div>
+
+      {/* Copy Code */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground text-center">
+          Ou copie o código PIX
+        </p>
+        <Button 
+          variant="outline" 
+          className="w-full" 
+          onClick={handleCopyCode}
+        >
+          {copied ? (
+            <>
+              <CheckCircle className="w-4 h-4 mr-2 text-status-finished" />
+              Código copiado!
+            </>
+          ) : (
+            <>
+              <Copy className="w-4 h-4 mr-2" />
+              Copiar código PIX
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Amount and status */}
+      <div className="p-4 bg-secondary rounded-xl text-center space-y-2">
+        <p className="text-sm text-muted-foreground">Valor a pagar</p>
+        <p className="text-2xl font-bold">R$ {(amount / 100).toFixed(2)}</p>
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          {checking ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Clock className="w-4 h-4" />
+          )}
+          <span>Aguardando pagamento...</span>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        O pagamento será confirmado automaticamente após a transferência
+      </p>
+    </div>
+  );
+}
+
 export function ClientAwaitingPaymentView() {
   const { chamado, availableProviders, processPayment, cancelChamado } = useApp();
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('credit_card');
@@ -104,24 +289,23 @@ export function ClientAwaitingPaymentView() {
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [loadingPayment, setLoadingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [currentPaymentMethod, setCurrentPaymentMethod] = useState<PaymentMethod | null>(null);
 
   const provider = availableProviders.find(p => p.id === chamado?.prestadorId);
 
-  useEffect(() => {
-    if (chamado?.id && selectedPayment === 'credit_card') {
-      createPaymentIntent();
-    }
-  }, [chamado?.id, selectedPayment]);
-
-  const createPaymentIntent = async () => {
+  const createPaymentIntent = useCallback(async (paymentMethod: PaymentMethod) => {
     if (!chamado?.id) return;
 
     setLoadingPayment(true);
     setPaymentError(null);
+    setClientSecret(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-        body: { chamado_id: chamado.id }
+        body: { 
+          chamado_id: chamado.id,
+          payment_method_type: paymentMethod === 'pix' ? 'pix' : 'card'
+        }
       });
 
       if (error) {
@@ -138,6 +322,7 @@ export function ClientAwaitingPaymentView() {
       if (data?.client_secret) {
         setClientSecret(data.client_secret);
         setPaymentAmount(data.amount);
+        setCurrentPaymentMethod(paymentMethod);
       }
     } catch (err) {
       console.error('Error:', err);
@@ -145,6 +330,19 @@ export function ClientAwaitingPaymentView() {
     } finally {
       setLoadingPayment(false);
     }
+  }, [chamado?.id]);
+
+  useEffect(() => {
+    if (chamado?.id) {
+      createPaymentIntent(selectedPayment);
+    }
+  }, [chamado?.id]);
+
+  // When payment method changes, create new payment intent
+  const handlePaymentMethodChange = (method: PaymentMethod) => {
+    if (method === selectedPayment) return;
+    setSelectedPayment(method);
+    createPaymentIntent(method);
   };
 
   const handlePaymentSuccess = () => {
@@ -155,13 +353,6 @@ export function ClientAwaitingPaymentView() {
   const handlePaymentError = (error: string) => {
     toast.error(error);
     setPaymentError(error);
-  };
-
-  const handleMockPayment = async () => {
-    setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    processPayment();
-    setIsProcessing(false);
   };
 
   if (!chamado) return null;
@@ -255,13 +446,13 @@ export function ClientAwaitingPaymentView() {
               {paymentMethods.map((method) => (
                 <button
                   key={method.id}
-                  onClick={() => setSelectedPayment(method.id)}
-                  disabled={method.id !== 'credit_card' || isProcessing || loadingPayment}
+                  onClick={() => method.available && handlePaymentMethodChange(method.id)}
+                  disabled={!method.available || isProcessing || loadingPayment}
                   className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all ${
                     selectedPayment === method.id
                       ? 'bg-primary/10 border-2 border-primary'
                       : 'bg-secondary border-2 border-transparent'
-                  } ${method.id !== 'credit_card' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${!method.available ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     selectedPayment === method.id ? 'bg-primary text-primary-foreground' : 'bg-background'
@@ -280,7 +471,7 @@ export function ClientAwaitingPaymentView() {
             </div>
           </div>
 
-          {/* Stripe Payment Form */}
+          {/* Payment Form */}
           <div className="p-4 space-y-4">
             {paymentError && (
               <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
@@ -295,7 +486,8 @@ export function ClientAwaitingPaymentView() {
               </div>
             )}
 
-            {clientSecret && !loadingPayment && selectedPayment === 'credit_card' && (
+            {/* Card Payment */}
+            {clientSecret && !loadingPayment && currentPaymentMethod === 'credit_card' && (
               <Elements 
                 stripe={stripePromise} 
                 options={{ 
@@ -308,7 +500,7 @@ export function ClientAwaitingPaymentView() {
                   }
                 }}
               >
-                <PaymentForm 
+                <CardPaymentForm 
                   clientSecret={clientSecret}
                   onSuccess={handlePaymentSuccess}
                   onError={handlePaymentError}
@@ -317,9 +509,19 @@ export function ClientAwaitingPaymentView() {
               </Elements>
             )}
 
+            {/* PIX Payment */}
+            {clientSecret && !loadingPayment && currentPaymentMethod === 'pix' && (
+              <PixPaymentForm
+                clientSecret={clientSecret}
+                onSuccess={handlePaymentSuccess}
+                onError={handlePaymentError}
+                amount={paymentAmount}
+              />
+            )}
+
             {!clientSecret && !loadingPayment && paymentError && (
               <Button 
-                onClick={createPaymentIntent}
+                onClick={() => createPaymentIntent(selectedPayment)}
                 className="w-full"
                 variant="outline"
               >

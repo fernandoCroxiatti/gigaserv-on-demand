@@ -40,9 +40,9 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     // Parse request body
-    const { chamado_id } = await req.json();
+    const { chamado_id, payment_method_type = 'card' } = await req.json();
     if (!chamado_id) throw new Error("chamado_id is required");
-    logStep("Processing chamado", { chamadoId: chamado_id });
+    logStep("Processing chamado", { chamadoId: chamado_id, paymentMethodType: payment_method_type });
 
     // Get chamado details
     const { data: chamado, error: chamadoError } = await supabaseClient
@@ -141,6 +141,13 @@ serve(async (req) => {
     }
     logStep("Customer ready", { customerId });
 
+    // Determine payment method types based on request
+    const paymentMethodTypes = payment_method_type === 'pix' 
+      ? ['pix'] 
+      : ['card'];
+    
+    logStep("Creating PaymentIntent", { paymentMethodTypes });
+
     // Create PaymentIntent with automatic transfer
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalAmountCentavos,
@@ -150,15 +157,14 @@ serve(async (req) => {
       transfer_data: {
         destination: providerData.stripe_account_id,
       },
+      payment_method_types: paymentMethodTypes,
       metadata: {
         chamado_id: chamado_id,
         cliente_id: user.id,
         prestador_id: chamado.prestador_id,
         tipo_servico: chamado.tipo_servico,
         commission_percentage: commissionPercentage.toString(),
-      },
-      automatic_payment_methods: {
-        enabled: true,
+        payment_method_type: payment_method_type,
       },
     });
 
@@ -189,6 +195,7 @@ serve(async (req) => {
       amount: totalAmountCentavos,
       application_fee: applicationFeeAmount,
       publishable_key: Deno.env.get("VITE_STRIPE_PUBLIC_KEY"),
+      payment_method_type: payment_method_type,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
