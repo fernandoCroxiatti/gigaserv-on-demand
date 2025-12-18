@@ -22,7 +22,7 @@ import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children }: { children: React.ReactElement }) {
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -40,10 +40,10 @@ function ProtectedRoute({ children }: { children: React.ReactElement }) {
     return <Navigate to="/auth" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 }
 
-function AdminRoute({ children }: { children: React.ReactElement }) {
+function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
 
@@ -66,10 +66,10 @@ function AdminRoute({ children }: { children: React.ReactElement }) {
     return <Navigate to="/" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 }
 
-function PublicRoute({ children }: { children: React.ReactElement }) {
+function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -87,7 +87,7 @@ function PublicRoute({ children }: { children: React.ReactElement }) {
     return <Navigate to="/" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 }
 
 const App = () => (
