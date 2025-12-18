@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { RealMapView } from '../Map/RealMapView';
+import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
+import { useProgressiveSearch } from '@/hooks/useProgressiveSearch';
+import { SearchingIndicator } from './SearchingIndicator';
 import { Button } from '../ui/button';
 import { MapPin, Navigation, ChevronRight, Clock, Check, Loader2, RefreshCw, Crosshair } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
@@ -17,14 +19,52 @@ export function ClientIdleView() {
   const [usingGpsLocation, setUsingGpsLocation] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
+  const [showProvidersSearch, setShowProvidersSearch] = useState(true);
 
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
 
+  // Progressive search for nearby providers
+  const searchLocation = useMemo(() => origem || userLocation, [origem, userLocation]);
+  
+  const {
+    searchState,
+    currentRadius,
+    nearbyProviders,
+    radiusIndex,
+    totalRadii,
+    startSearch,
+    resetSearch,
+  } = useProgressiveSearch({
+    userLocation: searchLocation,
+    serviceType: selectedService,
+    enabled: showProvidersSearch && !!searchLocation,
+  });
+
+  // Reset search when service type changes
+  useEffect(() => {
+    if (searchLocation) {
+      resetSearch();
+      // Search will auto-restart due to enabled dependency
+    }
+  }, [selectedService]);
+
+  // Convert nearby providers to map format
+  const mapProviders: MapProvider[] = useMemo(() => {
+    return nearbyProviders.map(p => ({
+      id: p.id,
+      location: p.location,
+      name: p.name,
+      services: p.services,
+      distance: p.distance,
+    }));
+  }, [nearbyProviders]);
+
   const handleOrigemSelect = (location: Location) => {
     setOrigem(location);
     setOrigemText(location.address);
-    setUsingGpsLocation(false); // User typed an address, not using GPS
+    setUsingGpsLocation(false);
+    resetSearch(); // Reset search to start with new location
   };
 
   const handleOrigemTextChange = (text: string) => {
@@ -33,7 +73,6 @@ export function ClientIdleView() {
       setOrigem(null);
       setUsingGpsLocation(false);
     } else {
-      // User is typing, so not using GPS location anymore
       setUsingGpsLocation(false);
     }
   };
@@ -43,6 +82,7 @@ export function ClientIdleView() {
       setOrigem(userLocation);
       setOrigemText(userLocation.address);
       setUsingGpsLocation(true);
+      resetSearch(); // Reset search to start with GPS location
     } else {
       refreshLocation();
     }
@@ -55,7 +95,6 @@ export function ClientIdleView() {
 
   const handleDestinoTextChange = (text: string) => {
     setDestinoText(text);
-    // Ao digitar, invalida coordenadas anteriores até selecionar um endereço real
     setDestino(null);
   };
 
@@ -66,43 +105,33 @@ export function ClientIdleView() {
     createChamado(selectedService, origem, needsDestination ? destino : null);
   };
 
-  const onlineProviders = availableProviders.filter(p => p.online).length;
   const canSubmit = origem && (!needsDestination || destino);
 
   return (
     <div className="relative h-full">
-      {/* Real Google Map */}
+      {/* Real Google Map with provider markers */}
       <RealMapView 
-        center={origem || userLocation}
+        center={searchLocation}
         origem={origem}
         destino={needsDestination ? destino : null}
         showRoute={needsDestination && !!origem && !!destino}
-        providers={availableProviders.filter(p => p.online).map(p => ({
-          id: p.id,
-          location: p.location,
-          name: p.name,
-        }))}
+        providers={mapProviders}
         showUserLocation={!origem}
+        showSearchRadius={searchState === 'searching' || searchState === 'expanding_radius'}
+        searchRadius={currentRadius}
+        animateProviders={true}
         className="absolute inset-0" 
-        zoom={origem ? 16 : 15}
       />
       
-      {/* Providers online indicator */}
+      {/* Search status indicator */}
       <div className="absolute top-24 left-4 right-4 z-10">
-        <div className="glass-card rounded-2xl p-3 flex items-center gap-3 animate-fade-in">
-          <div className="relative">
-            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-              <Navigation className="w-5 h-5 text-primary" />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center text-[10px] text-white font-bold">
-              {onlineProviders}
-            </div>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium">{onlineProviders} prestadores online</p>
-            <p className="text-xs text-muted-foreground">Prontos para atender você</p>
-          </div>
-        </div>
+        <SearchingIndicator
+          state={searchState}
+          currentRadius={currentRadius}
+          providersCount={nearbyProviders.length}
+          radiusIndex={radiusIndex}
+          totalRadii={totalRadii}
+        />
       </div>
 
       {/* Bottom card */}
@@ -115,6 +144,11 @@ export function ClientIdleView() {
               {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType) => {
                 const config = SERVICE_CONFIG[serviceType];
                 const isSelected = selectedService === serviceType;
+                // Count providers that offer this service
+                const serviceProviderCount = nearbyProviders.filter(p => 
+                  p.services.includes(serviceType)
+                ).length;
+                
                 return (
                   <button
                     key={serviceType}
@@ -137,7 +171,9 @@ export function ClientIdleView() {
                         {config.label}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {config.estimatedTime}
+                        {serviceProviderCount > 0 
+                          ? `${serviceProviderCount} disponíve${serviceProviderCount > 1 ? 'is' : 'l'}` 
+                          : config.estimatedTime}
                       </p>
                     </div>
                     {isSelected && (
