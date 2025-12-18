@@ -20,14 +20,12 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ClientRequestsList } from './ClientRequestsList';
-import { loadStripe } from '@stripe/stripe-js';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getStripePromise } from '@/lib/stripe';
 
-// Stripe publishable key - this is a PUBLIC key and safe to include in code
-const STRIPE_PUBLISHABLE_KEY = 'pk_live_51OnAPHDIcI8BuxJXQBntSvg6exbUcG1pLtGQNqlXg0lGrOjJ1M6LZb4AjqVk7XlQBrCdnHKaXFDT6Ar56CspGlvS00cYUJMxzI';
-const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
 interface SavedCard {
   id: string;
@@ -112,6 +110,7 @@ export function ClientProfile() {
   const [phone, setPhone] = useState(user?.phone || '');
 
   // Payment methods state
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [loadingCards, setLoadingCards] = useState(true);
   const [showAddCard, setShowAddCard] = useState(false);
@@ -147,6 +146,7 @@ export function ClientProfile() {
   const handleAddCard = async () => {
     setLoadingSetup(true);
     setShowAddCard(true);
+    setStripePromise(getStripePromise());
     
     try {
       const { data, error } = await supabase.functions.invoke('create-setup-intent');
@@ -417,27 +417,33 @@ export function ClientProfile() {
                     <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   </div>
                 ) : clientSecret ? (
-                  <Elements 
-                    stripe={stripePromise} 
-                    options={{ 
-                      clientSecret,
-                      appearance: {
-                        theme: 'stripe',
-                        variables: {
-                          colorPrimary: '#22c55e',
-                        }
-                      }
-                    }}
-                  >
-                    <AddCardForm 
-                      clientSecret={clientSecret}
-                      onSuccess={handleCardAdded}
-                      onCancel={() => {
-                        setShowAddCard(false);
-                        setClientSecret(null);
+                  stripePromise ? (
+                    <Elements 
+                      stripe={stripePromise} 
+                      options={{ 
+                        clientSecret,
+                        appearance: {
+                          theme: 'stripe',
+                          variables: {
+                            colorPrimary: 'hsl(var(--primary))',
+                          },
+                        },
                       }}
-                    />
-                  </Elements>
+                    >
+                      <AddCardForm 
+                        clientSecret={clientSecret}
+                        onSuccess={handleCardAdded}
+                        onCancel={() => {
+                          setShowAddCard(false);
+                          setClientSecret(null);
+                        }}
+                      />
+                    </Elements>
+                  ) : (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    </div>
+                  )
                 ) : (
                   <div className="text-center py-4">
                     <p className="text-sm text-destructive">Erro ao carregar formulário</p>
