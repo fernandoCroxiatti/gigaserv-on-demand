@@ -1,19 +1,31 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import { GoogleMap, Marker, DirectionsRenderer } from '@react-google-maps/api';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import { GoogleMap, Marker, DirectionsRenderer, Circle } from '@react-google-maps/api';
 import { useGoogleMaps } from './GoogleMapsProvider';
-import { Location } from '@/types/chamado';
+import { Location, ServiceType } from '@/types/chamado';
 import { Loader2, AlertCircle } from 'lucide-react';
+import { ProviderMarkers } from './ProviderMarkers';
+
+export interface MapProvider {
+  id: string;
+  location: Location;
+  name: string;
+  services?: ServiceType[];
+  distance?: number;
+}
 
 interface RealMapViewProps {
   center?: Location | null;
   origem?: Location | null;
   destino?: Location | null;
-  providers?: Array<{ id: string; location: Location; name: string }>;
+  providers?: MapProvider[];
   showRoute?: boolean;
   showUserLocation?: boolean;
+  showSearchRadius?: boolean;
+  searchRadius?: number; // in km
   onMapClick?: (location: Location) => void;
   className?: string;
   zoom?: number;
+  animateProviders?: boolean;
 }
 
 const mapContainerStyle = {
@@ -43,6 +55,16 @@ const mapOptions: google.maps.MapOptions = {
 
 const defaultCenter = { lat: -23.5505, lng: -46.6333 }; // São Paulo
 
+// Calculate zoom level based on radius
+function getZoomForRadius(radiusKm: number): number {
+  if (radiusKm <= 3) return 14;
+  if (radiusKm <= 5) return 13;
+  if (radiusKm <= 10) return 12;
+  if (radiusKm <= 20) return 11;
+  if (radiusKm <= 50) return 10;
+  return 9;
+}
+
 export function RealMapView({
   center,
   origem,
@@ -50,14 +72,24 @@ export function RealMapView({
   providers = [],
   showRoute = false,
   showUserLocation = true,
+  showSearchRadius = false,
+  searchRadius = 5,
   onMapClick,
   className = '',
-  zoom = 15,
+  zoom,
+  animateProviders = true,
 }: RealMapViewProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [userLocation, setUserLocation] = useState<Location | null>(null);
+
+  // Calculate dynamic zoom based on search radius
+  const effectiveZoom = useMemo(() => {
+    if (zoom !== undefined) return zoom;
+    if (showSearchRadius) return getZoomForRadius(searchRadius);
+    return 15;
+  }, [zoom, showSearchRadius, searchRadius]);
 
   // Get user location
   useEffect(() => {
@@ -127,6 +159,17 @@ export function RealMapView({
     [onMapClick]
   );
 
+  // Convert providers to marker format
+  const providerMarkers = useMemo(() => {
+    return providers.map(p => ({
+      id: p.id,
+      location: { lat: p.location.lat, lng: p.location.lng },
+      name: p.name,
+      services: p.services || ['guincho'] as ServiceType[],
+      distance: p.distance,
+    }));
+  }, [providers]);
+
   if (loadError) {
     return (
       <div className={`flex items-center justify-center bg-secondary ${className}`}>
@@ -163,12 +206,27 @@ export function RealMapView({
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={mapCenter}
-        zoom={zoom}
+        zoom={effectiveZoom}
         onLoad={onLoad}
         onUnmount={onUnmount}
         onClick={handleMapClick}
         options={mapOptions}
       >
+        {/* Search radius circle */}
+        {showSearchRadius && center && (
+          <Circle
+            center={{ lat: center.lat, lng: center.lng }}
+            radius={searchRadius * 1000} // Convert km to meters
+            options={{
+              fillColor: '#1DB954',
+              fillOpacity: 0.08,
+              strokeColor: '#1DB954',
+              strokeOpacity: 0.3,
+              strokeWeight: 2,
+            }}
+          />
+        )}
+
         {/* User location marker */}
         {showUserLocation && userLocation && (
           <Marker
@@ -214,23 +272,8 @@ export function RealMapView({
           />
         )}
 
-        {/* Provider markers */}
-        {providers.map((provider) => (
-          <Marker
-            key={provider.id}
-            position={{ lat: provider.location.lat, lng: provider.location.lng }}
-            icon={{
-              path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-              scale: 6,
-              fillColor: '#2563EB',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-              rotation: 0,
-            }}
-            title={provider.name}
-          />
-        ))}
+        {/* Provider markers with animation */}
+        <ProviderMarkers providers={providerMarkers} animate={animateProviders} />
 
         {/* Route */}
         {directions && (
