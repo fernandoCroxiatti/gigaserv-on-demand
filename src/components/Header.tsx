@@ -1,7 +1,7 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { ProfileSwitch } from './ProfileSwitch';
-import { Menu, Bell, User } from 'lucide-react';
+import { Menu, Bell, User, Shield } from 'lucide-react';
 import { Button } from './ui/button';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,10 +12,12 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 
 export function Header() {
   const { user } = useApp();
   const { signOut } = useAuth();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const isProvider = user?.activeProfile === 'provider';
 
@@ -40,6 +42,15 @@ export function Header() {
                 <User className="w-4 h-4 mr-2" />
                 Minha Conta
               </DropdownMenuItem>
+              {isAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/admin')} className="text-primary">
+                    <Shield className="w-4 h-4 mr-2" />
+                    Painel Admin
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
                 Sair
