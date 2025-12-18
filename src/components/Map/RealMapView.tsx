@@ -213,15 +213,15 @@ export function RealMapView({
         options={mapOptions}
       >
         {/* Search radius circle */}
-        {showSearchRadius && center && (
+        {showSearchRadius && mapCenter && (
           <Circle
-            center={{ lat: center.lat, lng: center.lng }}
+            center={mapCenter}
             radius={searchRadius * 1000} // Convert km to meters
             options={{
-              fillColor: '#1DB954',
-              fillOpacity: 0.08,
-              strokeColor: '#1DB954',
-              strokeOpacity: 0.3,
+              fillColor: '#3B82F6',
+              fillOpacity: 0.1,
+              strokeColor: '#3B82F6',
+              strokeOpacity: 0.4,
               strokeWeight: 2,
             }}
           />

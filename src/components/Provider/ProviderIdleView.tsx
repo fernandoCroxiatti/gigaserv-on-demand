@@ -41,27 +41,13 @@ export function ProviderIdleView() {
 
   return (
     <div className="relative h-full provider-theme">
-      {/* Map */}
+      {/* Map with search radius circle */}
       <RealMapView 
         className="absolute inset-0"
         center={location || undefined}
-        zoom={15}
+        showSearchRadius={isOnline}
+        searchRadius={radarRange}
       />
-
-      {/* Radar range indicator */}
-      {isOnline && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-          <div 
-            className="rounded-full border-2 border-provider-primary/30 bg-provider-primary/5 animate-pulse"
-            style={{ 
-              width: `${radarRange * 10}px`, 
-              height: `${radarRange * 10}px`,
-              maxWidth: '300px',
-              maxHeight: '300px'
-            }}
-          />
-        </div>
-      )}
 
       {/* GPS Error */}
       {geoError && (
