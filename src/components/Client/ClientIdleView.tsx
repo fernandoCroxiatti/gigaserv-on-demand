@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { useProgressiveSearch } from '@/hooks/useProgressiveSearch';
-import { SearchingIndicator } from './SearchingIndicator';
+import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { Button } from '../ui/button';
-import { MapPin, Navigation, ChevronRight, Clock, Check, Loader2, RefreshCw, Crosshair } from 'lucide-react';
+import { Navigation, ChevronRight, Check, Loader2, RefreshCw, Crosshair } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 
+const NEARBY_RADIUS_KM = 15;
+
 export function ClientIdleView() {
-  const { createChamado, availableProviders } = useApp();
+  const { createChamado } = useApp();
   const { location: userLocation, loading: locationLoading, error: locationError, refresh: refreshLocation } = useGeolocation();
   
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
@@ -19,35 +20,19 @@ export function ClientIdleView() {
   const [usingGpsLocation, setUsingGpsLocation] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
-  const [showProvidersSearch, setShowProvidersSearch] = useState(true);
 
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
 
-  // Progressive search for nearby providers
+  // Location for fetching nearby providers
   const searchLocation = useMemo(() => origem || userLocation, [origem, userLocation]);
   
-  const {
-    searchState,
-    currentRadius,
-    nearbyProviders,
-    radiusIndex,
-    totalRadii,
-    startSearch,
-    resetSearch,
-  } = useProgressiveSearch({
+  // Fetch nearby providers within 15km (no progressive search)
+  const { providers: nearbyProviders, loading: providersLoading } = useNearbyProviders({
     userLocation: searchLocation,
-    serviceType: selectedService,
-    enabled: showProvidersSearch && !!searchLocation,
+    radiusKm: NEARBY_RADIUS_KM,
+    enabled: !!searchLocation,
   });
-
-  // Reset search when service type changes
-  useEffect(() => {
-    if (searchLocation) {
-      resetSearch();
-      // Search will auto-restart due to enabled dependency
-    }
-  }, [selectedService]);
 
   // Convert nearby providers to map format
   const mapProviders: MapProvider[] = useMemo(() => {
@@ -60,11 +45,15 @@ export function ClientIdleView() {
     }));
   }, [nearbyProviders]);
 
+  // Count providers for selected service
+  const serviceProviderCount = useMemo(() => {
+    return nearbyProviders.filter(p => p.services.includes(selectedService)).length;
+  }, [nearbyProviders, selectedService]);
+
   const handleOrigemSelect = (location: Location) => {
     setOrigem(location);
     setOrigemText(location.address);
     setUsingGpsLocation(false);
-    resetSearch(); // Reset search to start with new location
   };
 
   const handleOrigemTextChange = (text: string) => {
@@ -82,7 +71,6 @@ export function ClientIdleView() {
       setOrigem(userLocation);
       setOrigemText(userLocation.address);
       setUsingGpsLocation(true);
-      resetSearch(); // Reset search to start with GPS location
     } else {
       refreshLocation();
     }
@@ -102,6 +90,7 @@ export function ClientIdleView() {
     if (!origem) return;
     if (needsDestination && !destino) return;
     
+    // Progressive search will be activated in searching state
     createChamado(selectedService, origem, needsDestination ? destino : null);
   };
 
@@ -117,21 +106,54 @@ export function ClientIdleView() {
         showRoute={needsDestination && !!origem && !!destino}
         providers={mapProviders}
         showUserLocation={!origem}
-        showSearchRadius={searchState === 'searching' || searchState === 'expanding_radius'}
-        searchRadius={currentRadius}
         animateProviders={true}
         className="absolute inset-0" 
+        zoom={origem ? 14 : 13}
       />
       
-      {/* Search status indicator */}
+      {/* Providers indicator */}
       <div className="absolute top-24 left-4 right-4 z-10">
-        <SearchingIndicator
-          state={searchState}
-          currentRadius={currentRadius}
-          providersCount={nearbyProviders.length}
-          radiusIndex={radiusIndex}
-          totalRadii={totalRadii}
-        />
+        <div className="glass-card rounded-2xl p-3 flex items-center gap-3 animate-fade-in">
+          <div className="relative">
+            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+              <Navigation className="w-5 h-5 text-primary" />
+            </div>
+            {nearbyProviders.length > 0 && (
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center text-[10px] text-white font-bold">
+                {nearbyProviders.length}
+              </div>
+            )}
+          </div>
+          <div className="flex-1">
+            {providersLoading ? (
+              <>
+                <p className="text-sm font-medium flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Buscando prestadores...
+                </p>
+                <p className="text-xs text-muted-foreground">Raio de {NEARBY_RADIUS_KM}km</p>
+              </>
+            ) : nearbyProviders.length > 0 ? (
+              <>
+                <p className="text-sm font-medium">
+                  {nearbyProviders.length} prestador{nearbyProviders.length > 1 ? 'es' : ''} próximo{nearbyProviders.length > 1 ? 's' : ''}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {serviceProviderCount > 0 
+                    ? `${serviceProviderCount} oferece${serviceProviderCount > 1 ? 'm' : ''} ${serviceConfig.label.toLowerCase()}`
+                    : `Nenhum oferece ${serviceConfig.label.toLowerCase()}`}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Nenhum prestador disponível
+                </p>
+                <p className="text-xs text-muted-foreground">Tente novamente em alguns minutos</p>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Bottom card */}
@@ -144,8 +166,7 @@ export function ClientIdleView() {
               {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType) => {
                 const config = SERVICE_CONFIG[serviceType];
                 const isSelected = selectedService === serviceType;
-                // Count providers that offer this service
-                const serviceProviderCount = nearbyProviders.filter(p => 
+                const typeProviderCount = nearbyProviders.filter(p => 
                   p.services.includes(serviceType)
                 ).length;
                 
@@ -171,8 +192,8 @@ export function ClientIdleView() {
                         {config.label}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {serviceProviderCount > 0 
-                          ? `${serviceProviderCount} disponíve${serviceProviderCount > 1 ? 'is' : 'l'}` 
+                        {typeProviderCount > 0 
+                          ? `${typeProviderCount} disponíve${typeProviderCount > 1 ? 'is' : 'l'}` 
                           : config.estimatedTime}
                       </p>
                     </div>
