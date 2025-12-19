@@ -4,7 +4,9 @@ import { OptimizedNavigationMap } from '../Map/OptimizedNavigationMap';
 import { useNavigationRoute } from '@/hooks/useNavigationRoute';
 import { useRealtimeGPS } from '@/hooks/useRealtimeGPS';
 import { useProviderTracking } from '@/hooks/useProviderTracking';
+import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
 import { Button } from '../ui/button';
+import { ChatModal } from '../Chat/ChatModal';
 import { 
   Phone, 
   MessageCircle, 
@@ -25,6 +27,7 @@ import {
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +47,7 @@ interface NavigationFullScreenProps {
 }
 
 export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
-  const { chamado, finishService, profile, availableProviders, cancelChamado } = useApp();
+  const { chamado, finishService, profile, availableProviders, cancelChamado, chatMessages } = useApp();
   const [navigationPhase, setNavigationPhase] = useState<NavigationPhase>('going_to_vehicle');
   const [routePolyline, setRoutePolyline] = useState<string>('');
   const [eta, setEta] = useState<string>('Calculando...');
@@ -52,7 +55,18 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [showArrivalDialog, setShowArrivalDialog] = useState(false);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [lastReadMessageCount, setLastReadMessageCount] = useState(0);
   const routeCalculatedRef = useRef<string>('');
+
+  // Get other party contact info
+  const { phone: otherPartyPhone, name: otherPartyName, loading: contactLoading } = useOtherPartyContact(
+    mode,
+    chamado?.id,
+    chamado?.clienteId,
+    chamado?.prestadorId
+  );
 
   const { 
     routeData, 
@@ -245,6 +259,41 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       setRoutePolyline(routeData.polyline);
     }
   }, [routeData]);
+
+  // Track unread messages - when chat is closed and new messages arrive
+  useEffect(() => {
+    if (showChat) {
+      // When chat opens, mark all as read
+      setHasUnreadMessages(false);
+      setLastReadMessageCount(chatMessages.length);
+    } else if (chatMessages.length > lastReadMessageCount) {
+      // New messages arrived while chat is closed
+      setHasUnreadMessages(true);
+    }
+  }, [chatMessages.length, showChat, lastReadMessageCount]);
+
+  // Handle call button click
+  const handleCall = useCallback(() => {
+    if (!otherPartyPhone) {
+      toast.error('Telefone não disponível', {
+        description: 'O número de telefone não foi cadastrado.'
+      });
+      return;
+    }
+    
+    // Clean the phone number (remove non-digits except +)
+    const cleanPhone = otherPartyPhone.replace(/[^\d+]/g, '');
+    
+    // Open native dialer
+    window.location.href = `tel:${cleanPhone}`;
+  }, [otherPartyPhone]);
+
+  // Handle message button click
+  const handleOpenChat = useCallback(() => {
+    setShowChat(true);
+    setHasUnreadMessages(false);
+    setLastReadMessageCount(chatMessages.length);
+  }, [chatMessages.length]);
 
   const handleConfirmArrival = async () => {
     setShowArrivalDialog(false);
@@ -570,13 +619,33 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
           {/* Contact buttons */}
           <div className="p-4 flex gap-3">
-            <Button variant="outline" className="flex-1" size="lg">
+            <Button 
+              variant="outline" 
+              className="flex-1" 
+              size="lg"
+              onClick={handleCall}
+              disabled={contactLoading}
+            >
               <Phone className="w-5 h-5" />
               Ligar
             </Button>
-            <Button variant="outline" className="flex-1" size="lg">
-              <MessageCircle className="w-5 h-5" />
+            <Button 
+              variant="outline" 
+              className={cn(
+                "flex-1 relative",
+                hasUnreadMessages && "border-primary ring-2 ring-primary/20"
+              )}
+              size="lg"
+              onClick={handleOpenChat}
+            >
+              <MessageCircle className={cn(
+                "w-5 h-5",
+                hasUnreadMessages && "text-primary"
+              )} />
               Mensagem
+              {hasUnreadMessages && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse" />
+              )}
             </Button>
           </div>
 
@@ -680,6 +749,14 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Chat Modal */}
+      <ChatModal
+        isOpen={showChat}
+        onClose={() => setShowChat(false)}
+        otherPartyName={otherPartyName || (mode === 'provider' ? 'Cliente' : 'Prestador')}
+        mode={mode}
+      />
     </div>
   );
 }
