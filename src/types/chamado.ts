@@ -125,6 +125,7 @@ export interface Provider {
   location: Location;
   radarRange: number;
   services: ServiceType[]; // Services this provider offers
+  vehiclePlate?: string; // Vehicle plate (optional)
 }
 
 export interface User {

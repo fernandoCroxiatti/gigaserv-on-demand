@@ -56,6 +56,7 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [cpf, setCpf] = useState('');
+  const [vehiclePlate, setVehiclePlate] = useState('');
   const [selectedServices, setSelectedServices] = useState<ServiceType[]>(['guincho']);
 
   const toggleService = (service: ServiceType) => {
@@ -78,6 +79,7 @@ export default function Auth() {
     setPassword('');
     setName('');
     setCpf('');
+    setVehiclePlate('');
     setSelectedServices(['guincho']);
   };
 
@@ -162,6 +164,7 @@ export default function Auth() {
             perfil_principal: profileType,
             cpf: profileType === 'provider' ? cpf.replace(/\D/g, '') : null,
             services_offered: profileType === 'provider' ? selectedServices : null,
+            vehicle_plate: profileType === 'provider' && vehiclePlate ? vehiclePlate.toUpperCase() : null,
           },
         },
       });
@@ -419,6 +422,21 @@ export default function Auth() {
                             onChange={(e) => setCpf(formatCPF(e.target.value))}
                             placeholder="000.000.000-00"
                             className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="vehiclePlate" className="text-foreground">Placa do veículo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+                        <div className="relative">
+                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <Input
+                            id="vehiclePlate"
+                            type="text"
+                            value={vehiclePlate}
+                            onChange={(e) => setVehiclePlate(e.target.value.toUpperCase().slice(0, 7))}
+                            placeholder="ABC-1D23"
+                            className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary uppercase"
                           />
                         </div>
                       </div>

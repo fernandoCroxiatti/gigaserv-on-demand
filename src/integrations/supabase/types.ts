@@ -285,6 +285,7 @@ export type Database = {
           total_services: number | null
           updated_at: string
           user_id: string
+          vehicle_plate: string | null
         }
         Insert: {
           block_reason?: string | null
@@ -312,6 +313,7 @@ export type Database = {
           total_services?: number | null
           updated_at?: string
           user_id: string
+          vehicle_plate?: string | null
         }
         Update: {
           block_reason?: string | null
@@ -339,6 +341,7 @@ export type Database = {
           total_services?: number | null
           updated_at?: string
           user_id?: string
+          vehicle_plate?: string | null
         }
         Relationships: []
       }
