@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useProviderEarnings } from '@/hooks/useProviderEarnings';
@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderRidesList } from './ProviderRidesList';
+import { ProviderRegistrationForm } from '../Provider/ProviderRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -46,11 +47,15 @@ export function ProviderProfile() {
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [showRegistrationForm, setShowRegistrationForm] = useState(false);
 
   // Stripe Connect state
   const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
   const [loadingStripe, setLoadingStripe] = useState(true);
   const [connectingStripe, setConnectingStripe] = useState(false);
+  
+  // Check if registration is complete
+  const isRegistrationComplete = providerData?.registration_complete === true;
   
   // Earnings hook
   const { earnings, loading: loadingEarnings, refetch: refetchEarnings } = useProviderEarnings();
@@ -92,6 +97,13 @@ export function ProviderProfile() {
   };
 
   const handleStripeOnboarding = async () => {
+    // Check if registration is complete first
+    if (!isRegistrationComplete) {
+      toast.error('Finalize seu cadastro como prestador antes de ativar os recebimentos.');
+      setShowRegistrationForm(true);
+      return;
+    }
+
     setConnectingStripe(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-connect-account');
@@ -122,6 +134,12 @@ export function ProviderProfile() {
     }
   };
 
+  const handleRegistrationComplete = useCallback(() => {
+    setShowRegistrationForm(false);
+    // Reload the page to get updated provider data
+    window.location.reload();
+  }, []);
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
@@ -141,6 +159,20 @@ export function ProviderProfile() {
   };
 
   const statusInfo = getStripeStatusInfo();
+
+  // Show registration form if not complete
+  if (showRegistrationForm || !isRegistrationComplete) {
+    return (
+      <ProviderRegistrationForm
+        userId={profile?.user_id || ''}
+        currentName={user?.name || ''}
+        currentPhone={user?.phone || ''}
+        currentAvatar={profile?.avatar_url || null}
+        currentVehiclePlate={providerData?.vehicle_plate || null}
+        onComplete={handleRegistrationComplete}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background provider-theme">
