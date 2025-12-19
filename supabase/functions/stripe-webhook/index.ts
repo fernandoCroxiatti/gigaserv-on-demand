@@ -28,20 +28,37 @@ serve(async (req) => {
 
     let event: Stripe.Event;
 
-    // If webhook secret is set, verify signature
+    // SECURITY: Always verify Stripe webhook signature in production
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-    if (webhookSecret && signature) {
-      try {
-        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-        logStep("Signature verified");
-      } catch (err) {
-        logStep("Signature verification failed", { error: (err as Error).message });
-        return new Response(JSON.stringify({ error: "Invalid signature" }), { status: 400 });
-      }
-    } else {
-      // Parse body directly (for testing without signature)
-      event = JSON.parse(body);
-      logStep("Parsed event without signature verification");
+    
+    // Require webhook secret in production
+    if (!webhookSecret) {
+      logStep("ERROR: STRIPE_WEBHOOK_SECRET not configured - rejecting webhook");
+      return new Response(
+        JSON.stringify({ error: "Webhook secret not configured" }), 
+        { status: 500 }
+      );
+    }
+    
+    // Require signature header
+    if (!signature) {
+      logStep("ERROR: Missing stripe-signature header");
+      return new Response(
+        JSON.stringify({ error: "Missing signature" }), 
+        { status: 401 }
+      );
+    }
+    
+    // Verify signature
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      logStep("Signature verified successfully");
+    } catch (err) {
+      logStep("Signature verification failed", { error: (err as Error).message });
+      return new Response(
+        JSON.stringify({ error: "Invalid signature" }), 
+        { status: 401 }
+      );
     }
 
     logStep("Processing event", { type: event.type, id: event.id });
