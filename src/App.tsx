@@ -12,6 +12,8 @@ import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import StripeCallback from "./pages/StripeCallback";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfUse from "./pages/TermsOfUse";
 import { AdminLayout } from "./components/Admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminSettings from "./pages/admin/Settings";
@@ -133,6 +135,9 @@ const App = () => (
                   </ProtectedRoute>
                 } 
               />
+              {/* Legal pages - publicly accessible */}
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfUse />} />
               {/* Admin Routes */}
               <Route 
                 path="/admin" 

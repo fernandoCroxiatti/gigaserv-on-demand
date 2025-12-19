@@ -19,13 +19,29 @@ import {
   CheckCircle,
   Loader2,
   RefreshCw,
-  TrendingUp
+  TrendingUp,
+  Shield,
+  Scale,
+  ChevronRight,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderRidesList } from './ProviderRidesList';
 import { ProviderRegistrationForm } from '../Provider/ProviderRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -54,6 +70,7 @@ export function ProviderProfile() {
   const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
   const [loadingStripe, setLoadingStripe] = useState(true);
   const [connectingStripe, setConnectingStripe] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   
   // Check if registration is complete
   const isRegistrationComplete = providerData?.registration_complete === true;
@@ -144,6 +161,27 @@ export function ProviderProfile() {
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-account');
+      
+      if (error || data?.error) {
+        toast.error(data?.error || 'Erro ao excluir conta. Tente novamente.');
+        return;
+      }
+
+      toast.success('Conta excluída com sucesso');
+      await signOut();
+      navigate('/auth');
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      toast.error('Erro ao excluir conta. Tente novamente.');
+    } finally {
+      setDeletingAccount(false);
+    }
   };
 
   const getStripeStatusInfo = () => {
@@ -323,15 +361,85 @@ export function ProviderProfile() {
             )}
           </div>
 
+          {/* Legal & Privacy */}
+          <div className="bg-card rounded-2xl p-6">
+            <h3 className="font-semibold text-lg mb-4">Legal e Privacidade</h3>
+            <div className="space-y-2">
+              <button 
+                onClick={() => navigate('/privacy')}
+                className="flex items-center gap-4 p-4 bg-secondary rounded-xl w-full hover:bg-secondary/80 transition-colors"
+              >
+                <Shield className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1 text-left">
+                  <p className="font-medium">Política de Privacidade</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </button>
+              
+              <button 
+                onClick={() => navigate('/terms')}
+                className="flex items-center gap-4 p-4 bg-secondary rounded-xl w-full hover:bg-secondary/80 transition-colors"
+              >
+                <Scale className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1 text-left">
+                  <p className="font-medium">Termos de Uso</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+          </div>
+
           {/* Logout */}
           <Button 
             variant="outline" 
-            className="w-full text-destructive hover:text-destructive"
+            className="w-full"
             onClick={handleSignOut}
           >
             <LogOut className="w-4 h-4 mr-2" />
             Sair da conta
           </Button>
+
+          {/* Delete Account */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                className="w-full text-destructive hover:text-destructive border-destructive/50"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Excluir minha conta
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-destructive" />
+                  Excluir conta
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação é irreversível. Todos os seus dados, histórico de corridas, 
+                  ganhos e informações de pagamento serão permanentemente excluídos.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deletingAccount ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Excluindo...
+                    </>
+                  ) : (
+                    'Sim, excluir minha conta'
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         {/* Bank Tab */}
