@@ -37,6 +37,7 @@ interface StripeAccountStatus {
   onboarding_completed: boolean;
   charges_enabled: boolean;
   payouts_enabled: boolean;
+  stripe_status?: 'not_configured' | 'pending' | 'verified' | 'restricted';
 }
 
 export function ProviderProfile() {
@@ -149,11 +150,15 @@ export function ProviderProfile() {
     if (!stripeStatus?.has_account) {
       return { status: 'not_started', label: 'Não configurada', color: 'muted' };
     }
-    if (stripeStatus.charges_enabled && stripeStatus.payouts_enabled) {
+    // Use stripe_status enum for proper status tracking
+    if (stripeStatus.stripe_status === 'verified') {
       return { status: 'complete', label: 'Ativa', color: 'status-finished' };
     }
-    if (stripeStatus.onboarding_completed) {
+    if (stripeStatus.stripe_status === 'pending') {
       return { status: 'pending', label: 'Em análise', color: 'status-searching' };
+    }
+    if (stripeStatus.stripe_status === 'restricted') {
+      return { status: 'restricted', label: 'Requer atenção', color: 'destructive' };
     }
     return { status: 'incomplete', label: 'Cadastro incompleto', color: 'status-searching' };
   };

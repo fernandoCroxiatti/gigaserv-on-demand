@@ -31,7 +31,8 @@ export function ProviderIdleView() {
       try {
         const { data, error } = await supabase.functions.invoke('check-connect-status');
         if (!error && data) {
-          setStripeVerified(data.charges_enabled && data.payouts_enabled);
+          // Use stripe_status === 'verified' for proper validation
+          setStripeVerified(data.stripe_status === 'verified');
         }
       } catch (err) {
         console.error('Error checking Stripe status:', err);

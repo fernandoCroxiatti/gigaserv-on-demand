@@ -283,6 +283,7 @@ export type Database = {
           stripe_details_submitted: boolean | null
           stripe_onboarding_completed: boolean | null
           stripe_payouts_enabled: boolean | null
+          stripe_status: string | null
           terms_accepted: boolean | null
           terms_accepted_at: string | null
           total_services: number | null
@@ -315,6 +316,7 @@ export type Database = {
           stripe_details_submitted?: boolean | null
           stripe_onboarding_completed?: boolean | null
           stripe_payouts_enabled?: boolean | null
+          stripe_status?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
           total_services?: number | null
@@ -347,6 +349,7 @@ export type Database = {
           stripe_details_submitted?: boolean | null
           stripe_onboarding_completed?: boolean | null
           stripe_payouts_enabled?: boolean | null
+          stripe_status?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
           total_services?: number | null
