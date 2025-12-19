@@ -275,6 +275,7 @@ export type Database = {
           payout_enabled: boolean | null
           radar_range: number | null
           rating: number | null
+          registration_complete: boolean | null
           services_offered: Database["public"]["Enums"]["service_type"][] | null
           stripe_account_id: string | null
           stripe_charges_enabled: boolean | null
@@ -282,10 +283,13 @@ export type Database = {
           stripe_details_submitted: boolean | null
           stripe_onboarding_completed: boolean | null
           stripe_payouts_enabled: boolean | null
+          terms_accepted: boolean | null
+          terms_accepted_at: string | null
           total_services: number | null
           updated_at: string
           user_id: string
           vehicle_plate: string | null
+          vehicle_type: string | null
         }
         Insert: {
           block_reason?: string | null
@@ -301,6 +305,7 @@ export type Database = {
           payout_enabled?: boolean | null
           radar_range?: number | null
           rating?: number | null
+          registration_complete?: boolean | null
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
@@ -310,10 +315,13 @@ export type Database = {
           stripe_details_submitted?: boolean | null
           stripe_onboarding_completed?: boolean | null
           stripe_payouts_enabled?: boolean | null
+          terms_accepted?: boolean | null
+          terms_accepted_at?: string | null
           total_services?: number | null
           updated_at?: string
           user_id: string
           vehicle_plate?: string | null
+          vehicle_type?: string | null
         }
         Update: {
           block_reason?: string | null
@@ -329,6 +337,7 @@ export type Database = {
           payout_enabled?: boolean | null
           radar_range?: number | null
           rating?: number | null
+          registration_complete?: boolean | null
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
@@ -338,10 +347,13 @@ export type Database = {
           stripe_details_submitted?: boolean | null
           stripe_onboarding_completed?: boolean | null
           stripe_payouts_enabled?: boolean | null
+          terms_accepted?: boolean | null
+          terms_accepted_at?: string | null
           total_services?: number | null
           updated_at?: string
           user_id?: string
           vehicle_plate?: string | null
+          vehicle_type?: string | null
         }
         Relationships: []
       }

@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin, Settings2, Check } from 'lucide-react';
+import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin, Settings2, Check, AlertCircle } from 'lucide-react';
 import { Slider } from '../ui/slider';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
@@ -13,10 +16,31 @@ export function ProviderIdleView() {
   const { user, toggleProviderOnline, setProviderRadarRange, setProviderServices, updateProviderLocation, providerData } = useApp();
   const { location, error: geoError } = useGeolocation(true);
   const [showServiceConfig, setShowServiceConfig] = useState(false);
+  const [stripeVerified, setStripeVerified] = useState(false);
+  const [checkingStripe, setCheckingStripe] = useState(true);
+  const navigate = useNavigate();
   
   const isOnline = user?.providerData?.online || false;
   const radarRange = user?.providerData?.radarRange || 15;
   const currentServices = (providerData?.services_offered as ServiceType[]) || ['guincho'];
+  const isRegistrationComplete = providerData?.registration_complete === true;
+
+  // Check Stripe status on mount
+  useEffect(() => {
+    const checkStripeStatus = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('check-connect-status');
+        if (!error && data) {
+          setStripeVerified(data.charges_enabled && data.payouts_enabled);
+        }
+      } catch (err) {
+        console.error('Error checking Stripe status:', err);
+      } finally {
+        setCheckingStripe(false);
+      }
+    };
+    checkStripeStatus();
+  }, []);
 
   const toggleService = (service: ServiceType) => {
     const newServices = currentServices.includes(service)
@@ -26,6 +50,33 @@ export function ProviderIdleView() {
     if (newServices.length > 0) {
       setProviderServices(newServices);
     }
+  };
+
+  const handleToggleOnline = async () => {
+    // If trying to go online, check requirements first
+    if (!isOnline) {
+      if (!isRegistrationComplete) {
+        toast.error('Finalize seu cadastro para começar a atender.', {
+          action: {
+            label: 'Ir para cadastro',
+            onClick: () => navigate('/profile'),
+          },
+        });
+        return;
+      }
+
+      if (!stripeVerified) {
+        toast.error('Finalize seu cadastro e ative os recebimentos para começar a atender.', {
+          action: {
+            label: 'Configurar',
+            onClick: () => navigate('/profile'),
+          },
+        });
+        return;
+      }
+    }
+
+    await toggleProviderOnline();
   };
 
   // Update provider location when location changes
@@ -119,6 +170,27 @@ export function ProviderIdleView() {
       {/* Bottom control panel */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
         <div className="bg-card rounded-t-3xl shadow-uber-lg p-6 space-y-6">
+          {/* Requirements warning */}
+          {!isOnline && (!isRegistrationComplete || !stripeVerified) && !checkingStripe && (
+            <div className="flex items-start gap-3 p-4 bg-status-searching/10 rounded-xl">
+              <AlertCircle className="w-5 h-5 text-status-searching flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-status-searching">
+                  {!isRegistrationComplete 
+                    ? 'Finalize seu cadastro para começar a atender'
+                    : 'Ative os recebimentos para começar a atender'}
+                </p>
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto text-sm text-provider-primary"
+                  onClick={() => navigate('/profile')}
+                >
+                  {!isRegistrationComplete ? 'Completar cadastro' : 'Configurar recebimentos'}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Online toggle */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -132,8 +204,9 @@ export function ProviderIdleView() {
             </div>
             <Button
               variant={isOnline ? 'provider' : 'outline'}
-              onClick={toggleProviderOnline}
+              onClick={handleToggleOnline}
               size="lg"
+              disabled={checkingStripe}
             >
               {isOnline ? 'Ficar offline' : 'Ficar online'}
             </Button>
