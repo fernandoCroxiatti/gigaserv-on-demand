@@ -15,6 +15,7 @@ interface UseNavigationRouteReturn {
   isCalculating: boolean;
   error: string | null;
   calculateRoute: (origin: Location, destination: Location, chamadoId: string, phase: string) => Promise<RouteData | null>;
+  forceRecalculateRoute: (origin: Location, destination: Location, chamadoId: string, phase: string) => Promise<RouteData | null>;
   clearRoute: () => void;
 }
 
@@ -142,11 +143,31 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
     console.log('[Navigation] Route cleared for new phase');
   }, []);
 
+  /**
+   * Force recalculate route (manual only)
+   * Resets the calculated ref to allow one new API call
+   */
+  const forceRecalculateRoute = useCallback(async (
+    origin: Location,
+    destination: Location,
+    chamadoId: string,
+    phase: string
+  ): Promise<RouteData | null> => {
+    console.log('[Navigation] MANUAL recalculate requested for phase:', phase);
+    
+    // Reset the calculated ref to allow new calculation
+    calculatedRef.current = '';
+    
+    // Now calculate with the normal function
+    return calculateRoute(origin, destination, chamadoId, phase);
+  }, [calculateRoute]);
+
   return {
     routeData,
     isCalculating,
     error,
     calculateRoute,
+    forceRecalculateRoute,
     clearRoute,
   };
 }

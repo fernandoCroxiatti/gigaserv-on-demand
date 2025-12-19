@@ -18,7 +18,9 @@ import {
   AlertCircle, 
   Loader2,
   Car,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
+  Wifi
 } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
@@ -56,6 +58,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     routeData, 
     isCalculating: isCalculatingRoute, 
     calculateRoute,
+    forceRecalculateRoute,
     clearRoute 
   } = useNavigationRoute();
 
@@ -64,10 +67,11 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     location: providerGPSLocation, 
     error: gpsError, 
     loading: gpsLoading,
-    heading: providerHeading 
+    heading: providerHeading,
+    isApproximate: isApproximateLocation,
   } = useRealtimeGPS({
     enableHighAccuracy: true,
-    timeout: 10000,
+    timeout: 15000, // Match the 15s timeout
     maximumAge: 0,
     onLocationUpdate: async (location) => {
       // Only update DB if provider mode
@@ -298,6 +302,36 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     }
   };
 
+  /**
+   * Manual route recalculation (only when provider clicks the button)
+   * Performs exactly 1 API call to Directions
+   */
+  const handleManualRecalculate = useCallback(async () => {
+    if (!providerLocation || !currentDestination) {
+      toast.error('Localização não disponível');
+      return;
+    }
+    
+    toast.info('Recalculando rota...', { duration: 2000 });
+    
+    const result = await forceRecalculateRoute(
+      providerLocation,
+      currentDestination,
+      chamado.id,
+      navigationPhase
+    );
+    
+    if (result) {
+      setRoutePolyline(result.polyline);
+      setDistance(result.distanceText);
+      setEta(result.durationText);
+      routeCalculatedRef.current = `${chamado.id}-${navigationPhase}`;
+      toast.success('Rota atualizada!');
+    } else {
+      toast.error('Erro ao recalcular rota');
+    }
+  }, [providerLocation, currentDestination, chamado.id, navigationPhase, forceRecalculateRoute]);
+
   // Format helpers
   function formatDistance(meters: number): string {
     if (meters < 1000) return `${meters} m`;
@@ -379,7 +413,28 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
             {isCalculatingRoute && (
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             )}
+            
+            {/* Manual recalculate button (provider only) */}
+            {mode === 'provider' && !isCalculatingRoute && (
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={handleManualRecalculate}
+                className="h-10 w-10"
+                title="Recalcular rota"
+              >
+                <RefreshCw className="w-5 h-5 text-muted-foreground" />
+              </Button>
+            )}
           </div>
+
+          {/* Approximate location warning (provider only) */}
+          {mode === 'provider' && isApproximateLocation && (
+            <div className="mt-2 flex items-center gap-2 p-2 bg-amber-500/10 rounded-lg">
+              <Wifi className="w-4 h-4 text-amber-600" />
+              <span className="text-xs text-amber-700">Localização aproximada - aguardando GPS</span>
+            </div>
+          )}
 
           {/* ETA and Distance */}
           <div className="mt-3 flex items-center gap-4 pt-3 border-t border-border">
