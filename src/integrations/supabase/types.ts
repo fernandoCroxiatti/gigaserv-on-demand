@@ -84,6 +84,7 @@ export type Database = {
           destino_lat: number | null
           destino_lng: number | null
           id: string
+          navigation_phase: string | null
           origem_address: string
           origem_lat: number
           origem_lng: number
@@ -93,6 +94,11 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status"] | null
           prestador_id: string | null
           provider_amount: number | null
+          provider_arrived_at_destination: boolean | null
+          provider_arrived_at_vehicle: boolean | null
+          route_distance_meters: number | null
+          route_duration_seconds: number | null
+          route_polyline: string | null
           status: Database["public"]["Enums"]["chamado_status"]
           stripe_application_fee_amount: number | null
           stripe_payment_intent_id: string | null
@@ -111,6 +117,7 @@ export type Database = {
           destino_lat?: number | null
           destino_lng?: number | null
           id?: string
+          navigation_phase?: string | null
           origem_address: string
           origem_lat: number
           origem_lng: number
@@ -120,6 +127,11 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           prestador_id?: string | null
           provider_amount?: number | null
+          provider_arrived_at_destination?: boolean | null
+          provider_arrived_at_vehicle?: boolean | null
+          route_distance_meters?: number | null
+          route_duration_seconds?: number | null
+          route_polyline?: string | null
           status?: Database["public"]["Enums"]["chamado_status"]
           stripe_application_fee_amount?: number | null
           stripe_payment_intent_id?: string | null
@@ -138,6 +150,7 @@ export type Database = {
           destino_lat?: number | null
           destino_lng?: number | null
           id?: string
+          navigation_phase?: string | null
           origem_address?: string
           origem_lat?: number
           origem_lng?: number
@@ -147,6 +160,11 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           prestador_id?: string | null
           provider_amount?: number | null
+          provider_arrived_at_destination?: boolean | null
+          provider_arrived_at_vehicle?: boolean | null
+          route_distance_meters?: number | null
+          route_duration_seconds?: number | null
+          route_polyline?: string | null
           status?: Database["public"]["Enums"]["chamado_status"]
           stripe_application_fee_amount?: number | null
           stripe_payment_intent_id?: string | null
