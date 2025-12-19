@@ -50,7 +50,7 @@ serve(async (req) => {
     // Check if user is a provider
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('perfil_principal, name, phone')
+      .select('perfil_principal, name, phone, avatar_url')
       .eq('user_id', user.id)
       .single();
 
@@ -59,10 +59,10 @@ serve(async (req) => {
     }
     logStep("User is a provider", { name: profile.name });
 
-    // Check if provider already has a Stripe account
+    // Get provider data and check registration_complete
     const { data: providerData, error: providerError } = await supabaseClient
       .from('provider_data')
-      .select('stripe_account_id, is_blocked')
+      .select('stripe_account_id, is_blocked, registration_complete, vehicle_plate, vehicle_type, terms_accepted')
       .eq('user_id', user.id)
       .single();
 
@@ -73,6 +73,33 @@ serve(async (req) => {
     if (providerData?.is_blocked) {
       throw new Error("Sua conta está bloqueada. Contate o suporte para mais informações.");
     }
+
+    // CRITICAL: Check if registration is complete before allowing Stripe onboarding
+    if (!providerData?.registration_complete) {
+      logStep("Registration incomplete - blocking Stripe onboarding");
+      throw new Error("Finalize seu cadastro como prestador antes de configurar os recebimentos.");
+    }
+
+    // Validate all required fields are filled
+    if (!profile.name || !profile.phone || !profile.avatar_url) {
+      logStep("Profile incomplete", { name: !!profile.name, phone: !!profile.phone, avatar: !!profile.avatar_url });
+      throw new Error("Complete seu perfil (nome, telefone e foto) antes de configurar os recebimentos.");
+    }
+
+    if (!providerData.vehicle_plate || !providerData.vehicle_type) {
+      logStep("Vehicle data incomplete", { plate: !!providerData.vehicle_plate, type: !!providerData.vehicle_type });
+      throw new Error("Informe os dados do veículo antes de configurar os recebimentos.");
+    }
+
+    if (!providerData.terms_accepted) {
+      logStep("Terms not accepted");
+      throw new Error("Aceite os termos de uso antes de configurar os recebimentos.");
+    }
+
+    logStep("Registration complete - proceeding with Stripe", {
+      registration_complete: providerData.registration_complete,
+      has_stripe_account: !!providerData.stripe_account_id
+    });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     let stripeAccountId = providerData?.stripe_account_id;
@@ -101,7 +128,7 @@ serve(async (req) => {
         stripeAccountId = account.id;
         logStep("Stripe Express account created", { accountId: stripeAccountId });
 
-        // Save to database
+        // Save to database with pending status
         const { error: updateError } = await supabaseClient
           .from('provider_data')
           .update({
@@ -111,12 +138,12 @@ serve(async (req) => {
             stripe_payouts_enabled: false,
             stripe_details_submitted: false,
             stripe_connected: false,
+            stripe_status: 'pending',
           })
           .eq('user_id', user.id);
 
         if (updateError) {
           logStep("Error saving stripe account to database", { error: updateError.message });
-          // Continue anyway - the account was created
         }
       } catch (stripeError: any) {
         logStep("Stripe account creation error", { error: stripeError.message });
@@ -127,7 +154,11 @@ serve(async (req) => {
       
       // Verify account still exists in Stripe
       try {
-        await stripe.accounts.retrieve(stripeAccountId);
+        const existingAccount = await stripe.accounts.retrieve(stripeAccountId);
+        logStep("Existing account retrieved", { 
+          chargesEnabled: existingAccount.charges_enabled,
+          payoutsEnabled: existingAccount.payouts_enabled
+        });
       } catch (retrieveError: any) {
         logStep("Stripe account not found, recreating", { error: retrieveError.message });
         
@@ -159,17 +190,19 @@ serve(async (req) => {
             stripe_payouts_enabled: false,
             stripe_details_submitted: false,
             stripe_connected: false,
+            stripe_status: 'pending',
           })
           .eq('user_id', user.id);
       }
     }
 
-    // Step 2: Always create a NEW onboarding link
+    // Step 2: ALWAYS create a NEW onboarding link (never reuse old links)
     const origin = req.headers.get("origin") || "https://gigaserv-on-demand.lovable.app";
     
-    logStep("Creating account onboarding link", { origin });
+    logStep("Creating NEW account onboarding link", { origin, accountId: stripeAccountId });
     
     try {
+      // Always generate a fresh onboarding link
       const accountLink = await stripe.accountLinks.create({
         account: stripeAccountId,
         refresh_url: `${origin}/stripe/callback?type=refresh`,
@@ -177,9 +210,9 @@ serve(async (req) => {
         type: "account_onboarding",
       });
 
-      logStep("Account onboarding link created", { 
+      logStep("Account onboarding link created successfully", { 
         url: accountLink.url,
-        expiresAt: accountLink.expires_at 
+        expiresAt: new Date(accountLink.expires_at * 1000).toISOString()
       });
 
       return new Response(JSON.stringify({ 

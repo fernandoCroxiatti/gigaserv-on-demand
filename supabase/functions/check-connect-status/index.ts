@@ -12,6 +12,24 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CHECK-CONNECT-STATUS] ${step}${detailsStr}`);
 };
 
+// Map Stripe account state to status enum
+function determineStripeStatus(account: Stripe.Account): 'pending' | 'verified' | 'restricted' {
+  // Verified: Can charge and receive payouts
+  if (account.charges_enabled && account.payouts_enabled) {
+    return 'verified';
+  }
+  
+  // Restricted: Has requirements that need attention
+  if (account.requirements?.currently_due?.length || 
+      account.requirements?.past_due?.length ||
+      account.requirements?.disabled_reason) {
+    return 'restricted';
+  }
+  
+  // Pending: Waiting for Stripe to verify
+  return 'pending';
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -42,7 +60,7 @@ serve(async (req) => {
     // Get provider data
     const { data: providerData, error: providerError } = await supabaseClient
       .from('provider_data')
-      .select('stripe_account_id, stripe_onboarding_completed, stripe_charges_enabled, stripe_payouts_enabled')
+      .select('stripe_account_id, stripe_onboarding_completed, stripe_charges_enabled, stripe_payouts_enabled, stripe_status')
       .eq('user_id', user.id)
       .single();
 
@@ -53,6 +71,7 @@ serve(async (req) => {
         onboarding_completed: false,
         charges_enabled: false,
         payouts_enabled: false,
+        stripe_status: 'not_configured',
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -66,6 +85,7 @@ serve(async (req) => {
         onboarding_completed: false,
         charges_enabled: false,
         payouts_enabled: false,
+        stripe_status: 'not_configured',
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -74,13 +94,49 @@ serve(async (req) => {
 
     // Check account status from Stripe
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    const account = await stripe.accounts.retrieve(providerData.stripe_account_id);
+    
+    let account: Stripe.Account;
+    try {
+      account = await stripe.accounts.retrieve(providerData.stripe_account_id);
+    } catch (retrieveError: any) {
+      logStep("Error retrieving Stripe account", { error: retrieveError.message });
+      
+      // Account doesn't exist in Stripe anymore
+      await supabaseClient
+        .from('provider_data')
+        .update({
+          stripe_account_id: null,
+          stripe_onboarding_completed: false,
+          stripe_charges_enabled: false,
+          stripe_payouts_enabled: false,
+          stripe_details_submitted: false,
+          stripe_connected: false,
+          stripe_status: 'not_configured',
+        })
+        .eq('user_id', user.id);
+
+      return new Response(JSON.stringify({ 
+        has_account: false,
+        onboarding_completed: false,
+        charges_enabled: false,
+        payouts_enabled: false,
+        stripe_status: 'not_configured',
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+    
+    // Determine the proper status
+    const stripeStatus = determineStripeStatus(account);
     
     logStep("Account retrieved from Stripe", {
       accountId: account.id,
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,
       detailsSubmitted: account.details_submitted,
+      stripeStatus: stripeStatus,
+      requirements: account.requirements?.currently_due,
     });
 
     // Update database with latest status
@@ -92,11 +148,14 @@ serve(async (req) => {
         stripe_payouts_enabled: account.payouts_enabled,
         stripe_details_submitted: account.details_submitted,
         stripe_connected: account.charges_enabled && account.payouts_enabled,
+        stripe_status: stripeStatus,
       })
       .eq('user_id', user.id);
 
     if (updateError) {
       logStep("Error updating provider data", { error: updateError.message });
+    } else {
+      logStep("Provider data updated", { stripeStatus });
     }
 
     return new Response(JSON.stringify({
@@ -105,6 +164,7 @@ serve(async (req) => {
       onboarding_completed: account.details_submitted,
       charges_enabled: account.charges_enabled,
       payouts_enabled: account.payouts_enabled,
+      stripe_status: stripeStatus,
       requirements: account.requirements,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
