@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Copy,
   QrCode,
-  CheckCircle
+  CheckCircle,
+  Car
 } from 'lucide-react';
 import { PaymentMethod } from '@/types/chamado';
 import type { Stripe } from '@stripe/stripe-js';
@@ -404,6 +405,14 @@ export function ClientAwaitingPaymentView() {
                   <span>•</span>
                   <span>{provider?.totalServices} serviços</span>
                 </div>
+                {provider?.vehiclePlate && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Car className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded">
+                      {provider.vehiclePlate}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold">R$ {chamado.valor?.toFixed(2)}</p>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { NavigationMapView } from '../Map/NavigationMapView';
 import { Button } from '../ui/button';
-import { Phone, MessageCircle, Star, Navigation, Shield, Clock, CheckCircle, MapPin, Route, Loader2 } from 'lucide-react';
+import { Phone, MessageCircle, Star, Navigation, Shield, Clock, CheckCircle, MapPin, Route, Loader2, Car } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { useProviderTracking } from '@/hooks/useProviderTracking';
 
@@ -124,6 +124,14 @@ export function ClientInServiceView() {
                   <span>•</span>
                   <span>{provider?.totalServices} serviços</span>
                 </div>
+                {provider?.vehiclePlate && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Car className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded">
+                      {provider.vehiclePlate}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-xl font-bold">R$ {chamado.valor?.toFixed(2)}</p>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Star, Send, Check, DollarSign, MessageCircle, User, ArrowRight, Navigation, Clock } from 'lucide-react';
+import { Star, Send, Check, DollarSign, MessageCircle, User, ArrowRight, Navigation, Clock, Car } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 
 export function ClientNegotiatingView() {
@@ -62,6 +62,14 @@ export function ClientNegotiatingView() {
             <div className="flex-1">
               <h3 className="font-semibold">{provider?.name}</h3>
               <p className="text-sm text-muted-foreground">{provider?.totalServices} serviços</p>
+              {provider?.vehiclePlate && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Car className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded">
+                    {provider.vehiclePlate}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="text-right">
               <span className="status-badge bg-primary/10 text-primary">

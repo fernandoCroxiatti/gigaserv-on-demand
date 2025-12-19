@@ -327,6 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           },
           radarRange: p.radar_range || 15,
           services: p.services_offered || ['guincho'],
+          vehiclePlate: p.vehicle_plate || undefined,
         }));
 
       setAvailableProviders(providers);
