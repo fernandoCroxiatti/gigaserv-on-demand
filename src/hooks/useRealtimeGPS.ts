@@ -8,6 +8,7 @@ interface GPSState {
   error: string | null;
   accuracy: number | null;
   heading: number | null;
+  isApproximate: boolean; // Indicates if using fallback location
 }
 
 interface UseRealtimeGPSOptions {
@@ -21,6 +22,10 @@ interface UseRealtimeGPSOptions {
 const MIN_DISTANCE_FOR_GEOCODE = 100;
 // Minimum time (ms) between geocode calls
 const GEOCODE_THROTTLE_MS = 30000;
+// GPS fix timeout (15 seconds as requested)
+const GPS_FIX_TIMEOUT_MS = 15000;
+// LocalStorage key for last known location
+const LAST_KNOWN_LOCATION_KEY = 'giga_sos_last_gps_location';
 
 /**
  * Calculate distance between two points in meters (Haversine formula)
@@ -51,12 +56,50 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
     error: null,
     accuracy: null,
     heading: null,
+    isApproximate: false,
   });
 
   const watchIdRef = useRef<number | null>(null);
   const onLocationUpdateRef = useRef(onLocationUpdate);
   // Throttling refs for geocoding
   const lastGeocodeRef = useRef<{ lat: number; lng: number; time: number; address: string } | null>(null);
+  // Timeout ref for GPS fix
+  const gpsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Track if we got a real fix
+  const hasRealFixRef = useRef<boolean>(false);
+
+  /**
+   * Save location to localStorage as fallback
+   */
+  const saveLastKnownLocation = useCallback((location: Location) => {
+    try {
+      localStorage.setItem(LAST_KNOWN_LOCATION_KEY, JSON.stringify({
+        ...location,
+        timestamp: Date.now(),
+      }));
+    } catch (e) {
+      console.warn('[GPS] Failed to save last known location');
+    }
+  }, []);
+
+  /**
+   * Get last known location from localStorage
+   */
+  const getLastKnownLocation = useCallback((): Location | null => {
+    try {
+      const stored = localStorage.getItem(LAST_KNOWN_LOCATION_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Only use if less than 24 hours old
+        if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          return { lat: parsed.lat, lng: parsed.lng, address: parsed.address };
+        }
+      }
+    } catch (e) {
+      console.warn('[GPS] Failed to get last known location');
+    }
+    return null;
+  }, []);
 
   // Keep callback ref updated
   useEffect(() => {
@@ -113,6 +156,15 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
   const handleSuccess = useCallback(async (position: GeolocationPosition) => {
     const { latitude, longitude, accuracy, heading } = position.coords;
     
+    // Mark that we got a real GPS fix
+    hasRealFixRef.current = true;
+    
+    // Clear timeout since we got a fix
+    if (gpsTimeoutRef.current) {
+      clearTimeout(gpsTimeoutRef.current);
+      gpsTimeoutRef.current = null;
+    }
+    
     // Get address with throttling (won't spam API)
     const address = await getAddressFromCoords(latitude, longitude);
     
@@ -122,19 +174,47 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
       address,
     };
 
+    // Save as last known location for future fallback
+    saveLastKnownLocation(newLocation);
+
     setState({
       location: newLocation,
       loading: false,
       error: null,
       accuracy,
       heading: heading || null,
+      isApproximate: false,
     });
 
     // Trigger callback for external updates (DB sync)
     if (onLocationUpdateRef.current) {
       onLocationUpdateRef.current(newLocation);
     }
-  }, [getAddressFromCoords]);
+  }, [getAddressFromCoords, saveLastKnownLocation]);
+
+  /**
+   * Use last known location as fallback after GPS timeout
+   */
+  const useApproximateLocation = useCallback(() => {
+    const lastKnown = getLastKnownLocation();
+    if (lastKnown) {
+      console.log('[GPS] Using approximate location (GPS timeout, using last known)');
+      setState(prev => ({
+        ...prev,
+        location: lastKnown,
+        loading: false,
+        error: null,
+        isApproximate: true,
+      }));
+      
+      // Still trigger callback but with approximate location
+      if (onLocationUpdateRef.current) {
+        onLocationUpdateRef.current(lastKnown);
+      }
+      return true;
+    }
+    return false;
+  }, [getLastKnownLocation]);
 
   const handleError = useCallback((error: GeolocationPositionError) => {
     let errorMessage = 'Erro ao obter localização';
@@ -148,8 +228,17 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
         break;
       case error.POSITION_UNAVAILABLE:
         errorMessage = 'Localização indisponível. Verifique seu GPS.';
+        // Try fallback to last known location
+        if (useApproximateLocation()) {
+          return; // Don't set error if we have fallback
+        }
         break;
       case error.TIMEOUT:
+        // Try fallback to last known location
+        if (useApproximateLocation()) {
+          console.log('[GPS] Timeout - using approximate location');
+          return; // Don't set error if we have fallback
+        }
         errorMessage = 'Tempo esgotado ao obter localização.';
         break;
     }
@@ -158,8 +247,9 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
       ...prev,
       loading: false,
       error: errorMessage,
+      isApproximate: false,
     }));
-  }, []);
+  }, [useApproximateLocation]);
 
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
@@ -169,16 +259,31 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
         error: 'Geolocalização não suportada neste navegador.',
         accuracy: null,
         heading: null,
+        isApproximate: false,
       });
       return;
     }
 
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    hasRealFixRef.current = false;
+    setState(prev => ({ ...prev, loading: true, error: null, isApproximate: false }));
 
     // Clear any existing watch
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
     }
+    
+    // Clear existing timeout
+    if (gpsTimeoutRef.current) {
+      clearTimeout(gpsTimeoutRef.current);
+    }
+
+    // Set 15-second timeout for GPS fix
+    gpsTimeoutRef.current = setTimeout(() => {
+      if (!hasRealFixRef.current) {
+        console.log('[GPS] 15s timeout reached, attempting fallback...');
+        useApproximateLocation();
+      }
+    }, GPS_FIX_TIMEOUT_MS);
 
     // Start continuous tracking with watchPosition
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -192,13 +297,17 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
     );
 
     console.log('[GPS] Started real-time tracking, watchId:', watchIdRef.current);
-  }, [enableHighAccuracy, timeout, maximumAge, handleSuccess, handleError]);
+  }, [enableHighAccuracy, timeout, maximumAge, handleSuccess, handleError, useApproximateLocation]);
 
   const stopTracking = useCallback(() => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       console.log('[GPS] Stopped tracking, cleared watchId:', watchIdRef.current);
       watchIdRef.current = null;
+    }
+    if (gpsTimeoutRef.current) {
+      clearTimeout(gpsTimeoutRef.current);
+      gpsTimeoutRef.current = null;
     }
   }, []);
 
@@ -215,3 +324,5 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
     isTracking: watchIdRef.current !== null,
   };
 }
+
+export type { GPSState };
