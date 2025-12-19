@@ -416,6 +416,29 @@ export function ProviderProfile() {
               </div>
             )}
 
+            {!loadingStripe && statusInfo.status === 'restricted' && (
+              <>
+                <div className="bg-destructive/10 rounded-xl p-4 mb-4">
+                  <p className="text-sm text-destructive">
+                    Sua conta Stripe requer atenção. Complete as informações pendentes para continuar recebendo pagamentos.
+                  </p>
+                </div>
+                <Button 
+                  variant="provider" 
+                  className="w-full"
+                  onClick={handleStripeOnboarding}
+                  disabled={connectingStripe}
+                >
+                  {connectingStripe ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                  )}
+                  Resolver pendências
+                </Button>
+              </>
+            )}
+
             {!loadingStripe && statusInfo.status === 'complete' && (
               <div className="bg-status-finished/10 rounded-xl p-4">
                 <p className="text-sm text-status-finished">
