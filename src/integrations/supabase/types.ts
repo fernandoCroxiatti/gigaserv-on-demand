@@ -581,6 +581,7 @@ export type Database = {
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_provider: { Args: { _user_id: string }; Returns: boolean }
       is_provider_active: { Args: { _user_id: string }; Returns: boolean }
+      validate_cpf: { Args: { cpf_input: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
