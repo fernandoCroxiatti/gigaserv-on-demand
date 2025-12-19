@@ -1,7 +1,7 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { ProfileSwitch } from './ProfileSwitch';
-import { Menu, Bell, User, Shield } from 'lucide-react';
+import { Menu, Bell, User, Shield, Settings } from 'lucide-react';
 import { Button } from './ui/button';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -41,6 +41,10 @@ export function Header() {
               <DropdownMenuItem onClick={() => navigate('/profile')}>
                 <User className="w-4 h-4 mr-2" />
                 Minha Conta
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings className="w-4 h-4 mr-2" />
+                Configurações
               </DropdownMenuItem>
               {isAdmin && (
                 <>
