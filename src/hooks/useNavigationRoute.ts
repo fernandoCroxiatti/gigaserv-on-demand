@@ -21,12 +21,19 @@ interface UseNavigationRouteReturn {
 /**
  * Hook to calculate route ONCE per phase and store in database.
  * Minimizes API calls by only calculating when explicitly requested.
+ * 
+ * AUDIT FIX: Removed routeData from useCallback dependencies to prevent
+ * unnecessary recalculations when state changes.
  */
 export function useNavigationRoute(): UseNavigationRouteReturn {
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Track calculated routes to prevent duplicates
   const calculatedRef = useRef<string>('');
+  // Track if currently calculating to prevent concurrent calls
+  const calculatingRef = useRef<boolean>(false);
 
   const calculateRoute = useCallback(async (
     origin: Location,
@@ -37,12 +44,20 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
     // Create unique key to prevent duplicate calculations
     const routeKey = `${chamadoId}-${phase}`;
     
-    // Skip if already calculated for this phase
-    if (calculatedRef.current === routeKey && routeData) {
-      console.log('[Navigation] Route already calculated for this phase');
-      return routeData;
+    // AUDIT FIX: Multiple checks to prevent duplicate API calls
+    // 1. Check if already calculated for this phase
+    if (calculatedRef.current === routeKey) {
+      console.log('[Navigation] Route already calculated for phase:', phase);
+      return null;
+    }
+    
+    // 2. Check if currently calculating (prevent concurrent calls)
+    if (calculatingRef.current) {
+      console.log('[Navigation] Route calculation already in progress, skipping');
+      return null;
     }
 
+    calculatingRef.current = true;
     setIsCalculating(true);
     setError(null);
 
@@ -51,6 +66,12 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
       if (!window.google?.maps) {
         throw new Error('Google Maps não carregado');
       }
+
+      console.log('[Navigation] CALCULATING ROUTE (API CALL):', {
+        phase,
+        from: `${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)}`,
+        to: `${destination.lat.toFixed(4)}, ${destination.lng.toFixed(4)}`,
+      });
 
       const directionsService = new google.maps.DirectionsService();
       
@@ -91,10 +112,11 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
         console.error('[Navigation] Error saving route to DB:', updateError);
       }
 
+      // Mark as calculated AFTER successful save
       calculatedRef.current = routeKey;
       setRouteData(newRouteData);
       
-      console.log('[Navigation] Route calculated and stored:', {
+      console.log('[Navigation] ✅ Route calculated and stored:', {
         phase,
         distance: newRouteData.distanceText,
         duration: newRouteData.durationText,
@@ -103,18 +125,21 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
       return newRouteData;
     } catch (err: any) {
       const errorMsg = err.message || 'Erro ao calcular rota';
-      console.error('[Navigation] Route calculation error:', err);
+      console.error('[Navigation] ❌ Route calculation error:', err);
       setError(errorMsg);
       return null;
     } finally {
       setIsCalculating(false);
+      calculatingRef.current = false;
     }
-  }, [routeData]);
+  }, []); // AUDIT FIX: Empty dependencies - no need to recreate this function
 
   const clearRoute = useCallback(() => {
     setRouteData(null);
     calculatedRef.current = '';
+    calculatingRef.current = false;
     setError(null);
+    console.log('[Navigation] Route cleared for new phase');
   }, []);
 
   return {

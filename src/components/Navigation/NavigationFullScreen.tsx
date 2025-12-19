@@ -190,14 +190,30 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   }, [chamado.id, navigationPhase, routePolyline, mode]);
 
   // Calculate route ONCE when phase changes (provider only)
+  // AUDIT FIX: Added multiple guards to prevent duplicate API calls
   useEffect(() => {
-    if (mode !== 'provider' || !providerLocation || !currentDestination) return;
+    // Guard 1: Only provider calculates routes
+    if (mode !== 'provider') return;
     
+    // Guard 2: Need valid locations
+    if (!providerLocation || !currentDestination) return;
+    
+    // Guard 3: Check if already calculated for this phase
     const routeKey = `${chamado.id}-${navigationPhase}`;
-    if (routeCalculatedRef.current === routeKey) return;
+    if (routeCalculatedRef.current === routeKey) {
+      console.log('[Navigation] Skipping route calculation - already done for:', navigationPhase);
+      return;
+    }
+    
+    // Guard 4: Skip if we already have a polyline for this phase (loaded from DB)
+    if (routePolyline && routeCalculatedRef.current.includes(chamado.id)) {
+      console.log('[Navigation] Skipping route calculation - polyline already loaded');
+      routeCalculatedRef.current = routeKey;
+      return;
+    }
 
     const doCalculateRoute = async () => {
-      console.log('[Navigation] Calculating route for phase:', navigationPhase);
+      console.log('[Navigation] Initiating route calculation for phase:', navigationPhase);
       const result = await calculateRoute(
         providerLocation,
         currentDestination,
@@ -214,7 +230,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     };
 
     doCalculateRoute();
-  }, [mode, providerLocation?.lat, currentDestination?.lat, navigationPhase, chamado.id]);
+  // AUDIT FIX: Minimal dependencies - only trigger when phase changes, not on GPS updates
+  }, [mode, navigationPhase, chamado.id, !!providerLocation, !!currentDestination]);
 
   // Update route data when routeData changes
   useEffect(() => {
