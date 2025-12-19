@@ -209,13 +209,6 @@ export type Database = {
             referencedRelation: "chamados"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "chat_messages_chamado_id_fkey"
-            columns: ["chamado_id"]
-            isOneToOne: false
-            referencedRelation: "chamados_searching"
-            referencedColumns: ["id"]
-          },
         ]
       }
       profiles: {
@@ -420,13 +413,6 @@ export type Database = {
             referencedRelation: "chamados"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "reviews_chamado_id_fkey"
-            columns: ["chamado_id"]
-            isOneToOne: false
-            referencedRelation: "chamados_searching"
-            referencedColumns: ["id"]
-          },
         ]
       }
       settings_history: {
@@ -479,96 +465,7 @@ export type Database = {
       }
     }
     Views: {
-      chamados_searching: {
-        Row: {
-          cliente_id: string | null
-          created_at: string | null
-          destino_address: string | null
-          destino_lat: number | null
-          destino_lng: number | null
-          id: string | null
-          origem_address: string | null
-          origem_lat: number | null
-          origem_lng: number | null
-          status: Database["public"]["Enums"]["chamado_status"] | null
-          tipo_servico: Database["public"]["Enums"]["service_type"] | null
-          valor_proposto: number | null
-        }
-        Insert: {
-          cliente_id?: string | null
-          created_at?: string | null
-          destino_address?: string | null
-          destino_lat?: number | null
-          destino_lng?: number | null
-          id?: string | null
-          origem_address?: string | null
-          origem_lat?: number | null
-          origem_lng?: number | null
-          status?: Database["public"]["Enums"]["chamado_status"] | null
-          tipo_servico?: Database["public"]["Enums"]["service_type"] | null
-          valor_proposto?: number | null
-        }
-        Update: {
-          cliente_id?: string | null
-          created_at?: string | null
-          destino_address?: string | null
-          destino_lat?: number | null
-          destino_lng?: number | null
-          id?: string | null
-          origem_address?: string | null
-          origem_lat?: number | null
-          origem_lng?: number | null
-          status?: Database["public"]["Enums"]["chamado_status"] | null
-          tipo_servico?: Database["public"]["Enums"]["service_type"] | null
-          valor_proposto?: number | null
-        }
-        Relationships: []
-      }
-      profiles_public: {
-        Row: {
-          active_profile:
-            | Database["public"]["Enums"]["user_profile_type"]
-            | null
-          avatar_url: string | null
-          name: string | null
-          perfil_principal: string | null
-          user_id: string | null
-        }
-        Insert: {
-          active_profile?:
-            | Database["public"]["Enums"]["user_profile_type"]
-            | null
-          avatar_url?: string | null
-          name?: string | null
-          perfil_principal?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          active_profile?:
-            | Database["public"]["Enums"]["user_profile_type"]
-            | null
-          avatar_url?: string | null
-          name?: string | null
-          perfil_principal?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
-      provider_public_info: {
-        Row: {
-          avatar_url: string | null
-          current_lat: number | null
-          current_lng: number | null
-          is_online: boolean | null
-          name: string | null
-          radar_range: number | null
-          rating: number | null
-          services_offered: Database["public"]["Enums"]["service_type"][] | null
-          total_services: number | null
-          user_id: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       has_role: {
