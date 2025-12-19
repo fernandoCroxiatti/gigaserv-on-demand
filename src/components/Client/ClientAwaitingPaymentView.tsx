@@ -16,7 +16,8 @@ import {
   Copy,
   QrCode,
   CheckCircle,
-  Car
+  Car,
+  Smartphone
 } from 'lucide-react';
 import { PaymentMethod } from '@/types/chamado';
 import type { Stripe } from '@stripe/stripe-js';
@@ -24,8 +25,12 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getStripePromise } from '@/lib/stripe';
+import { WalletPaymentForm } from './WalletPaymentForm';
 
-const paymentMethods: { id: PaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean }[] = [
+type ExtendedPaymentMethod = PaymentMethod | 'wallet';
+
+const basePaymentMethods: { id: ExtendedPaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean; walletOnly?: boolean }[] = [
+  { id: 'wallet', name: 'Apple Pay / Google Pay', icon: Smartphone, description: 'Carteira digital', available: true, walletOnly: true },
   { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento via Stripe', available: true },
   { id: 'pix', name: 'PIX', icon: Wallet, description: 'Pagamento instantâneo', available: true },
   { id: 'cash', name: 'Dinheiro', icon: Banknote, description: 'Pagar ao prestador (em breve)', available: false },
@@ -284,33 +289,45 @@ function PixPaymentForm({
 
 export function ClientAwaitingPaymentView() {
   const { chamado, availableProviders, processPayment, cancelChamado } = useApp();
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('credit_card');
+  const [selectedPayment, setSelectedPayment] = useState<ExtendedPaymentMethod>('credit_card');
   const [isProcessing, setIsProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [loadingPayment, setLoadingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [currentPaymentMethod, setCurrentPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [currentPaymentMethod, setCurrentPaymentMethod] = useState<ExtendedPaymentMethod | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+  const [walletAvailable, setWalletAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     setStripePromise(getStripePromise());
   }, []);
 
+  // Filter payment methods based on wallet availability
+  const paymentMethods = basePaymentMethods.filter(method => {
+    if (method.walletOnly) {
+      return walletAvailable === true;
+    }
+    return true;
+  });
+
   const provider = availableProviders.find(p => p.id === chamado?.prestadorId);
 
-  const createPaymentIntent = useCallback(async (paymentMethod: PaymentMethod) => {
+  const createPaymentIntent = useCallback(async (paymentMethod: ExtendedPaymentMethod) => {
     if (!chamado?.id) return;
 
     setLoadingPayment(true);
     setPaymentError(null);
     setClientSecret(null);
 
+    // For wallet payments, use 'card' as the payment method type (Apple Pay/Google Pay use card rails)
+    const paymentMethodType = paymentMethod === 'pix' ? 'pix' : 'card';
+
     try {
       const { data, error } = await supabase.functions.invoke('create-payment-intent', {
         body: { 
           chamado_id: chamado.id,
-          payment_method_type: paymentMethod === 'pix' ? 'pix' : 'card'
+          payment_method_type: paymentMethodType
         }
       });
 
@@ -338,6 +355,41 @@ export function ClientAwaitingPaymentView() {
     }
   }, [chamado?.id]);
 
+  // Check wallet availability on mount
+  useEffect(() => {
+    const checkWalletAvailability = async () => {
+      const stripe = await stripePromise;
+      if (!stripe) return;
+
+      try {
+        const pr = stripe.paymentRequest({
+          country: 'BR',
+          currency: 'brl',
+          total: {
+            label: 'GigaSOS - Verificação',
+            amount: 100, // dummy amount for check
+          },
+        });
+
+        const result = await pr.canMakePayment();
+        console.log('Wallet availability check:', result);
+        setWalletAvailable(!!result);
+        
+        // If wallet is available, auto-select it for better UX
+        if (result && walletAvailable === null) {
+          setSelectedPayment('wallet');
+        }
+      } catch (err) {
+        console.log('Wallet check error:', err);
+        setWalletAvailable(false);
+      }
+    };
+
+    if (stripePromise && walletAvailable === null) {
+      checkWalletAvailability();
+    }
+  }, [stripePromise, walletAvailable]);
+
   useEffect(() => {
     if (chamado?.id) {
       createPaymentIntent(selectedPayment);
@@ -345,11 +397,28 @@ export function ClientAwaitingPaymentView() {
   }, [chamado?.id]);
 
   // When payment method changes, create new payment intent
-  const handlePaymentMethodChange = (method: PaymentMethod) => {
+  const handlePaymentMethodChange = (method: ExtendedPaymentMethod) => {
     if (method === selectedPayment) return;
     setSelectedPayment(method);
     createPaymentIntent(method);
   };
+
+  // Handle wallet not available - fallback to card
+  const handleWalletNotAvailable = useCallback(() => {
+    setWalletAvailable(false);
+    // If wallet was selected, switch to card
+    if (selectedPayment === 'wallet') {
+      setSelectedPayment('credit_card');
+      createPaymentIntent('credit_card');
+    }
+  }, [selectedPayment, createPaymentIntent]);
+
+  // Handle wallet available detection
+  const handleWalletAvailable = useCallback(() => {
+    if (walletAvailable === null) {
+      setWalletAvailable(true);
+    }
+  }, [walletAvailable]);
 
   const handlePaymentSuccess = () => {
     toast.success('Pagamento confirmado! O serviço será iniciado.');
@@ -537,6 +606,36 @@ export function ClientAwaitingPaymentView() {
                 onError={handlePaymentError}
                 amount={paymentAmount}
               />
+            )}
+
+            {/* Wallet Payment (Apple Pay / Google Pay) */}
+            {clientSecret && !loadingPayment && currentPaymentMethod === 'wallet' && (
+              stripePromise ? (
+                <Elements 
+                  stripe={stripePromise} 
+                  options={{ 
+                    clientSecret,
+                    appearance: {
+                      theme: 'stripe',
+                      variables: {
+                        colorPrimary: 'hsl(var(--primary))',
+                      },
+                    },
+                  }}
+                >
+                  <WalletPaymentForm 
+                    clientSecret={clientSecret}
+                    onSuccess={handlePaymentSuccess}
+                    onError={handlePaymentError}
+                    amount={paymentAmount}
+                    onNotAvailable={handleWalletNotAvailable}
+                  />
+                </Elements>
+              ) : (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              )
             )}
 
             {!clientSecret && !loadingPayment && paymentError && (
