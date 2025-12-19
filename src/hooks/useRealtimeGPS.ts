@@ -17,6 +17,26 @@ interface UseRealtimeGPSOptions {
   onLocationUpdate?: (location: Location) => void;
 }
 
+// Minimum distance (meters) to trigger geocoding update
+const MIN_DISTANCE_FOR_GEOCODE = 100;
+// Minimum time (ms) between geocode calls
+const GEOCODE_THROTTLE_MS = 30000;
+
+/**
+ * Calculate distance between two points in meters (Haversine formula)
+ */
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
   const {
     enableHighAccuracy = true,
@@ -35,35 +55,65 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
 
   const watchIdRef = useRef<number | null>(null);
   const onLocationUpdateRef = useRef(onLocationUpdate);
+  // Throttling refs for geocoding
+  const lastGeocodeRef = useRef<{ lat: number; lng: number; time: number; address: string } | null>(null);
 
   // Keep callback ref updated
   useEffect(() => {
     onLocationUpdateRef.current = onLocationUpdate;
   }, [onLocationUpdate]);
 
+  /**
+   * OPTIMIZED: Only geocode when position changes significantly OR after throttle period
+   * This prevents excessive API calls (was calling on every GPS update!)
+   */
   const getAddressFromCoords = useCallback(async (lat: number, lng: number): Promise<string> => {
+    // Check if we should skip geocoding (throttle)
+    if (lastGeocodeRef.current) {
+      const timeSinceLastGeocode = Date.now() - lastGeocodeRef.current.time;
+      const distance = calculateDistance(
+        lastGeocodeRef.current.lat,
+        lastGeocodeRef.current.lng,
+        lat,
+        lng
+      );
+
+      // Skip if not enough time passed AND not enough distance traveled
+      if (timeSinceLastGeocode < GEOCODE_THROTTLE_MS && distance < MIN_DISTANCE_FOR_GEOCODE) {
+        return lastGeocodeRef.current.address;
+      }
+    }
+
+    // Check if Google Maps is available
     if (!window.google?.maps) {
-      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      const fallbackAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      lastGeocodeRef.current = { lat, lng, time: Date.now(), address: fallbackAddress };
+      return fallbackAddress;
     }
 
     try {
       const geocoder = new google.maps.Geocoder();
       const response = await geocoder.geocode({ location: { lat, lng } });
       
-      if (response.results[0]) {
-        return response.results[0].formatted_address;
-      }
-      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      const address = response.results[0]?.formatted_address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      
+      // Cache the result
+      lastGeocodeRef.current = { lat, lng, time: Date.now(), address };
+      console.log('[GPS] Geocoded new address:', address.substring(0, 50) + '...');
+      
+      return address;
     } catch (error) {
-      console.error('Geocoding error:', error);
-      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      console.error('[GPS] Geocoding error:', error);
+      const fallbackAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      lastGeocodeRef.current = { lat, lng, time: Date.now(), address: fallbackAddress };
+      return fallbackAddress;
     }
   }, []);
 
   const handleSuccess = useCallback(async (position: GeolocationPosition) => {
     const { latitude, longitude, accuracy, heading } = position.coords;
     
-    // Only geocode occasionally to avoid API spam
+    // Get address with throttling (won't spam API)
     const address = await getAddressFromCoords(latitude, longitude);
     
     const newLocation: Location = {
@@ -80,7 +130,7 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
       heading: heading || null,
     });
 
-    // Trigger callback for external updates
+    // Trigger callback for external updates (DB sync)
     if (onLocationUpdateRef.current) {
       onLocationUpdateRef.current(newLocation);
     }
