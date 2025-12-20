@@ -29,3 +29,12 @@ verify_jwt = true
 
 [functions.provider-financial-data]
 verify_jwt = true
+
+[functions.send-notifications]
+verify_jwt = false
+
+[functions.pay-with-saved-card]
+verify_jwt = true
+
+[functions.check-payment-status]
+verify_jwt = true

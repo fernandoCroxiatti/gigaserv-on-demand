@@ -217,6 +217,114 @@ export type Database = {
           },
         ]
       }
+      notification_history: {
+        Row: {
+          body: string
+          clicked_at: string | null
+          data: Json | null
+          id: string
+          notification_type: string
+          sent_at: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          clicked_at?: string | null
+          data?: Json | null
+          id?: string
+          notification_type: string
+          sent_at?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          clicked_at?: string | null
+          data?: Json | null
+          id?: string
+          notification_type?: string
+          sent_at?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_preferences: {
+        Row: {
+          chamado_updates: boolean
+          created_at: string
+          enabled: boolean
+          id: string
+          last_engagement_sent_at: string | null
+          last_promotional_sent_at: string | null
+          permission_asked_at: string | null
+          permission_granted: boolean | null
+          promotional: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chamado_updates?: boolean
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_engagement_sent_at?: string | null
+          last_promotional_sent_at?: string | null
+          permission_asked_at?: string | null
+          permission_granted?: boolean | null
+          promotional?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chamado_updates?: boolean
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_engagement_sent_at?: string | null
+          last_promotional_sent_at?: string | null
+          permission_asked_at?: string | null
+          permission_granted?: boolean | null
+          promotional?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active_profile:
