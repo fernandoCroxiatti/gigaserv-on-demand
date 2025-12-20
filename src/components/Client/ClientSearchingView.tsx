@@ -4,10 +4,9 @@ import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { SearchingIndicator } from './SearchingIndicator';
 import { useProgressiveSearch } from '@/hooks/useProgressiveSearch';
 import { Button } from '../ui/button';
-import { X } from 'lucide-react';
+import { X, MapPin, Navigation } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
 export function ClientSearchingView() {
   const { chamado, cancelChamado } = useApp();
@@ -73,7 +72,6 @@ export function ClientSearchingView() {
           
           if (newDeclines.length > 0) {
             console.log('[ClientSearching] Provider(s) declined:', newDeclines);
-            // Removed toast notification - too noisy for user
             
             // Update local state
             setDeclinedProviderIdsFromDb(newDeclined);
@@ -125,8 +123,8 @@ export function ClientSearchingView() {
 
       {/* Search overlay */}
       <div className="absolute inset-0 pointer-events-none">
-        {/* Top search status */}
-        <div className="absolute top-24 left-4 right-4 pointer-events-auto">
+        {/* Top search status - more compact */}
+        <div className="absolute top-20 left-3 right-3 pointer-events-auto">
           <SearchingIndicator
             state={searchState}
             currentRadius={currentRadius}
@@ -139,81 +137,86 @@ export function ClientSearchingView() {
         {/* Animated search ring - only when actively searching */}
         {(searchState === 'searching' || searchState === 'expanding_radius') && (
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="relative w-48 h-48">
-              <div className="absolute inset-0 rounded-full border-4 border-primary/30 animate-ping" style={{ animationDuration: '2s' }} />
-              <div className="absolute inset-4 rounded-full border-4 border-primary/40 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
-              <div className="absolute inset-8 rounded-full border-4 border-primary/50 animate-ping" style={{ animationDuration: '2s', animationDelay: '1s' }} />
+            <div className="relative w-40 h-40">
+              <div className="absolute inset-0 rounded-full border-2 border-primary/30 animate-ping" style={{ animationDuration: '2s' }} />
+              <div className="absolute inset-4 rounded-full border-2 border-primary/40 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+              <div className="absolute inset-8 rounded-full border-2 border-primary/50 animate-ping" style={{ animationDuration: '2s', animationDelay: '1s' }} />
             </div>
           </div>
         )}
       </div>
 
-      {/* Bottom card */}
+      {/* Bottom card - more compact and premium */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-3xl shadow-uber-lg p-6 space-y-4">
-          {/* Service type badge */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xl">{serviceConfig.icon}</span>
-            <span className="status-badge bg-primary/10 text-primary">{serviceConfig.label}</span>
+        <div className="bg-card rounded-t-2xl shadow-uber-lg p-4 space-y-3">
+          {/* Service type badge - compact */}
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+              <span className="text-lg">{serviceConfig.icon}</span>
+            </div>
+            <div className="flex-1">
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+                {serviceConfig.label}
+              </span>
+            </div>
           </div>
 
-          {/* Trip info */}
-          <div className="flex items-start gap-3">
-            <div className="flex flex-col items-center gap-1">
-              <div className="w-3 h-3 bg-primary rounded-full" />
+          {/* Trip info - compact */}
+          <div className="flex items-start gap-2.5">
+            <div className="flex flex-col items-center gap-0.5 pt-0.5">
+              <div className="w-2 h-2 bg-primary rounded-full" />
               {hasDestination && (
                 <>
-                  <div className="w-0.5 h-8 bg-border" />
-                  <div className="w-3 h-3 bg-foreground rounded-full" />
+                  <div className="w-px h-6 bg-border" />
+                  <div className="w-2 h-2 bg-foreground rounded-full" />
                 </>
               )}
             </div>
-            <div className="flex-1 space-y-3">
+            <div className="flex-1 space-y-2">
               <div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
                   {hasDestination ? 'Origem' : 'Local do atendimento'}
                 </p>
-                <p className="font-medium text-sm">{chamado.origem.address}</p>
+                <p className="font-medium text-xs truncate">{chamado.origem.address}</p>
               </div>
               {hasDestination && chamado.destino && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Destino</p>
-                  <p className="font-medium text-sm">{chamado.destino.address}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Destino</p>
+                  <p className="font-medium text-xs truncate">{chamado.destino.address}</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Loading animation */}
-          <div className="flex items-center justify-center gap-3 py-4">
+          {/* Loading animation - compact */}
+          <div className="flex items-center justify-center gap-2 py-2">
             <div className="flex gap-1">
               {[0, 1, 2].map((i) => (
                 <div
                   key={i}
-                  className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                  className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
                   style={{ animationDelay: `${i * 0.15}s` }}
                 />
               ))}
             </div>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {searchState === 'timeout' 
                 ? 'Nenhum prestador encontrado'
                 : searchState === 'waiting_cooldown'
-                  ? `Aguardando para tentar novamente (${Math.floor(cooldownRemaining / 60)}:${String(cooldownRemaining % 60).padStart(2, '0')})`
+                  ? `Aguardando (${Math.floor(cooldownRemaining / 60)}:${String(cooldownRemaining % 60).padStart(2, '0')})`
                   : searchState === 'expanding_radius'
-                    ? `Expandindo busca para ${currentRadius}km...`
+                    ? `Expandindo para ${currentRadius}km...`
                     : 'Aguardando resposta'}
             </span>
           </div>
 
-          {/* Cancel button */}
+          {/* Cancel button - wider */}
           <Button 
             variant="outline" 
             onClick={cancelChamado}
-            className="w-full"
-            size="lg"
+            className="w-full h-11"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
             Cancelar busca
           </Button>
         </div>

@@ -357,81 +357,76 @@ export function ClientAwaitingPaymentView() {
         className="absolute inset-0" 
       />
 
-      {/* Bottom payment panel */}
+      {/* Bottom payment panel - compact and premium */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-3xl shadow-uber-lg max-h-[85vh] overflow-y-auto">
-          {/* Status header */}
-          <div className="p-4 border-b border-border sticky top-0 bg-card z-10">
+        <div className="bg-card rounded-t-2xl shadow-uber-lg max-h-[80vh] overflow-y-auto">
+          {/* Status header - compact */}
+          <div className="px-4 py-3 border-b border-border/50 sticky top-0 bg-card z-10">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-status-searching/10 rounded-full flex items-center justify-center">
-                <Lock className="w-5 h-5 text-status-searching" />
+              <div className="w-9 h-9 bg-status-searching/10 rounded-full flex items-center justify-center">
+                <Lock className="w-4 h-4 text-status-searching" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold">Pagamento necessário</h3>
-                <p className="text-sm text-muted-foreground">Confirme para iniciar o serviço</p>
+                <h3 className="font-semibold text-sm">Pagamento necessário</h3>
+                <p className="text-xs text-muted-foreground">Confirme para iniciar</p>
               </div>
             </div>
           </div>
 
-          {/* Provider info */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-4">
+          {/* Provider info - compact */}
+          <div className="p-3 border-b border-border/30">
+            <div className="flex items-center gap-3">
               <img 
                 src={provider?.avatar} 
                 alt={provider?.name}
-                className="w-12 h-12 rounded-full"
+                className="w-10 h-10 rounded-full shadow-sm"
               />
-              <div className="flex-1">
-                <p className="font-medium">{provider?.name}</p>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <Star className="w-3 h-3 text-status-searching fill-current" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{provider?.name}</p>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Star className="w-2.5 h-2.5 text-status-searching fill-current" />
                   <span>{provider?.rating}</span>
                   <span>•</span>
                   <span>{provider?.totalServices} serviços</span>
+                  {provider?.vehiclePlate && (
+                    <>
+                      <span>•</span>
+                      <span className="font-medium text-foreground bg-secondary px-1.5 py-0.5 rounded text-[10px]">
+                        {provider.vehiclePlate}
+                      </span>
+                    </>
+                  )}
                 </div>
-                {provider?.vehiclePlate && (
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Car className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded">
-                      {provider.vehiclePlate}
-                    </span>
-                  </div>
-                )}
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold">R$ {chamado.valor?.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Valor acordado</p>
+                <p className="text-xl font-bold text-primary">R$ {chamado.valor?.toFixed(2)}</p>
+                <p className="text-[10px] text-muted-foreground">Valor acordado</p>
               </div>
             </div>
           </div>
 
-          {/* Security notice */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-start gap-3 p-3 bg-status-searching/10 rounded-xl">
-              <Shield className="w-5 h-5 text-status-searching flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-status-searching">Pagamento seguro e protegido</p>
-                <p className="text-xs text-muted-foreground">
-                  O prestador recebe automaticamente após a confirmação. Seu dinheiro está protegido.
-                </p>
-              </div>
+          {/* Security notice - compact */}
+          <div className="px-3 py-2 border-b border-border/30">
+            <div className="flex items-center gap-2 p-2 bg-status-searching/10 rounded-lg">
+              <Shield className="w-4 h-4 text-status-searching flex-shrink-0" />
+              <p className="text-xs text-status-searching font-medium">Pagamento seguro e protegido</p>
             </div>
           </div>
 
-          {/* Trip details */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-start gap-3">
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-2 h-2 bg-primary rounded-full" />
-                <div className="w-0.5 h-6 bg-border" />
-                <div className="w-2 h-2 bg-foreground rounded-full" />
+          {/* Trip details - compact */}
+          <div className="p-3 border-b border-border/30">
+            <div className="flex items-start gap-2">
+              <div className="flex flex-col items-center gap-0.5 pt-0.5">
+                <div className="w-1.5 h-1.5 bg-primary rounded-full" />
+                <div className="w-px h-4 bg-border" />
+                <div className="w-1.5 h-1.5 bg-foreground rounded-full" />
               </div>
-              <div className="flex-1 space-y-2">
-                <p className="text-sm truncate">{chamado.origem.address}</p>
-                <p className="text-sm truncate">{chamado.destino?.address || 'Atendimento no local'}</p>
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="text-xs truncate">{chamado.origem.address}</p>
+                <p className="text-xs truncate text-muted-foreground">{chamado.destino?.address || 'Atendimento no local'}</p>
               </div>
-              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
                 <span>~15 min</span>
               </div>
             </div>
