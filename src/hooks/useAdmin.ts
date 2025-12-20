@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
@@ -7,6 +7,7 @@ export function useAdmin() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [checked, setChecked] = useState(false);
+  const lastCheckedUserId = useRef<string | null>(null);
 
   const checkAdminStatus = useCallback(async () => {
     // Wait for auth to finish loading
@@ -18,6 +19,12 @@ export function useAdmin() {
       setIsAdmin(false);
       setLoading(false);
       setChecked(true);
+      lastCheckedUserId.current = null;
+      return;
+    }
+
+    // Skip if we already checked for this user
+    if (lastCheckedUserId.current === user.id && checked) {
       return;
     }
 
@@ -38,9 +45,10 @@ export function useAdmin() {
         setIsAdmin(false);
       } else {
         const hasAdminRole = data !== null;
-        console.log('[useAdmin] Admin check result:', { hasAdminRole, data });
+        console.log('[useAdmin] Admin check result:', { hasAdminRole, data, userId: user.id });
         setIsAdmin(hasAdminRole);
       }
+      lastCheckedUserId.current = user.id;
     } catch (err) {
       console.error('[useAdmin] Error checking admin status:', err);
       setIsAdmin(false);
@@ -48,11 +56,19 @@ export function useAdmin() {
       setLoading(false);
       setChecked(true);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, checked]);
 
   useEffect(() => {
     checkAdminStatus();
   }, [checkAdminStatus]);
+
+  // Reset when user changes
+  useEffect(() => {
+    if (user?.id !== lastCheckedUserId.current) {
+      setChecked(false);
+      setIsAdmin(false);
+    }
+  }, [user?.id]);
 
   // Keep loading true until auth finishes AND we've checked admin status
   const effectiveLoading = authLoading || !checked;
