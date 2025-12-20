@@ -24,6 +24,7 @@ import AdminReports from "./pages/admin/Reports";
 import AdminProviders from "./pages/admin/Providers";
 import AdminClients from "./pages/admin/Clients";
 import AdminChamados from "./pages/admin/Chamados";
+import StripeAuditReport from "./pages/StripeAuditReport";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -141,6 +142,8 @@ const App = () => (
               {/* Legal pages - publicly accessible */}
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfUse />} />
+              {/* Stripe Audit Report - publicly accessible */}
+              <Route path="/stripe-audit" element={<StripeAuditReport />} />
               {/* PIX payment return pages */}
               <Route 
                 path="/pix-sucesso" 
