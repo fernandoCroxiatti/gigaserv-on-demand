@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Database } from '@/integrations/supabase/types';
 import { isChamadoWithinRange } from '@/lib/distance';
-import { playNotificationSound } from '@/lib/notificationSound';
+import { startRideAlertLoop, stopRideAlertLoop } from '@/lib/rideAlertSound';
 
 type DbChamado = Database['public']['Tables']['chamados']['Row'];
 type DbProfile = Database['public']['Tables']['profiles']['Row'];
@@ -417,7 +417,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (isWithinRange) {
             console.log(`[Chamados] Found chamado within range: ${chamadoData.id}`);
             setIncomingRequest(chamadoData);
-            playNotificationSound();
+            // Sound is handled by IncomingRequestCard component
             toast.info('Novo chamado disponível!', {
               description: 'Um cliente está procurando atendimento.',
             });
@@ -474,7 +474,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (isWithinRange) {
             console.log(`[Chamados] New chamado within range: ${newChamado.id}`);
             setIncomingRequest(newChamado);
-            playNotificationSound();
+            // Sound is handled by IncomingRequestCard component
             toast.info('Novo chamado!', {
               description: 'Um cliente próximo precisa de ajuda.',
             });
@@ -530,7 +530,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (isWithinRange) {
             console.log(`[Chamados] Updated chamado within range: ${chamadoData.id}`);
             setIncomingRequest(chamadoData);
-            playNotificationSound();
+            // Sound is handled by IncomingRequestCard component
             toast.info('Chamado disponível novamente!', {
               description: 'Um cliente precisa de ajuda.',
             });
