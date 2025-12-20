@@ -2,17 +2,21 @@ import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Star, Send, Check, DollarSign, MessageCircle, User, ArrowRight, Navigation, Clock, Car } from 'lucide-react';
+import { Star, Send, Check, DollarSign, MessageCircle, User, ArrowRight, Navigation, Clock, Car, Phone, Truck } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
+import { useProviderInfo } from '@/hooks/useProviderInfo';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 
 export function ClientNegotiatingView() {
-  const { chamado, availableProviders, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
+  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
 
+  // Fetch complete provider info
+  const providerInfo = useProviderInfo(chamado?.prestadorId);
+
   if (!chamado) return null;
 
-  const provider = availableProviders.find(p => p.id === chamado.prestadorId);
   const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
   const hasDestination = chamado.destino !== null;
 
@@ -34,6 +38,12 @@ export function ClientNegotiatingView() {
     confirmValue();
   };
 
+  const handleCallProvider = () => {
+    if (providerInfo.phone) {
+      window.location.href = `tel:${providerInfo.phone}`;
+    }
+  };
+
   return (
     <div className="relative h-full">
       {/* Map with route */}
@@ -47,37 +57,60 @@ export function ClientNegotiatingView() {
       {/* Provider card overlay */}
       <div className="absolute top-24 left-4 right-4 z-10 animate-slide-down">
         <div className="glass-card rounded-2xl p-4">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <img 
-                src={provider?.avatar} 
-                alt={provider?.name}
-                className="w-14 h-14 rounded-full border-2 border-primary"
-              />
-              <div className="absolute -bottom-1 -right-1 bg-primary text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Star className="w-3 h-3 fill-current" />
-                {provider?.rating}
+          {providerInfo.loading ? (
+            <div className="flex items-center gap-4 animate-pulse">
+              <div className="w-14 h-14 rounded-full bg-secondary" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-secondary rounded w-24" />
+                <div className="h-3 bg-secondary rounded w-16" />
               </div>
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold">{provider?.name}</h3>
-              <p className="text-sm text-muted-foreground">{provider?.totalServices} serviços</p>
-              {provider?.vehiclePlate && (
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Car className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded">
-                    {provider.vehiclePlate}
-                  </span>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Avatar className="w-14 h-14 border-2 border-primary">
+                  <AvatarImage src={providerInfo.avatar || undefined} alt={providerInfo.name} />
+                  <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
+                    {providerInfo.name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-1 -right-1 bg-primary text-white text-xs px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                  <Star className="w-2.5 h-2.5 fill-current" />
+                  <span className="font-medium">{providerInfo.rating.toFixed(1)}</span>
                 </div>
-              )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold truncate">{providerInfo.name}</h3>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>{providerInfo.totalServices} corridas</span>
+                </div>
+                {providerInfo.vehiclePlate && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Car className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-bold text-foreground bg-secondary px-2 py-0.5 rounded uppercase tracking-wider">
+                      {providerInfo.vehiclePlate}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className="status-badge bg-primary/10 text-primary text-xs">
+                  <span className="mr-1">{serviceConfig.icon}</span>
+                  {serviceConfig.label}
+                </span>
+                {providerInfo.phone && (
+                  <button 
+                    onClick={handleCallProvider}
+                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <Phone className="w-3 h-3" />
+                    Ligar
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="text-right">
-              <span className="status-badge bg-primary/10 text-primary">
-                <span className="mr-1">{serviceConfig.icon}</span>
-                {serviceConfig.label}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
