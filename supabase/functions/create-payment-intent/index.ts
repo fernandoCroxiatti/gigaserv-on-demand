@@ -180,10 +180,13 @@ serve(async (req) => {
       ? ['pix'] 
       : ['card'];
     
-    logStep("Creating PaymentIntent", { paymentMethodTypes });
+    logStep("Creating PaymentIntent", { paymentMethodTypes, paymentMethodType: payment_method_type });
 
-    // Create PaymentIntent with automatic transfer
-    const paymentIntent = await stripe.paymentIntents.create({
+    // PIX expiration in seconds (15 minutes)
+    const PIX_EXPIRATION_SECONDS = 900;
+
+    // Build payment intent options
+    const paymentIntentOptions: any = {
       amount: totalAmountCentavos,
       currency: "brl",
       customer: customerId,
@@ -200,7 +203,20 @@ serve(async (req) => {
         commission_percentage: commissionPercentage.toString(),
         payment_method_type: payment_method_type,
       },
-    });
+    };
+
+    // Add PIX-specific options for expiration
+    if (payment_method_type === 'pix') {
+      paymentIntentOptions.payment_method_options = {
+        pix: {
+          expires_after_seconds: PIX_EXPIRATION_SECONDS,
+        },
+      };
+      logStep("PIX expiration configured", { expiresAfterSeconds: PIX_EXPIRATION_SECONDS });
+    }
+
+    // Create PaymentIntent with automatic transfer
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentOptions);
 
     logStep("PaymentIntent created", { 
       paymentIntentId: paymentIntent.id,
