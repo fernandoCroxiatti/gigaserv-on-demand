@@ -41,6 +41,7 @@ export function ClientSearchingView() {
     radiusIndex,
     totalRadii,
     forceExpandRadius,
+    cooldownRemaining,
   } = useProgressiveSearch({
     userLocation: chamado?.origem || null,
     serviceType: chamado?.tipoServico || 'guincho',
@@ -197,9 +198,11 @@ export function ClientSearchingView() {
             <span className="text-sm text-muted-foreground">
               {searchState === 'timeout' 
                 ? 'Nenhum prestador encontrado'
-                : searchState === 'expanding_radius'
-                  ? `Expandindo busca para ${currentRadius}km...`
-                  : 'Aguardando resposta'}
+                : searchState === 'waiting_cooldown'
+                  ? `Aguardando para tentar novamente (${Math.floor(cooldownRemaining / 60)}:${String(cooldownRemaining % 60).padStart(2, '0')})`
+                  : searchState === 'expanding_radius'
+                    ? `Expandindo busca para ${currentRadius}km...`
+                    : 'Aguardando resposta'}
             </span>
           </div>
 
