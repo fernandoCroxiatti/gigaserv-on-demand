@@ -124,6 +124,16 @@ serve(async (req) => {
           detailsSubmitted: account.details_submitted,
         });
 
+        // Determine status
+        let stripeStatus = 'pending';
+        if (account.charges_enabled && account.payouts_enabled) {
+          stripeStatus = 'verified';
+        } else if (account.requirements?.currently_due?.length || 
+                   account.requirements?.past_due?.length ||
+                   account.requirements?.disabled_reason) {
+          stripeStatus = 'restricted';
+        }
+
         // Update provider_data based on user_id from metadata
         const userId = account.metadata?.user_id;
         if (userId) {
@@ -135,13 +145,14 @@ serve(async (req) => {
               stripe_payouts_enabled: account.payouts_enabled,
               stripe_details_submitted: account.details_submitted,
               stripe_connected: account.charges_enabled && account.payouts_enabled,
+              stripe_status: stripeStatus,
             })
             .eq('user_id', userId);
 
           if (error) {
             logStep("Error updating provider data", { error: error.message });
           } else {
-            logStep("Provider data updated", { userId });
+            logStep("Provider data updated", { userId, stripeStatus });
           }
         } else {
           // Try to find by stripe_account_id
@@ -153,6 +164,7 @@ serve(async (req) => {
               stripe_payouts_enabled: account.payouts_enabled,
               stripe_details_submitted: account.details_submitted,
               stripe_connected: account.charges_enabled && account.payouts_enabled,
+              stripe_status: stripeStatus,
             })
             .eq('stripe_account_id', account.id);
 
@@ -163,13 +175,109 @@ serve(async (req) => {
         break;
       }
 
-      case "payout.paid": {
+      case "payout.created": {
         const payout = event.data.object as Stripe.Payout;
-        logStep("Payout completed", {
+        logStep("Payout created", {
           payoutId: payout.id,
           amount: payout.amount,
-          destination: payout.destination,
+          status: payout.status,
+          arrivalDate: payout.arrival_date,
         });
+
+        // Find provider by stripe account - payout is on connected account
+        const accountId = (event as any).account;
+        if (accountId) {
+          const { data: providerData } = await supabaseClient
+            .from('provider_data')
+            .select('user_id')
+            .eq('stripe_account_id', accountId)
+            .single();
+
+          if (providerData) {
+            const { error } = await supabaseClient
+              .from('provider_payouts')
+              .upsert({
+                provider_id: providerData.user_id,
+                stripe_payout_id: payout.id,
+                stripe_account_id: accountId,
+                amount: payout.amount,
+                currency: payout.currency,
+                status: payout.status,
+                arrival_date: payout.arrival_date ? new Date(payout.arrival_date * 1000).toISOString() : null,
+              }, {
+                onConflict: 'stripe_payout_id'
+              });
+
+            if (error) {
+              logStep("Error inserting payout", { error: error.message });
+            } else {
+              logStep("Payout created in database", { payoutId: payout.id });
+            }
+          }
+        }
+        break;
+      }
+
+      case "payout.paid": {
+        const payout = event.data.object as Stripe.Payout;
+        logStep("Payout paid", {
+          payoutId: payout.id,
+          amount: payout.amount,
+        });
+
+        const { error } = await supabaseClient
+          .from('provider_payouts')
+          .update({
+            status: 'paid',
+            paid_at: new Date().toISOString(),
+          })
+          .eq('stripe_payout_id', payout.id);
+
+        if (error) {
+          logStep("Error updating payout to paid", { error: error.message });
+        } else {
+          logStep("Payout marked as paid", { payoutId: payout.id });
+        }
+        break;
+      }
+
+      case "payout.failed": {
+        const payout = event.data.object as Stripe.Payout;
+        logStep("Payout failed", {
+          payoutId: payout.id,
+          failureCode: payout.failure_code,
+          failureMessage: payout.failure_message,
+        });
+
+        const { error } = await supabaseClient
+          .from('provider_payouts')
+          .update({
+            status: 'failed',
+            failure_code: payout.failure_code || null,
+            failure_message: payout.failure_message || null,
+          })
+          .eq('stripe_payout_id', payout.id);
+
+        if (error) {
+          logStep("Error updating payout to failed", { error: error.message });
+        } else {
+          logStep("Payout marked as failed", { payoutId: payout.id });
+        }
+        break;
+      }
+
+      case "payout.canceled": {
+        const payout = event.data.object as Stripe.Payout;
+        logStep("Payout canceled", { payoutId: payout.id });
+
+        const { error } = await supabaseClient
+          .from('provider_payouts')
+          .update({ status: 'canceled' })
+          .eq('stripe_payout_id', payout.id);
+
+        if (error) {
+          logStep("Error updating payout to canceled", { error: error.message });
+        }
         break;
       }
 
@@ -189,6 +297,27 @@ serve(async (req) => {
             .update({ stripe_transfer_id: transfer.id })
             .eq('id', chamadoId);
         }
+        break;
+      }
+
+      case "charge.succeeded": {
+        const charge = event.data.object as Stripe.Charge;
+        logStep("Charge succeeded", {
+          chargeId: charge.id,
+          amount: charge.amount,
+          paymentIntent: charge.payment_intent,
+        });
+        // Charge succeeded is handled via payment_intent.succeeded
+        break;
+      }
+
+      case "balance.available": {
+        const balance = event.data.object as Stripe.Balance;
+        logStep("Balance available updated", {
+          available: balance.available,
+          pending: balance.pending,
+        });
+        // Balance updates are fetched on-demand via provider-financial-data
         break;
       }
 
