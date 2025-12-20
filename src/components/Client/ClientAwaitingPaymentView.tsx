@@ -13,9 +13,6 @@ import {
   Lock,
   Loader2,
   AlertCircle,
-  Copy,
-  QrCode,
-  CheckCircle,
   Car,
   Smartphone
 } from 'lucide-react';
@@ -103,332 +100,80 @@ function CardPaymentForm({
   );
 }
 
-interface PixPaymentInfo {
-  qrCode: string;
-  qrCodeUrl: string;
-  expiresAt: Date;
-}
-
-type PixStatus = 'generating' | 'waiting' | 'processing' | 'success' | 'expired' | 'failed';
-
-function PixPaymentForm({
-  clientSecret,
-  onSuccess,
+// PIX now uses Stripe Checkout - this component shows loading state while redirecting
+function PixCheckoutRedirect({
+  chamadoId,
   onError,
   amount,
-  chamadoId,
 }: {
-  clientSecret: string;
-  onSuccess: () => void;
+  chamadoId: string;
   onError: (error: string) => void;
   amount: number;
-  chamadoId: string;
 }) {
-  const [pixInfo, setPixInfo] = useState<PixPaymentInfo | null>(null);
-  const [pixStatus, setPixStatus] = useState<PixStatus>('generating');
-  const [copied, setCopied] = useState(false);
-  const [stripe, setStripe] = useState<Stripe | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
-  // PIX expiration time in minutes
-  const PIX_EXPIRATION_MINUTES = 15;
-
-  // Initialize Stripe lazily
   useEffect(() => {
-    getStripePromise()
-      .then((s) => setStripe(s))
-      .catch((e) => {
-        setPixStatus('failed');
-        onError(e?.message || 'Stripe não configurado');
-      });
-  }, [onError]);
-
-  // Confirm PIX payment and get QR code
-  useEffect(() => {
-    if (!stripe || !clientSecret) return;
-
-    const confirmPix = async () => {
-      setPixStatus('generating');
+    const createCheckout = async () => {
+      setIsRedirecting(true);
       try {
-        const { paymentIntent, error } = await stripe.confirmPixPayment(clientSecret, {
-          payment_method: {},
+        const { data, error } = await supabase.functions.invoke('create-pix-checkout', {
+          body: { chamado_id: chamadoId },
         });
 
         if (error) {
-          setPixStatus('failed');
-          onError(getPixErrorMessage(error.code || 'unknown'));
+          onError('Erro ao criar sessão de pagamento PIX');
+          setIsRedirecting(false);
           return;
         }
 
-        // Access next_action with type assertion for PIX
-        const nextAction = paymentIntent?.next_action as any;
-        if (nextAction?.pix_display_qr_code) {
-          const pixData = nextAction.pix_display_qr_code;
-          const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MINUTES * 60 * 1000);
-          setPixInfo({
-            qrCode: pixData.data || '',
-            qrCodeUrl: pixData.image_url_png || '',
-            expiresAt,
-          });
-          setPixStatus('waiting');
+        if (data?.error_code === 'pix_not_enabled') {
+          onError('PIX não está disponível no momento. Por favor, use cartão de crédito.');
+          setIsRedirecting(false);
+          return;
+        }
+
+        if (data?.error) {
+          onError(data.error);
+          setIsRedirecting(false);
+          return;
+        }
+
+        if (data?.checkout_url) {
+          setCheckoutUrl(data.checkout_url);
+          // Redirect to Stripe Checkout
+          window.location.href = data.checkout_url;
         } else {
-          setPixStatus('failed');
-          onError('Erro ao gerar QR Code PIX');
+          onError('URL de checkout não recebida');
+          setIsRedirecting(false);
         }
       } catch (err) {
-        setPixStatus('failed');
         onError('Erro ao iniciar pagamento PIX');
+        setIsRedirecting(false);
       }
     };
 
-    confirmPix();
-  }, [stripe, clientSecret, onError]);
-
-  // Timer for expiration countdown
-  useEffect(() => {
-    if (!pixInfo || pixStatus !== 'waiting') return;
-
-    const updateTimer = () => {
-      const now = new Date();
-      const diff = Math.max(0, Math.floor((pixInfo.expiresAt.getTime() - now.getTime()) / 1000));
-      setTimeRemaining(diff);
-
-      if (diff === 0 && pixStatus === 'waiting') {
-        setPixStatus('expired');
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [pixInfo, pixStatus]);
-
-  // Listen to realtime database updates for payment confirmation via webhook
-  // This is the CORRECT way - don't poll Stripe directly, wait for webhook to update DB
-  useEffect(() => {
-    if (!chamadoId || pixStatus === 'expired' || pixStatus === 'success') return;
-
-    const channel = supabase
-      .channel(`pix-payment-${chamadoId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'chamados',
-          filter: `id=eq.${chamadoId}`,
-        },
-        (payload) => {
-          const newData = payload.new as any;
-          
-          // Payment confirmed by webhook
-          if (newData.payment_status === 'paid_stripe' || newData.status === 'in_service') {
-            setPixStatus('success');
-            onSuccess();
-          }
-          
-          // Payment failed
-          if (newData.payment_status === 'failed') {
-            setPixStatus('failed');
-            onError('Falha no pagamento. Tente novamente.');
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [chamadoId, pixStatus, onSuccess, onError]);
-
-  const handleCopyCode = async () => {
-    if (!pixInfo?.qrCode) return;
-    
-    try {
-      await navigator.clipboard.writeText(pixInfo.qrCode);
-      setCopied(true);
-      toast.success('Código PIX copiado!');
-      setTimeout(() => setCopied(false), 3000);
-    } catch (err) {
-      toast.error('Erro ao copiar código');
-    }
-  };
-
-  const handleRetryPix = () => {
-    // Reload page to generate new PIX
-    window.location.reload();
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Status messages
-  const getStatusMessage = () => {
-    switch (pixStatus) {
-      case 'generating':
-        return 'Gerando QR Code PIX...';
-      case 'waiting':
-        return 'Aguardando pagamento do PIX';
-      case 'processing':
-        return 'Processando pagamento...';
-      case 'success':
-        return 'Pagamento confirmado com sucesso!';
-      case 'expired':
-        return 'PIX expirado. Gere um novo pagamento.';
-      case 'failed':
-        return 'Falha no pagamento. Tente novamente.';
-      default:
-        return 'Aguardando...';
-    }
-  };
-
-  if (pixStatus === 'generating') {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Gerando QR Code PIX...</p>
-      </div>
-    );
-  }
-
-  if (pixStatus === 'success') {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <div className="w-16 h-16 bg-status-finished/20 rounded-full flex items-center justify-center">
-          <CheckCircle className="w-10 h-10 text-status-finished" />
-        </div>
-        <p className="text-lg font-semibold text-status-finished">Pagamento confirmado!</p>
-        <p className="text-sm text-muted-foreground text-center">
-          O serviço será iniciado em instantes.
-        </p>
-      </div>
-    );
-  }
-
-  if (pixStatus === 'expired') {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <div className="w-16 h-16 bg-status-searching/20 rounded-full flex items-center justify-center">
-          <Clock className="w-10 h-10 text-status-searching" />
-        </div>
-        <p className="text-lg font-semibold text-status-searching">PIX expirado</p>
-        <p className="text-sm text-muted-foreground text-center">
-          O tempo para pagamento expirou. Gere um novo QR Code para continuar.
-        </p>
-        <Button onClick={handleRetryPix} className="w-full">
-          Gerar novo PIX
-        </Button>
-      </div>
-    );
-  }
-
-  if (pixStatus === 'failed' || !pixInfo) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <div className="w-16 h-16 bg-destructive/20 rounded-full flex items-center justify-center">
-          <AlertCircle className="w-10 h-10 text-destructive" />
-        </div>
-        <p className="text-lg font-semibold text-destructive">Falha no pagamento</p>
-        <p className="text-sm text-muted-foreground text-center">
-          Não foi possível processar o PIX. Tente outro método de pagamento.
-        </p>
-        <Button onClick={handleRetryPix} variant="outline" className="w-full">
-          Tentar novamente
-        </Button>
-      </div>
-    );
-  }
+    createCheckout();
+  }, [chamadoId, onError]);
 
   return (
-    <div className="space-y-4">
-      {/* Status indicator */}
-      <div className="flex items-center justify-center gap-2 p-2 bg-status-searching/10 rounded-lg">
-        <Loader2 className="w-4 h-4 animate-spin text-status-searching" />
-        <span className="text-sm font-medium text-status-searching">{getStatusMessage()}</span>
-      </div>
-
-      {/* QR Code */}
-      <div className="flex flex-col items-center p-6 bg-white rounded-xl">
-        {pixInfo.qrCodeUrl ? (
-          <img 
-            src={pixInfo.qrCodeUrl} 
-            alt="QR Code PIX" 
-            className="w-48 h-48"
-          />
-        ) : (
-          <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center">
-            <QrCode className="w-16 h-16 text-muted-foreground" />
-          </div>
-        )}
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          Escaneie o QR Code com o app do seu banco
-        </p>
-      </div>
-
-      {/* Expiration timer */}
-      <div className="flex items-center justify-center gap-2 text-sm">
-        <Clock className="w-4 h-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          Expira em: <span className={`font-mono font-semibold ${timeRemaining < 120 ? 'text-destructive' : 'text-foreground'}`}>
-            {formatTime(timeRemaining)}
-          </span>
-        </span>
-      </div>
-
-      {/* Copy Code */}
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground text-center">
-          Ou copie o código PIX
-        </p>
-        <Button 
-          variant="outline" 
-          className="w-full" 
-          onClick={handleCopyCode}
-        >
-          {copied ? (
-            <>
-              <CheckCircle className="w-4 h-4 mr-2 text-status-finished" />
-              Código copiado!
-            </>
-          ) : (
-            <>
-              <Copy className="w-4 h-4 mr-2" />
-              Copiar código PIX
-            </>
-          )}
-        </Button>
-      </div>
-
-      {/* Amount and status */}
-      <div className="p-4 bg-secondary rounded-xl text-center space-y-2">
+    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+      <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      <p className="text-lg font-medium">Redirecionando para pagamento PIX...</p>
+      <p className="text-sm text-muted-foreground text-center">
+        Você será direcionado para a página segura do Stripe para escanear o QR Code PIX.
+      </p>
+      <div className="p-4 bg-secondary rounded-xl text-center">
         <p className="text-sm text-muted-foreground">Valor a pagar</p>
         <p className="text-2xl font-bold">R$ {(amount / 100).toFixed(2)}</p>
-        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Aguardando confirmação do pagamento...</span>
-        </div>
       </div>
-
       <p className="text-xs text-muted-foreground text-center">
-        O serviço será liberado automaticamente após a confirmação do pagamento pelo seu banco.
+        Após o pagamento, você retornará automaticamente ao app.
       </p>
     </div>
   );
 }
 
-// Helper function for PIX error messages
-function getPixErrorMessage(errorCode: string): string {
-  const errorMessages: Record<string, string> = {
-    'payment_intent_unexpected_state': 'Pagamento já foi processado ou expirou.',
-    'expired_card': 'Método de pagamento expirado.',
-    'processing_error': 'Erro ao processar. Tente novamente.',
-    'insufficient_funds': 'Saldo insuficiente.',
-  };
-  return errorMessages[errorCode] || 'Erro ao processar PIX. Tente novamente.';
-}
 
 export function ClientAwaitingPaymentView() {
   const { chamado, availableProviders, processPayment, cancelChamado } = useApp();
@@ -441,29 +186,18 @@ export function ClientAwaitingPaymentView() {
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<ExtendedPaymentMethod | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [walletAvailable, setWalletAvailable] = useState<boolean | null>(null);
-  const [pixAvailable, setPixAvailable] = useState(true);
 
   useEffect(() => {
     setStripePromise(getStripePromise());
   }, []);
 
-  // Filter payment methods based on wallet availability + PIX availability
+  // Filter payment methods based on wallet availability
   const paymentMethods = basePaymentMethods
     .filter((method) => {
       if (method.walletOnly) {
         return walletAvailable === true;
       }
       return true;
-    })
-    .map((method) => {
-      if (method.id === 'pix' && !pixAvailable) {
-        return {
-          ...method,
-          available: false,
-          description: 'Indisponível no momento',
-        };
-      }
-      return method;
     });
 
   const provider = availableProviders.find(p => p.id === chamado?.prestadorId);
@@ -471,12 +205,20 @@ export function ClientAwaitingPaymentView() {
   const createPaymentIntent = useCallback(async (paymentMethod: ExtendedPaymentMethod) => {
     if (!chamado?.id) return;
 
+    // PIX now uses Stripe Checkout - no need to create PaymentIntent here
+    if (paymentMethod === 'pix') {
+      setCurrentPaymentMethod('pix');
+      setPaymentAmount(Math.round((chamado.valor || 0) * 100));
+      setLoadingPayment(false);
+      return;
+    }
+
     setLoadingPayment(true);
     setPaymentError(null);
     setClientSecret(null);
 
     // For wallet payments, use 'card' as the payment method type (Apple Pay/Google Pay use card rails)
-    const paymentMethodType = paymentMethod === 'pix' ? 'pix' : 'card';
+    const paymentMethodType = 'card';
 
     try {
       const { data, error } = await supabase.functions.invoke('create-payment-intent', {
@@ -489,30 +231,12 @@ export function ClientAwaitingPaymentView() {
       // Function-level error (non-2xx)
       if (error) {
         console.error('Error creating payment intent:', error);
-        const msg = (error as any)?.message || 'Erro ao preparar pagamento. Tente novamente.';
-
-        // If user selected PIX but it's not available, disable it in the UI.
-        if (paymentMethod === 'pix' && /\bpix\b/i.test(msg)) {
-          setPixAvailable(false);
-        }
-
         setPaymentError('Erro ao preparar pagamento. Tente novamente.');
         return;
       }
 
       // App-level error (2xx but with error payload)
       if (data?.error) {
-        if (data?.error_code === 'pix_not_enabled') {
-          setPixAvailable(false);
-
-          // If user selected PIX, automatically fallback to card so they can complete payment
-          if (paymentMethod === 'pix') {
-            setSelectedPayment('credit_card');
-            await createPaymentIntent('credit_card');
-            return;
-          }
-        }
-
         setPaymentError(data.error);
         return;
       }
@@ -528,7 +252,7 @@ export function ClientAwaitingPaymentView() {
     } finally {
       setLoadingPayment(false);
     }
-  }, [chamado?.id]);
+  }, [chamado?.id, chamado?.valor]);
 
   // Check wallet availability on mount
   useEffect(() => {
@@ -776,14 +500,12 @@ export function ClientAwaitingPaymentView() {
               )
             )}
 
-            {/* PIX Payment */}
-            {clientSecret && !loadingPayment && currentPaymentMethod === 'pix' && chamado && (
-              <PixPaymentForm
-                clientSecret={clientSecret}
-                onSuccess={handlePaymentSuccess}
-                onError={handlePaymentError}
-                amount={paymentAmount}
+            {/* PIX Payment - Redirects to Stripe Checkout */}
+            {!loadingPayment && currentPaymentMethod === 'pix' && chamado && (
+              <PixCheckoutRedirect
                 chamadoId={chamado.id}
+                onError={handlePaymentError}
+                amount={paymentAmount || Math.round((chamado.valor || 0) * 100)}
               />
             )}
 

@@ -64,6 +64,40 @@ serve(async (req) => {
     logStep("Processing event", { type: event.type, id: event.id });
 
     switch (event.type) {
+      // Handle Stripe Checkout session completed (used for PIX payments via Checkout)
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        logStep("Checkout session completed", {
+          sessionId: session.id,
+          paymentStatus: session.payment_status,
+          paymentIntentId: session.payment_intent,
+          metadata: session.metadata,
+        });
+
+        const chamadoId = session.metadata?.chamado_id;
+        if (chamadoId && session.payment_status === 'paid') {
+          const paymentMethod = session.metadata?.payment_method_type || 'pix';
+          
+          const { error } = await supabaseClient
+            .from('chamados')
+            .update({
+              payment_status: 'paid_stripe',
+              status: 'in_service',
+              payment_completed_at: new Date().toISOString(),
+              payment_method: paymentMethod,
+              stripe_payment_intent_id: session.payment_intent as string,
+            })
+            .eq('id', chamadoId);
+
+          if (error) {
+            logStep("Error updating chamado from checkout", { error: error.message });
+          } else {
+            logStep("Chamado updated to in_service via Checkout", { chamadoId, paymentMethod });
+          }
+        }
+        break;
+      }
+
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         logStep("Payment succeeded", { 
@@ -75,22 +109,34 @@ serve(async (req) => {
 
         const chamadoId = paymentIntent.metadata?.chamado_id;
         if (chamadoId) {
-          const paymentMethod = paymentIntent.payment_method_types?.includes('pix') ? 'pix' : 'card';
-          
-          const { error } = await supabaseClient
+          // Check if already updated by checkout.session.completed
+          const { data: existingChamado } = await supabaseClient
             .from('chamados')
-            .update({
-              payment_status: 'paid_stripe',
-              status: 'in_service',
-              payment_completed_at: new Date().toISOString(),
-              payment_method: paymentMethod,
-            })
-            .eq('id', chamadoId);
+            .select('payment_status')
+            .eq('id', chamadoId)
+            .single();
 
-          if (error) {
-            logStep("Error updating chamado", { error: error.message });
+          // Only update if not already paid (avoid duplicate updates)
+          if (existingChamado?.payment_status !== 'paid_stripe') {
+            const paymentMethod = paymentIntent.payment_method_types?.includes('pix') ? 'pix' : 'card';
+            
+            const { error } = await supabaseClient
+              .from('chamados')
+              .update({
+                payment_status: 'paid_stripe',
+                status: 'in_service',
+                payment_completed_at: new Date().toISOString(),
+                payment_method: paymentMethod,
+              })
+              .eq('id', chamadoId);
+
+            if (error) {
+              logStep("Error updating chamado", { error: error.message });
+            } else {
+              logStep("Chamado updated to in_service", { chamadoId, paymentMethod });
+            }
           } else {
-            logStep("Chamado updated to in_service", { chamadoId, paymentMethod });
+            logStep("Chamado already paid, skipping update", { chamadoId });
           }
         }
         break;
