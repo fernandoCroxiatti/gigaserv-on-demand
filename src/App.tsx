@@ -24,6 +24,7 @@ import AdminReports from "./pages/admin/Reports";
 import AdminProviders from "./pages/admin/Providers";
 import AdminClients from "./pages/admin/Clients";
 import AdminChamados from "./pages/admin/Chamados";
+import AdminNotifications from "./pages/admin/Notifications";
 import StripeAuditReport from "./pages/StripeAuditReport";
 import { Loader2 } from "lucide-react";
 
@@ -184,6 +185,7 @@ const App = () => (
               >
                 <Route index element={<AdminDashboard />} />
                 <Route path="settings" element={<AdminSettings />} />
+                <Route path="notifications" element={<AdminNotifications />} />
                 <Route path="reports" element={<AdminReports />} />
                 <Route path="providers" element={<AdminProviders />} />
                 <Route path="clients" element={<AdminClients />} />
