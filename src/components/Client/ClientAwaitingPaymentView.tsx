@@ -441,18 +441,30 @@ export function ClientAwaitingPaymentView() {
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<ExtendedPaymentMethod | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [walletAvailable, setWalletAvailable] = useState<boolean | null>(null);
+  const [pixAvailable, setPixAvailable] = useState(true);
 
   useEffect(() => {
     setStripePromise(getStripePromise());
   }, []);
 
-  // Filter payment methods based on wallet availability
-  const paymentMethods = basePaymentMethods.filter(method => {
-    if (method.walletOnly) {
-      return walletAvailable === true;
-    }
-    return true;
-  });
+  // Filter payment methods based on wallet availability + PIX availability
+  const paymentMethods = basePaymentMethods
+    .filter((method) => {
+      if (method.walletOnly) {
+        return walletAvailable === true;
+      }
+      return true;
+    })
+    .map((method) => {
+      if (method.id === 'pix' && !pixAvailable) {
+        return {
+          ...method,
+          available: false,
+          description: 'Indisponível no momento',
+        };
+      }
+      return method;
+    });
 
   const provider = availableProviders.find(p => p.id === chamado?.prestadorId);
 
@@ -468,19 +480,39 @@ export function ClientAwaitingPaymentView() {
 
     try {
       const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-        body: { 
+        body: {
           chamado_id: chamado.id,
-          payment_method_type: paymentMethodType
-        }
+          payment_method_type: paymentMethodType,
+        },
       });
 
+      // Function-level error (non-2xx)
       if (error) {
         console.error('Error creating payment intent:', error);
+        const msg = (error as any)?.message || 'Erro ao preparar pagamento. Tente novamente.';
+
+        // If user selected PIX but it's not available, disable it in the UI.
+        if (paymentMethod === 'pix' && /\bpix\b/i.test(msg)) {
+          setPixAvailable(false);
+        }
+
         setPaymentError('Erro ao preparar pagamento. Tente novamente.');
         return;
       }
 
+      // App-level error (2xx but with error payload)
       if (data?.error) {
+        if (data?.error_code === 'pix_not_enabled') {
+          setPixAvailable(false);
+
+          // If user selected PIX, automatically fallback to card so they can complete payment
+          if (paymentMethod === 'pix') {
+            setSelectedPayment('credit_card');
+            await createPaymentIntent('credit_card');
+            return;
+          }
+        }
+
         setPaymentError(data.error);
         return;
       }
