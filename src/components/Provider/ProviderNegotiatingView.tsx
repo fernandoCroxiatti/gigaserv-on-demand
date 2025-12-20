@@ -1,19 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Send, MessageCircle, User, Navigation, Clock, ArrowRight, Check } from 'lucide-react';
+import { Send, MessageCircle, User, Navigation, Clock, ArrowRight, Check, Route, Car, Phone } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
+import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
+import { calculateDistance } from '@/lib/distance';
 
 export function ProviderNegotiatingView() {
-  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, availableProviders } = useApp();
+  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, providerData } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
+
+  // Fetch client info
+  const { name: clientName, phone: clientPhone, loading: contactLoading } = useOtherPartyContact(
+    'provider',
+    chamado?.id,
+    chamado?.clienteId,
+    chamado?.prestadorId
+  );
+
+  // Calculate distances
+  const distanceToClient = useMemo(() => {
+    if (!chamado || !providerData?.current_lat || !providerData?.current_lng) {
+      return null;
+    }
+    return calculateDistance(
+      Number(providerData.current_lat),
+      Number(providerData.current_lng),
+      chamado.origem.lat,
+      chamado.origem.lng
+    );
+  }, [chamado, providerData?.current_lat, providerData?.current_lng]);
+
+  const routeDistance = useMemo(() => {
+    if (!chamado?.destino) return null;
+    return calculateDistance(
+      chamado.origem.lat,
+      chamado.origem.lng,
+      chamado.destino.lat,
+      chamado.destino.lng
+    );
+  }, [chamado]);
+
+  // Calculate estimated travel time (assuming avg 40km/h for urban areas)
+  const estimatedMinutes = useMemo(() => {
+    if (!routeDistance) return null;
+    return Math.round((routeDistance / 40) * 60);
+  }, [routeDistance]);
 
   if (!chamado) return null;
 
   const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
   const hasDestination = chamado.destino !== null;
+
+  const formattedDistanceToClient = distanceToClient !== null 
+    ? distanceToClient < 1 
+      ? `${Math.round(distanceToClient * 1000)} m`
+      : `${distanceToClient.toFixed(1)} km`
+    : '--';
+
+  const formattedRouteDistance = routeDistance !== null 
+    ? routeDistance < 1 
+      ? `${Math.round(routeDistance * 1000)} m`
+      : `${routeDistance.toFixed(1)} km`
+    : '--';
+
+  const formattedTravelTime = estimatedMinutes !== null
+    ? estimatedMinutes < 60 
+      ? `${estimatedMinutes} min`
+      : `${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}min`
+    : '--';
 
   const handleSendMessage = () => {
     if (!message.trim()) return;
@@ -56,7 +113,7 @@ export function ProviderNegotiatingView() {
               <User className="w-6 h-6 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold">Cliente</h3>
+              <h3 className="font-semibold">{contactLoading ? 'Carregando...' : clientName}</h3>
               <div className="flex items-center gap-2">
                 <span className="status-badge bg-provider-primary/10 text-provider-primary text-xs">
                   <span className="mr-1">{serviceConfig.icon}</span>
@@ -64,11 +121,20 @@ export function ProviderNegotiatingView() {
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-4 text-sm">
+            <div className="flex flex-col items-end gap-1 text-sm">
               <div className="flex items-center gap-1">
                 <Navigation className="w-4 h-4 text-provider-primary" />
-                <span>--</span>
+                <span>{formattedDistanceToClient}</span>
               </div>
+              {clientPhone && (
+                <a 
+                  href={`tel:${clientPhone}`} 
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-provider-primary"
+                >
+                  <Phone className="w-3 h-3" />
+                  <span>Ligar</span>
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -91,9 +157,9 @@ export function ProviderNegotiatingView() {
             </div>
           </div>
 
-          {/* Trip details */}
+          {/* Trip details with stats */}
           <div className="p-4 border-b border-border bg-secondary/30">
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 mb-3">
               <div className="flex flex-col items-center gap-1">
                 <div className="w-2 h-2 bg-provider-primary rounded-full" />
                 {hasDestination && (
@@ -111,9 +177,30 @@ export function ProviderNegotiatingView() {
               </div>
             </div>
             
-            {/* Service type indicator */}
+            {/* Route stats */}
+            {hasDestination && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                <div className="bg-background rounded-xl p-2 text-center">
+                  <Navigation className="w-4 h-4 mx-auto mb-1 text-provider-primary" />
+                  <p className="font-semibold text-sm">{formattedDistanceToClient}</p>
+                  <p className="text-[10px] text-muted-foreground">Até cliente</p>
+                </div>
+                <div className="bg-background rounded-xl p-2 text-center">
+                  <Route className="w-4 h-4 mx-auto mb-1 text-provider-primary" />
+                  <p className="font-semibold text-sm">{formattedRouteDistance}</p>
+                  <p className="text-[10px] text-muted-foreground">Trajeto total</p>
+                </div>
+                <div className="bg-background rounded-xl p-2 text-center">
+                  <Clock className="w-4 h-4 mx-auto mb-1 text-provider-primary" />
+                  <p className="font-semibold text-sm">{formattedTravelTime}</p>
+                  <p className="text-[10px] text-muted-foreground">Tempo estimado</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Service type indicator for non-destination services */}
             {!hasDestination && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Check className="w-3 h-3 text-provider-primary" />
                 <span>Atendimento no local</span>
               </div>
