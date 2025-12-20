@@ -100,76 +100,303 @@ function CardPaymentForm({
   );
 }
 
-// PIX now uses Stripe Checkout - this component shows loading state while redirecting
-function PixCheckoutRedirect({
+type PixFlowState = 'generating' | 'redirecting' | 'awaiting_return' | 'confirming' | 'confirmed' | 'error';
+
+// PIX Checkout Flow Component - Full UX with state management
+function PixCheckoutFlow({
   chamadoId,
   onError,
+  onSuccess,
   amount,
 }: {
   chamadoId: string;
   onError: (error: string) => void;
+  onSuccess: () => void;
   amount: number;
 }) {
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [flowState, setFlowState] = useState<PixFlowState>('generating');
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Check URL params for return from Stripe Checkout
   useEffect(() => {
-    const createCheckout = async () => {
-      setIsRedirecting(true);
+    const urlParams = new URLSearchParams(window.location.search);
+    const pixSuccess = urlParams.get('pix_success');
+    const pixCanceled = urlParams.get('pix_canceled');
+    const returnedChamadoId = urlParams.get('chamado_id');
+
+    // If returning from Stripe Checkout
+    if (returnedChamadoId === chamadoId) {
+      if (pixSuccess === 'true') {
+        // User returned from successful checkout - now wait for webhook confirmation
+        setFlowState('confirming');
+        // Clean URL params
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (pixCanceled === 'true') {
+        // User canceled checkout
+        setFlowState('generating');
+        // Clean URL params
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [chamadoId]);
+
+  // Listen to realtime updates for payment confirmation via webhook
+  useEffect(() => {
+    if (flowState !== 'confirming' && flowState !== 'awaiting_return') return;
+
+    const channel = supabase
+      .channel(`pix-payment-confirm-${chamadoId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chamados',
+          filter: `id=eq.${chamadoId}`,
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          
+          // Payment confirmed via webhook
+          if (newData.payment_status === 'paid_stripe' && newData.status === 'in_service') {
+            setFlowState('confirmed');
+            setTimeout(() => {
+              onSuccess();
+            }, 2000); // Show confirmation for 2 seconds before proceeding
+          }
+          
+          // Payment failed
+          if (newData.payment_status === 'failed') {
+            setFlowState('error');
+            setErrorMessage('Pagamento falhou. Tente novamente.');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chamadoId, flowState, onSuccess]);
+
+  // Poll for payment status as fallback (in case realtime misses it)
+  useEffect(() => {
+    if (flowState !== 'confirming') return;
+
+    const checkStatus = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('create-pix-checkout', {
+        const { data, error } = await supabase.functions.invoke('check-payment-status', {
           body: { chamado_id: chamadoId },
         });
 
-        if (error) {
-          onError('Erro ao criar sessão de pagamento PIX');
-          setIsRedirecting(false);
-          return;
-        }
-
-        if (data?.error_code === 'pix_not_enabled') {
-          onError('PIX não está disponível no momento. Por favor, use cartão de crédito.');
-          setIsRedirecting(false);
-          return;
-        }
-
-        if (data?.error) {
-          onError(data.error);
-          setIsRedirecting(false);
-          return;
-        }
-
-        if (data?.checkout_url) {
-          setCheckoutUrl(data.checkout_url);
-          // Redirect to Stripe Checkout
-          window.location.href = data.checkout_url;
-        } else {
-          onError('URL de checkout não recebida');
-          setIsRedirecting(false);
+        if (!error && data?.is_confirmed) {
+          setFlowState('confirmed');
+          setTimeout(() => {
+            onSuccess();
+          }, 2000);
         }
       } catch (err) {
-        onError('Erro ao iniciar pagamento PIX');
-        setIsRedirecting(false);
+        console.log('Status check error:', err);
       }
     };
 
-    createCheckout();
+    // Check immediately and then every 3 seconds
+    checkStatus();
+    const interval = setInterval(checkStatus, 3000);
+
+    // Stop polling after 2 minutes
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+    }, 120000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [chamadoId, flowState, onSuccess]);
+
+  // Create checkout session and open in new tab
+  const createCheckout = useCallback(async () => {
+    setFlowState('generating');
+    setErrorMessage(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('create-pix-checkout', {
+        body: { chamado_id: chamadoId },
+      });
+
+      if (error) {
+        setFlowState('error');
+        setErrorMessage('Erro ao criar sessão de pagamento PIX');
+        onError('Erro ao criar sessão de pagamento PIX');
+        return;
+      }
+
+      if (data?.error_code === 'pix_not_enabled') {
+        setFlowState('error');
+        setErrorMessage('PIX não está disponível no momento. Por favor, use cartão de crédito.');
+        onError('PIX não está disponível no momento. Por favor, use cartão de crédito.');
+        return;
+      }
+
+      if (data?.error) {
+        setFlowState('error');
+        setErrorMessage(data.error);
+        onError(data.error);
+        return;
+      }
+
+      if (data?.checkout_url) {
+        setCheckoutUrl(data.checkout_url);
+        setFlowState('redirecting');
+        
+        // Small delay to show redirecting state
+        setTimeout(() => {
+          setFlowState('awaiting_return');
+          // Open checkout - user will return via success_url
+          window.location.href = data.checkout_url;
+        }, 1000);
+      } else {
+        setFlowState('error');
+        setErrorMessage('URL de checkout não recebida');
+        onError('URL de checkout não recebida');
+      }
+    } catch (err) {
+      setFlowState('error');
+      setErrorMessage('Erro ao iniciar pagamento PIX');
+      onError('Erro ao iniciar pagamento PIX');
+    }
   }, [chamadoId, onError]);
+
+  // Start checkout on mount
+  useEffect(() => {
+    // Don't start if already in confirming state (returned from Stripe)
+    if (flowState === 'confirming' || flowState === 'confirmed') return;
+    
+    // Check if we're returning from checkout
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('pix_success') || urlParams.get('pix_canceled')) return;
+
+    createCheckout();
+  }, []); // Only run once on mount
+
+  // Render based on flow state
+  const renderContent = () => {
+    switch (flowState) {
+      case 'generating':
+        return (
+          <>
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+            <p className="text-lg font-medium">Gerando PIX...</p>
+            <p className="text-sm text-muted-foreground text-center">
+              Preparando sua sessão de pagamento segura
+            </p>
+          </>
+        );
+
+      case 'redirecting':
+        return (
+          <>
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+            <p className="text-lg font-medium">Abrindo página de pagamento...</p>
+            <p className="text-sm text-muted-foreground text-center">
+              Você será redirecionado para a página segura do Stripe
+            </p>
+          </>
+        );
+
+      case 'awaiting_return':
+        return (
+          <>
+            <div className="w-16 h-16 bg-status-searching/10 rounded-full flex items-center justify-center">
+              <Wallet className="w-8 h-8 text-status-searching" />
+            </div>
+            <p className="text-lg font-medium">Aguardando pagamento...</p>
+            <p className="text-sm text-muted-foreground text-center">
+              Complete o pagamento na página do Stripe e retorne aqui
+            </p>
+            <Button 
+              variant="outline" 
+              onClick={() => checkoutUrl && window.open(checkoutUrl, '_blank')}
+              className="mt-4"
+            >
+              Reabrir página de pagamento
+            </Button>
+          </>
+        );
+
+      case 'confirming':
+        return (
+          <>
+            <div className="w-16 h-16 bg-status-searching/10 rounded-full flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-status-searching" />
+            </div>
+            <p className="text-lg font-medium">Confirmando pagamento...</p>
+            <p className="text-sm text-muted-foreground text-center">
+              Verificando confirmação do seu banco
+            </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="w-2 h-2 bg-status-searching rounded-full animate-pulse" />
+              <span>Aguardando confirmação do webhook</span>
+            </div>
+          </>
+        );
+
+      case 'confirmed':
+        return (
+          <>
+            <div className="w-16 h-16 bg-status-finished/20 rounded-full flex items-center justify-center">
+              <Check className="w-10 h-10 text-status-finished" />
+            </div>
+            <p className="text-lg font-semibold text-status-finished">Pagamento confirmado!</p>
+            <p className="text-sm text-muted-foreground text-center">
+              O serviço será iniciado em instantes
+            </p>
+          </>
+        );
+
+      case 'error':
+        return (
+          <>
+            <div className="w-16 h-16 bg-destructive/20 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-10 h-10 text-destructive" />
+            </div>
+            <p className="text-lg font-semibold text-destructive">Erro no pagamento</p>
+            <p className="text-sm text-muted-foreground text-center">
+              {errorMessage || 'Ocorreu um erro. Tente novamente.'}
+            </p>
+            <Button onClick={createCheckout} className="mt-4">
+              Tentar novamente
+            </Button>
+          </>
+        );
+    }
+  };
 
   return (
     <div className="flex flex-col items-center justify-center py-8 space-y-4">
-      <Loader2 className="w-10 h-10 animate-spin text-primary" />
-      <p className="text-lg font-medium">Redirecionando para pagamento PIX...</p>
-      <p className="text-sm text-muted-foreground text-center">
-        Você será direcionado para a página segura do Stripe para escanear o QR Code PIX.
-      </p>
-      <div className="p-4 bg-secondary rounded-xl text-center">
-        <p className="text-sm text-muted-foreground">Valor a pagar</p>
-        <p className="text-2xl font-bold">R$ {(amount / 100).toFixed(2)}</p>
-      </div>
-      <p className="text-xs text-muted-foreground text-center">
-        Após o pagamento, você retornará automaticamente ao app.
-      </p>
+      {renderContent()}
+      
+      {/* Always show amount */}
+      {flowState !== 'confirmed' && flowState !== 'error' && (
+        <div className="p-4 bg-secondary rounded-xl text-center mt-4">
+          <p className="text-sm text-muted-foreground">Valor a pagar</p>
+          <p className="text-2xl font-bold">R$ {(amount / 100).toFixed(2)}</p>
+        </div>
+      )}
+
+      {/* Security badge */}
+      {(flowState === 'generating' || flowState === 'redirecting') && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4">
+          <Shield className="w-4 h-4" />
+          <span>Pagamento processado de forma segura via Stripe</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -500,11 +727,12 @@ export function ClientAwaitingPaymentView() {
               )
             )}
 
-            {/* PIX Payment - Redirects to Stripe Checkout */}
+            {/* PIX Payment - Full Checkout Flow with UX states */}
             {!loadingPayment && currentPaymentMethod === 'pix' && chamado && (
-              <PixCheckoutRedirect
+              <PixCheckoutFlow
                 chamadoId={chamado.id}
                 onError={handlePaymentError}
+                onSuccess={handlePaymentSuccess}
                 amount={paymentAmount || Math.round((chamado.valor || 0) * 100)}
               />
             )}
