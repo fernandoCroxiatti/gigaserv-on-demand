@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { 
+  isNativeApp, 
+  isPushAvailable, 
+  requestNativePushPermission, 
+  setupPushListeners,
+  removeAllDeliveredNotifications
+} from '@/lib/capacitorPush';
 
 interface NotificationPreferences {
   enabled: boolean;
@@ -33,14 +40,90 @@ export function useNotifications() {
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
   const permissionAskedRef = useRef(false);
+  const nativeListenersCleanupRef = useRef<(() => void) | null>(null);
+
+  // Check if running in native app
+  const isNative = isNativeApp();
 
   // Check current permission status
   useEffect(() => {
-    if ('Notification' in window) {
+    if (isNative) {
+      // For native, we'll check when requesting
+      setPermission('default');
+    } else if ('Notification' in window) {
       setPermission(Notification.permission);
     }
-  }, []);
+  }, [isNative]);
+
+  // Setup native push listeners
+  useEffect(() => {
+    if (!isNative || !user?.id) return;
+
+    const cleanup = setupPushListeners(
+      // On token received
+      async (token: string) => {
+        console.log('[useNotifications] FCM token received:', token);
+        setFcmToken(token);
+        
+        // Save FCM token to database
+        await saveFcmToken(token);
+      },
+      // On notification received (foreground)
+      (notification) => {
+        console.log('[useNotifications] Native notification received:', notification);
+        // Could trigger local sound/vibration here
+      },
+      // On notification action (user tapped)
+      (action) => {
+        console.log('[useNotifications] Notification action:', action);
+        // Navigate based on notification data
+        const data = action.notification.data;
+        if (data?.chamadoId) {
+          // Could trigger navigation here
+        }
+        // Clear delivered notifications
+        removeAllDeliveredNotifications();
+      }
+    );
+
+    nativeListenersCleanupRef.current = cleanup;
+
+    return () => {
+      if (nativeListenersCleanupRef.current) {
+        nativeListenersCleanupRef.current();
+      }
+    };
+  }, [isNative, user?.id]);
+
+  // Save FCM token to database
+  const saveFcmToken = useCallback(async (token: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('notification_subscriptions')
+        .upsert({
+          user_id: user.id,
+          endpoint: `fcm://${token}`, // Use fcm:// prefix to identify FCM tokens
+          p256dh: 'fcm', // Placeholder for FCM
+          auth: 'fcm', // Placeholder for FCM
+          user_agent: navigator.userAgent,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,endpoint'
+        });
+
+      if (error) {
+        console.error('[useNotifications] Error saving FCM token:', error);
+      } else {
+        console.log('[useNotifications] FCM token saved to database');
+      }
+    } catch (error) {
+      console.error('[useNotifications] Error saving FCM token:', error);
+    }
+  }, [user?.id]);
 
   // Load user preferences
   useEffect(() => {
@@ -75,10 +158,10 @@ export function useNotifications() {
     loadPreferences();
   }, [user?.id]);
 
-  // Register service worker and get push subscription
+  // Register service worker and get push subscription (Web Push)
   const registerServiceWorker = useCallback(async () => {
-    if (!('serviceWorker' in navigator)) {
-      console.log('Service workers not supported');
+    if (isNative || !('serviceWorker' in navigator)) {
+      console.log('[useNotifications] Service workers not available');
       return null;
     }
 
@@ -86,43 +169,41 @@ export function useNotifications() {
       const registration = await navigator.serviceWorker.register('/sw.js', {
         scope: '/'
       });
-      console.log('Service Worker registered:', registration);
+      console.log('[useNotifications] Service Worker registered:', registration);
       return registration;
     } catch (error) {
-      console.error('Service Worker registration failed:', error);
+      console.error('[useNotifications] Service Worker registration failed:', error);
       return null;
     }
-  }, []);
+  }, [isNative]);
 
-  // Subscribe to push notifications
+  // Subscribe to Web Push
   const subscribeToPush = useCallback(async (registration: ServiceWorkerRegistration) => {
     if (!VAPID_PUBLIC_KEY) {
-      console.log('VAPID public key not configured');
+      console.log('[useNotifications] VAPID public key not configured');
       return null;
     }
 
     try {
-      // Check if already subscribed
       let subscription = await registration.pushManager.getSubscription();
       
       if (!subscription) {
-        // Subscribe to push
         const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: applicationServerKey.buffer as ArrayBuffer
         });
-        console.log('Push subscription created:', subscription);
+        console.log('[useNotifications] Web Push subscription created:', subscription);
       }
 
       return subscription;
     } catch (error) {
-      console.error('Push subscription failed:', error);
+      console.error('[useNotifications] Web Push subscription failed:', error);
       return null;
     }
   }, []);
 
-  // Save push subscription to database
+  // Save Web Push subscription to database
   const savePushSubscription = useCallback(async (subscription: PushSubscription) => {
     if (!user?.id) return;
 
@@ -131,7 +212,6 @@ export function useNotifications() {
       const p256dh = subscriptionJson.keys?.p256dh || '';
       const auth = subscriptionJson.keys?.auth || '';
 
-      // Upsert subscription (update if endpoint exists)
       const { error } = await supabase
         .from('notification_subscriptions')
         .upsert({
@@ -146,40 +226,34 @@ export function useNotifications() {
         });
 
       if (error) {
-        console.error('Error saving push subscription:', error);
+        console.error('[useNotifications] Error saving push subscription:', error);
       } else {
-        console.log('Push subscription saved to database');
+        console.log('[useNotifications] Web Push subscription saved to database');
       }
     } catch (error) {
-      console.error('Error saving push subscription:', error);
+      console.error('[useNotifications] Error saving push subscription:', error);
     }
   }, [user?.id]);
 
-  // Request notification permission
+  // Request notification permission (handles both native and web)
   const requestPermission = useCallback(async (): Promise<boolean> => {
-    if (!('Notification' in window)) {
-      console.log('Notifications not supported');
-      return false;
-    }
+    console.log('[useNotifications] Requesting permission, isNative:', isNative);
 
     try {
-      const result = await Notification.requestPermission();
-      setPermission(result);
-      
-      if (user?.id) {
-        // Update preferences in database
-        await supabase
-          .from('notification_preferences')
-          .upsert({
-            user_id: user.id,
-            permission_asked_at: new Date().toISOString(),
-            permission_granted: result === 'granted',
-            enabled: result === 'granted'
-          }, {
-            onConflict: 'user_id'
-          });
+      let granted = false;
 
-        if (result === 'granted') {
+      if (isNative && isPushAvailable()) {
+        // Native push permission
+        granted = await requestNativePushPermission();
+        console.log('[useNotifications] Native permission result:', granted);
+      } else if ('Notification' in window) {
+        // Web push permission
+        const result = await Notification.requestPermission();
+        setPermission(result);
+        granted = result === 'granted';
+        console.log('[useNotifications] Web permission result:', result);
+
+        if (granted) {
           // Register service worker and subscribe to push
           const registration = await registerServiceWorker();
           if (registration) {
@@ -191,21 +265,35 @@ export function useNotifications() {
         }
       }
 
-      return result === 'granted';
+      // Update preferences in database
+      if (user?.id) {
+        await supabase
+          .from('notification_preferences')
+          .upsert({
+            user_id: user.id,
+            permission_asked_at: new Date().toISOString(),
+            permission_granted: granted,
+            enabled: granted
+          }, {
+            onConflict: 'user_id'
+          });
+      }
+
+      return granted;
     } catch (error) {
-      console.error('Error requesting notification permission:', error);
+      console.error('[useNotifications] Error requesting permission:', error);
       return false;
     }
-  }, [user?.id, registerServiceWorker, subscribeToPush, savePushSubscription]);
+  }, [isNative, user?.id, registerServiceWorker, subscribeToPush, savePushSubscription]);
 
   // Show permission modal (triggered at right moment)
   const triggerPermissionFlow = useCallback(() => {
     if (permissionAskedRef.current) return;
-    if (permission !== 'default') return;
+    if (!isNative && permission !== 'default') return;
     
     permissionAskedRef.current = true;
     setShowPermissionModal(true);
-  }, [permission]);
+  }, [isNative, permission]);
 
   // Handle permission modal confirm
   const handlePermissionConfirm = useCallback(async () => {
@@ -252,14 +340,14 @@ export function useNotifications() {
       }
       return false;
     } catch (err) {
-      console.error('Error updating preferences:', err);
+      console.error('[useNotifications] Error updating preferences:', err);
       return false;
     }
   }, [user?.id]);
 
-  // Send local notification (when app is in foreground)
+  // Send local notification (when app is in foreground - web only)
   const sendLocalNotification = useCallback((title: string, options?: NotificationOptions) => {
-    if (permission !== 'granted') return;
+    if (isNative || permission !== 'granted') return;
     
     try {
       new Notification(title, {
@@ -268,15 +356,23 @@ export function useNotifications() {
         ...options
       });
     } catch (error) {
-      console.error('Error sending local notification:', error);
+      console.error('[useNotifications] Error sending local notification:', error);
     }
-  }, [permission]);
+  }, [isNative, permission]);
 
   // Check if should ask for permission
-  const shouldAskPermission = permission === 'default' && !preferences?.permission_granted;
+  const shouldAskPermission = (isNative || permission === 'default') && !preferences?.permission_granted;
 
   // Re-subscribe to push (useful after re-opening app)
   const resubscribeToPush = useCallback(async () => {
+    if (isNative) {
+      // For native, just request permission again which will re-register
+      if (isPushAvailable()) {
+        await requestNativePushPermission();
+      }
+      return;
+    }
+
     if (permission !== 'granted' || !user?.id) return;
     
     const registration = await navigator.serviceWorker.ready;
@@ -284,7 +380,7 @@ export function useNotifications() {
     if (subscription) {
       await savePushSubscription(subscription);
     }
-  }, [permission, user?.id, subscribeToPush, savePushSubscription]);
+  }, [isNative, permission, user?.id, subscribeToPush, savePushSubscription]);
 
   return {
     permission,
@@ -292,6 +388,8 @@ export function useNotifications() {
     loading,
     showPermissionModal,
     shouldAskPermission,
+    isNative,
+    fcmToken,
     triggerPermissionFlow,
     handlePermissionConfirm,
     handlePermissionDecline,
