@@ -305,7 +305,7 @@ function PixCheckoutFlow({
             </div>
             <p className="text-lg font-medium">Abrindo página de pagamento...</p>
             <p className="text-sm text-muted-foreground text-center">
-              Você será redirecionado para a página segura do Stripe
+              Você será redirecionado para a página segura de pagamento
             </p>
           </>
         );
@@ -318,7 +318,7 @@ function PixCheckoutFlow({
             </div>
             <p className="text-lg font-medium">Aguardando pagamento...</p>
             <p className="text-sm text-muted-foreground text-center">
-              Complete o pagamento na página do Stripe e retorne aqui
+              Complete o pagamento PIX e retorne aqui
             </p>
             <Button 
               variant="outline" 
@@ -342,7 +342,7 @@ function PixCheckoutFlow({
             </p>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <div className="w-2 h-2 bg-status-searching rounded-full animate-pulse" />
-              <span>Aguardando confirmação do webhook</span>
+              <span>Aguardando confirmação bancária</span>
             </div>
           </>
         );
@@ -394,7 +394,7 @@ function PixCheckoutFlow({
       {(flowState === 'generating' || flowState === 'redirecting') && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4">
           <Shield className="w-4 h-4" />
-          <span>Pagamento processado de forma segura via Stripe</span>
+          <span>Transação segura e criptografada</span>
         </div>
       )}
     </div>
