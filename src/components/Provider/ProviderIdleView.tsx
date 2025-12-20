@@ -170,26 +170,6 @@ export function ProviderIdleView() {
         </div>
       </div>
 
-      {/* Stats cards - Compact */}
-      {isOnline && (
-        <div className={`absolute ${geoError ? 'top-52' : 'top-36'} left-3 right-3 z-10 grid grid-cols-3 gap-2 animate-fade-in`}>
-          <div className="bg-card rounded-xl p-2.5 text-center shadow-sm">
-            <TrendingUp className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
-            <p className="text-base font-bold">{user?.providerData?.totalServices || 0}</p>
-            <p className="text-[10px] text-muted-foreground">Total</p>
-          </div>
-          <div className="bg-card rounded-xl p-2.5 text-center shadow-sm">
-            <Clock className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
-            <p className="text-base font-bold">--</p>
-            <p className="text-[10px] text-muted-foreground">Online</p>
-          </div>
-          <div className="bg-card rounded-xl p-2.5 text-center shadow-sm">
-            <DollarSign className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
-            <p className="text-base font-bold">--</p>
-            <p className="text-[10px] text-muted-foreground">Ganhos</p>
-          </div>
-        </div>
-      )}
 
       {/* Bottom control panel */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
