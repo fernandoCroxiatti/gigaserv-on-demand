@@ -15,6 +15,8 @@ import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfUse from "./pages/TermsOfUse";
 import Settings from "./pages/Settings";
+import PixSucesso from "./pages/PixSucesso";
+import PixCancelado from "./pages/PixCancelado";
 import { AdminLayout } from "./components/Admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminSettings from "./pages/admin/Settings";
@@ -139,6 +141,23 @@ const App = () => (
               {/* Legal pages - publicly accessible */}
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfUse />} />
+              {/* PIX payment return pages */}
+              <Route 
+                path="/pix-sucesso" 
+                element={
+                  <ProtectedRoute>
+                    <PixSucesso />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/pix-cancelado" 
+                element={
+                  <ProtectedRoute>
+                    <PixCancelado />
+                  </ProtectedRoute>
+                } 
+              />
               {/* Settings page */}
               <Route 
                 path="/settings" 

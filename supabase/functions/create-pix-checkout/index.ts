@@ -192,8 +192,9 @@ serve(async (req) => {
           payment_method_type: 'pix',
         },
       },
-      success_url: `${origin}/?pix_success=true&chamado_id=${chamado_id}`,
-      cancel_url: `${origin}/?pix_canceled=true&chamado_id=${chamado_id}`,
+      // URLs for return from Stripe Checkout
+      success_url: `${origin}/pix-sucesso?session_id={CHECKOUT_SESSION_ID}&chamado_id=${chamado_id}`,
+      cancel_url: `${origin}/pix-cancelado?chamado_id=${chamado_id}`,
       expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes expiration
       metadata: {
         chamado_id: chamado_id,
