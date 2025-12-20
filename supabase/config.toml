@@ -5,3 +5,27 @@ verify_jwt = false
 
 [functions.get-stripe-publishable-key]
 verify_jwt = false
+
+[functions.create-payment-intent]
+verify_jwt = true
+
+[functions.check-connect-status]
+verify_jwt = true
+
+[functions.create-connect-account]
+verify_jwt = true
+
+[functions.create-setup-intent]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.delete-payment-method]
+verify_jwt = true
+
+[functions.list-payment-methods]
+verify_jwt = true
+
+[functions.provider-financial-data]
+verify_jwt = true
