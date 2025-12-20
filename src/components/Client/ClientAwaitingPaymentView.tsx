@@ -14,7 +14,9 @@ import {
   Loader2,
   AlertCircle,
   Car,
-  Smartphone
+  Smartphone,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { PaymentMethod } from '@/types/chamado';
 import type { Stripe } from '@stripe/stripe-js';
@@ -24,7 +26,15 @@ import { toast } from 'sonner';
 import { getStripePromise } from '@/lib/stripe';
 import { WalletPaymentForm } from './WalletPaymentForm';
 
-type ExtendedPaymentMethod = PaymentMethod | 'wallet';
+type ExtendedPaymentMethod = PaymentMethod | 'wallet' | 'saved_card';
+
+interface SavedCard {
+  id: string;
+  brand: string;
+  last4: string;
+  exp_month?: number;
+  exp_year?: number;
+}
 
 const basePaymentMethods: { id: ExtendedPaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean; walletOnly?: boolean }[] = [
   { id: 'wallet', name: 'Apple Pay / Google Pay', icon: Smartphone, description: 'Carteira digital', available: true, walletOnly: true },
@@ -413,9 +423,38 @@ export function ClientAwaitingPaymentView() {
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<ExtendedPaymentMethod | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [walletAvailable, setWalletAvailable] = useState<boolean | null>(null);
+  
+  // Saved cards state
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [loadingSavedCards, setLoadingSavedCards] = useState(true);
+  const [selectedSavedCard, setSelectedSavedCard] = useState<string | null>(null);
+  const [showSavedCards, setShowSavedCards] = useState(false);
+  const [payingWithSavedCard, setPayingWithSavedCard] = useState(false);
 
   useEffect(() => {
     setStripePromise(getStripePromise());
+  }, []);
+
+  // Fetch saved cards on mount
+  useEffect(() => {
+    const fetchSavedCards = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('list-payment-methods');
+        if (!error && data?.payment_methods) {
+          setSavedCards(data.payment_methods);
+          // If user has saved cards, auto-select the first one
+          if (data.payment_methods.length > 0) {
+            setSelectedSavedCard(data.payment_methods[0].id);
+            setShowSavedCards(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching saved cards:', err);
+      } finally {
+        setLoadingSavedCards(false);
+      }
+    };
+    fetchSavedCards();
   }, []);
 
   // Filter payment methods based on wallet availability
@@ -428,6 +467,63 @@ export function ClientAwaitingPaymentView() {
     });
 
   const provider = availableProviders.find(p => p.id === chamado?.prestadorId);
+
+  // Pay with saved card
+  const handlePayWithSavedCard = async () => {
+    if (!chamado?.id || !selectedSavedCard) return;
+    
+    setPayingWithSavedCard(true);
+    setPaymentError(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('pay-with-saved-card', {
+        body: {
+          chamado_id: chamado.id,
+          payment_method_id: selectedSavedCard,
+        },
+      });
+
+      if (error) {
+        console.error('Error paying with saved card:', error);
+        setPaymentError('Erro ao processar pagamento. Tente novamente.');
+        return;
+      }
+
+      if (data?.error) {
+        setPaymentError(data.error);
+        return;
+      }
+
+      // Check if 3D Secure is required
+      if (data?.requires_action && data?.client_secret) {
+        // Need to handle 3D Secure
+        const stripe = await stripePromise;
+        if (!stripe) {
+          setPaymentError('Erro ao carregar Stripe');
+          return;
+        }
+
+        const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(data.client_secret);
+        
+        if (confirmError) {
+          setPaymentError(confirmError.message || 'Erro na autenticação');
+          return;
+        }
+
+        if (paymentIntent?.status === 'succeeded') {
+          handlePaymentSuccess();
+        }
+      } else if (data?.success) {
+        // Payment succeeded immediately
+        handlePaymentSuccess();
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      setPaymentError('Erro ao conectar com servidor de pagamentos');
+    } finally {
+      setPayingWithSavedCard(false);
+    }
+  };
 
   const createPaymentIntent = useCallback(async (paymentMethod: ExtendedPaymentMethod) => {
     if (!chamado?.id) return;
@@ -650,6 +746,95 @@ export function ClientAwaitingPaymentView() {
               </div>
             </div>
           </div>
+
+          {/* Saved Cards Section */}
+          {savedCards.length > 0 && (
+            <div className="p-4 border-b border-border">
+              <button
+                onClick={() => setShowSavedCards(!showSavedCards)}
+                className="w-full flex items-center justify-between mb-3"
+              >
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-primary" />
+                  <span className="font-medium">Cartões salvos</span>
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                    {savedCards.length}
+                  </span>
+                </div>
+                {showSavedCards ? (
+                  <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                )}
+              </button>
+
+              {showSavedCards && (
+                <div className="space-y-2">
+                  {savedCards.map((card) => (
+                    <button
+                      key={card.id}
+                      onClick={() => setSelectedSavedCard(card.id)}
+                      disabled={payingWithSavedCard}
+                      className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all ${
+                        selectedSavedCard === card.id
+                          ? 'bg-primary/10 border-2 border-primary'
+                          : 'bg-secondary border-2 border-transparent'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        selectedSavedCard === card.id ? 'bg-primary text-primary-foreground' : 'bg-background'
+                      }`}>
+                        <CreditCard className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="font-medium capitalize">{card.brand}</p>
+                        <p className="text-sm text-muted-foreground">
+                          **** {card.last4}
+                          {card.exp_month && card.exp_year && (
+                            <span className="ml-2">
+                              {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      {selectedSavedCard === card.id && (
+                        <Check className="w-5 h-5 text-primary" />
+                      )}
+                    </button>
+                  ))}
+
+                  {/* Pay with saved card button */}
+                  <Button
+                    onClick={handlePayWithSavedCard}
+                    disabled={!selectedSavedCard || payingWithSavedCard}
+                    className="w-full mt-3"
+                    size="lg"
+                  >
+                    {payingWithSavedCard ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Processando pagamento...
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-5 h-5" />
+                        Pagar R$ {chamado.valor?.toFixed(2)} com cartão salvo
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-card px-2 text-muted-foreground">ou pague com</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Payment methods selection */}
           <div className="p-4 border-b border-border">
