@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
-import { Menu, User, Landmark, FileText, Shield, Scale, LogOut, Trash2, Star, AlertTriangle, Loader2 } from 'lucide-react';
+import { Menu, User, Landmark, FileText, Shield, Scale, LogOut, Trash2, Star, AlertTriangle, Loader2, CreditCard } from 'lucide-react';
 import { Button } from './ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -124,16 +124,32 @@ export function GlobalDrawer() {
             </>
           )}
 
-          {/* Client profile */}
-          {!isProvider && (
+        {/* Client menu items */}
+        {!isProvider && (
+          <>
             <button
               onClick={() => handleNavigate('/profile')}
               className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
             >
               <User className="w-5 h-5" />
-              <span className="font-medium">Meu Perfil</span>
+              <span className="font-medium">Perfil</span>
             </button>
-          )}
+            <button
+              onClick={() => handleNavigate('/profile?tab=rides')}
+              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
+            >
+              <FileText className="w-5 h-5" />
+              <span className="font-medium">Corridas</span>
+            </button>
+            <button
+              onClick={() => handleNavigate('/profile?tab=payments')}
+              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
+            >
+              <CreditCard className="w-5 h-5" />
+              <span className="font-medium">Pagamentos</span>
+            </button>
+          </>
+        )}
 
           <div className="border-t border-border my-4 pt-4">
             <button
