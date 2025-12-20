@@ -779,12 +779,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       const newStatus = !providerData.is_online;
+      
+      // Update provider online status
       const { error } = await supabase
         .from('provider_data')
         .update({ is_online: newStatus })
         .eq('user_id', authUser.id);
 
       if (error) throw error;
+
+      // CRITICAL: When going online, ensure active_profile is set to 'provider'
+      // This is required for the chamado listener to work correctly
+      if (newStatus) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ active_profile: 'provider' })
+          .eq('user_id', authUser.id);
+        
+        if (!profileError) {
+          setProfile(prev => prev ? { ...prev, active_profile: 'provider' } : null);
+        }
+      }
 
       setProviderData(prev => prev ? { ...prev, is_online: newStatus } : null);
       toast.success(newStatus ? 'Você está online!' : 'Você está offline');
