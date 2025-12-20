@@ -15,8 +15,7 @@ import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfUse from "./pages/TermsOfUse";
 import Settings from "./pages/Settings";
-import PixSucesso from "./pages/PixSucesso";
-import PixCancelado from "./pages/PixCancelado";
+import Support from "./pages/Support";
 import { AdminLayout } from "./components/Admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminSettings from "./pages/admin/Settings";
@@ -142,29 +141,12 @@ const App = () => (
               {/* Legal pages - publicly accessible */}
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfUse />} />
-              {/* Stripe Audit Report - admin only */}
+              {/* Support page */}
               <Route 
-                path="/stripe-audit" 
-                element={
-                  <AdminRoute>
-                    <StripeAuditReport />
-                  </AdminRoute>
-                } 
-              />
-              {/* PIX payment return pages */}
-              <Route 
-                path="/pix-sucesso" 
+                path="/support" 
                 element={
                   <ProtectedRoute>
-                    <PixSucesso />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/pix-cancelado" 
-                element={
-                  <ProtectedRoute>
-                    <PixCancelado />
+                    <Support />
                   </ProtectedRoute>
                 } 
               />
