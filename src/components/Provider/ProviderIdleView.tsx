@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
@@ -9,6 +9,8 @@ import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useNotifications } from '@/hooks/useNotifications';
+import { NotificationPermissionModal } from '../Notifications/NotificationPermissionModal';
 
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
@@ -19,6 +21,15 @@ export function ProviderIdleView() {
   const [stripeVerified, setStripeVerified] = useState(false);
   const [checkingStripe, setCheckingStripe] = useState(true);
   const navigate = useNavigate();
+  
+  // Notification permission flow
+  const { 
+    permission: notifPermission, 
+    shouldAskPermission,
+    requestPermission
+  } = useNotifications();
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const hasAskedNotifRef = useRef(false);
   
   const isOnline = user?.providerData?.online || false;
   const radarRange = user?.providerData?.radarRange || 15;
@@ -78,9 +89,25 @@ export function ProviderIdleView() {
         });
         return;
       }
+      
+      // Check if we should ask for notification permission (first time going online)
+      if (shouldAskPermission && !hasAskedNotifRef.current) {
+        hasAskedNotifRef.current = true;
+        setShowNotifModal(true);
+        // Continue with going online after modal
+      }
     }
 
     await toggleProviderOnline();
+  };
+
+  const handleNotifConfirm = async () => {
+    setShowNotifModal(false);
+    await requestPermission();
+  };
+
+  const handleNotifDecline = () => {
+    setShowNotifModal(false);
   };
 
   // Update provider location when location changes
@@ -295,6 +322,14 @@ export function ProviderIdleView() {
           )}
         </div>
       </div>
+      
+      {/* Notification permission modal for providers */}
+      <NotificationPermissionModal
+        open={showNotifModal}
+        onConfirm={handleNotifConfirm}
+        onDecline={handleNotifDecline}
+        userType="provider"
+      />
     </div>
   );
 }

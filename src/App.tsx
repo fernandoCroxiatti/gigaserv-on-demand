@@ -3,10 +3,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AppProvider } from "./contexts/AppContext";
+import { AppProvider, useApp } from "./contexts/AppContext";
 import { GoogleMapsProvider } from "./components/Map/GoogleMapsProvider";
 import { useAuth } from "./hooks/useAuth";
 import { useAdmin } from "./hooks/useAdmin";
+import { NotificationProvider } from "./components/Notifications/NotificationProvider";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
@@ -96,13 +97,26 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Wrapper to access app context for notification provider
+function AppWithNotifications({ children }: { children: React.ReactNode }) {
+  const { user } = useApp();
+  const activeProfile = user?.activeProfile || 'client';
+  
+  return (
+    <NotificationProvider activeProfile={activeProfile}>
+      {children}
+    </NotificationProvider>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <GoogleMapsProvider>
         <AppProvider>
-          <Toaster />
-          <Sonner />
+          <AppWithNotifications>
+            <Toaster />
+            <Sonner />
           <BrowserRouter>
             <Routes>
               <Route 
@@ -178,6 +192,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
+          </AppWithNotifications>
         </AppProvider>
       </GoogleMapsProvider>
     </TooltipProvider>
