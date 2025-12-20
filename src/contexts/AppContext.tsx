@@ -34,7 +34,7 @@ interface AppContextType {
   
   chamado: Chamado | null;
   setChamadoStatus: (status: ChamadoStatus) => void;
-  createChamado: (tipoServico: ServiceType, origem: Location, destino: Location | null) => Promise<void>;
+  createChamado: (tipoServico: ServiceType, origem: Location, destino: Location | null, vehicleType?: string) => Promise<void>;
   acceptChamado: (chamadoId: string) => Promise<void>;
   proposeValue: (value: number) => Promise<void>;
   confirmValue: () => Promise<void>;
@@ -81,6 +81,7 @@ function mapDbChamadoToChamado(db: DbChamado): Chamado {
     } : null,
     valor: db.valor ? Number(db.valor) : null,
     valorProposto: db.valor_proposto ? Number(db.valor_proposto) : null,
+    vehicleType: (db as any).vehicle_type || null,
     payment: db.payment_status ? {
       id: db.stripe_payment_intent_id || `payment-${db.id}`,
       status: db.payment_status,
@@ -571,7 +572,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [authUser, profile, canAccessProviderFeatures]);
 
-  const createChamado = useCallback(async (tipoServico: ServiceType, origem: Location, destino: Location | null) => {
+  const createChamado = useCallback(async (tipoServico: ServiceType, origem: Location, destino: Location | null, vehicleType?: string) => {
     if (!authUser) {
       toast.error('Você precisa estar logado');
       return;
@@ -584,19 +585,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const insertData: any = {
+        cliente_id: authUser.id,
+        tipo_servico: tipoServico,
+        status: 'searching',
+        origem_lat: origem.lat,
+        origem_lng: origem.lng,
+        origem_address: origem.address,
+        destino_lat: needsDestination && destino ? destino.lat : null,
+        destino_lng: needsDestination && destino ? destino.lng : null,
+        destino_address: needsDestination && destino ? destino.address : null,
+      };
+      
+      if (vehicleType) {
+        insertData.vehicle_type = vehicleType;
+      }
+
       const { data, error } = await supabase
         .from('chamados')
-        .insert({
-          cliente_id: authUser.id,
-          tipo_servico: tipoServico,
-          status: 'searching',
-          origem_lat: origem.lat,
-          origem_lng: origem.lng,
-          origem_address: origem.address,
-          destino_lat: needsDestination && destino ? destino.lat : null,
-          destino_lng: needsDestination && destino ? destino.lng : null,
-          destino_address: needsDestination && destino ? destino.address : null,
-        })
+        .insert(insertData)
         .select()
         .single();
 

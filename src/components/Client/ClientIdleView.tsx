@@ -7,6 +7,8 @@ import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { Button } from '../ui/button';
 import { Navigation, ChevronRight, Check, Loader2, RefreshCw, Crosshair } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
+import { VehicleType } from '@/types/vehicleTypes';
+import { VehicleTypeSelector } from './VehicleTypeSelector';
 
 const NEARBY_RADIUS_KM = 15;
 
@@ -15,6 +17,7 @@ export function ClientIdleView() {
   const { location: userLocation, loading: locationLoading, error: locationError, refresh: refreshLocation } = useGeolocation();
   
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
+  const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType>('carro_passeio');
   const [origem, setOrigem] = useState<Location | null>(null);
   const [origemText, setOrigemText] = useState<string>('');
   const [usingGpsLocation, setUsingGpsLocation] = useState(false);
@@ -91,10 +94,10 @@ export function ClientIdleView() {
     if (needsDestination && !destino) return;
     
     // Progressive search will be activated in searching state
-    createChamado(selectedService, origem, needsDestination ? destino : null);
+    createChamado(selectedService, origem, needsDestination ? destino : null, selectedVehicleType);
   };
 
-  const canSubmit = origem && (!needsDestination || destino);
+  const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType;
 
   return (
     <div className="relative h-full">
@@ -208,6 +211,12 @@ export function ClientIdleView() {
               {serviceConfig.description}
             </p>
           </div>
+
+          {/* Vehicle type selector */}
+          <VehicleTypeSelector 
+            value={selectedVehicleType} 
+            onChange={setSelectedVehicleType} 
+          />
 
           {/* Location inputs */}
           <div className="space-y-3">

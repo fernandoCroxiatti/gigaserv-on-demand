@@ -108,6 +108,7 @@ export type Database = {
           updated_at: string
           valor: number | null
           valor_proposto: number | null
+          vehicle_type: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Insert: {
           cliente_id?: string | null
@@ -142,6 +143,7 @@ export type Database = {
           updated_at?: string
           valor?: number | null
           valor_proposto?: number | null
+          vehicle_type?: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Update: {
           cliente_id?: string | null
@@ -176,6 +178,7 @@ export type Database = {
           updated_at?: string
           valor?: number | null
           valor_proposto?: number | null
+          vehicle_type?: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Relationships: []
       }
@@ -550,6 +553,20 @@ export type Database = {
         | "refunded"
       service_type: "guincho" | "borracharia" | "mecanica" | "chaveiro"
       user_profile_type: "client" | "provider"
+      vehicle_type:
+        | "carro_passeio"
+        | "carro_utilitario"
+        | "pickup"
+        | "van"
+        | "moto"
+        | "caminhao_toco"
+        | "caminhao_34"
+        | "truck"
+        | "carreta"
+        | "cavalinho"
+        | "onibus"
+        | "micro_onibus"
+        | "outro"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -697,6 +714,21 @@ export const Constants = {
       ],
       service_type: ["guincho", "borracharia", "mecanica", "chaveiro"],
       user_profile_type: ["client", "provider"],
+      vehicle_type: [
+        "carro_passeio",
+        "carro_utilitario",
+        "pickup",
+        "van",
+        "moto",
+        "caminhao_toco",
+        "caminhao_34",
+        "truck",
+        "carreta",
+        "cavalinho",
+        "onibus",
+        "micro_onibus",
+        "outro",
+      ],
     },
   },
 } as const
