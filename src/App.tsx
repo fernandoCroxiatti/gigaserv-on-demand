@@ -142,8 +142,15 @@ const App = () => (
               {/* Legal pages - publicly accessible */}
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfUse />} />
-              {/* Stripe Audit Report - publicly accessible */}
-              <Route path="/stripe-audit" element={<StripeAuditReport />} />
+              {/* Stripe Audit Report - admin only */}
+              <Route 
+                path="/stripe-audit" 
+                element={
+                  <AdminRoute>
+                    <StripeAuditReport />
+                  </AdminRoute>
+                } 
+              />
               {/* PIX payment return pages */}
               <Route 
                 path="/pix-sucesso" 
