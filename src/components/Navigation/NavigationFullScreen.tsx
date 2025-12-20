@@ -14,15 +14,9 @@ import {
   CheckCircle, 
   Flag, 
   MapPin, 
-  ArrowRight, 
-  Clock, 
-  Route, 
   AlertCircle, 
   Loader2,
-  Car,
-  AlertTriangle,
   RefreshCw,
-  Wifi
 } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
@@ -46,19 +40,24 @@ interface NavigationFullScreenProps {
   mode: ViewMode;
 }
 
+// GPS update interval in milliseconds (5 seconds for smooth updates with low API usage)
+const GPS_UPDATE_INTERVAL = 5000;
+
 export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const { chamado, finishService, profile, availableProviders, cancelChamado, chatMessages } = useApp();
   const [navigationPhase, setNavigationPhase] = useState<NavigationPhase>('going_to_vehicle');
   const [routePolyline, setRoutePolyline] = useState<string>('');
-  const [eta, setEta] = useState<string>('Calculando...');
-  const [distance, setDistance] = useState<string>('Calculando...');
+  const [eta, setEta] = useState<string>('');
+  const [distance, setDistance] = useState<string>('');
   const [isConfirming, setIsConfirming] = useState(false);
   const [showArrivalDialog, setShowArrivalDialog] = useState(false);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [lastReadMessageCount, setLastReadMessageCount] = useState(0);
+  const [showControls, setShowControls] = useState(true);
   const routeCalculatedRef = useRef<string>('');
+  const lastGpsUpdateRef = useRef<number>(0);
 
   // Get other party contact info
   const { phone: otherPartyPhone, name: otherPartyName, loading: contactLoading } = useOtherPartyContact(
@@ -76,19 +75,22 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     clearRoute 
   } = useNavigationRoute();
 
-  // Provider mode: use realtime GPS
+  // Provider mode: use realtime GPS with throttled updates
   const { 
     location: providerGPSLocation, 
     error: gpsError, 
     loading: gpsLoading,
     heading: providerHeading,
-    isApproximate: isApproximateLocation,
   } = useRealtimeGPS({
     enableHighAccuracy: true,
-    timeout: 15000, // Match the 15s timeout
-    maximumAge: 0,
+    timeout: 15000,
+    maximumAge: GPS_UPDATE_INTERVAL, // Allow cached position to reduce battery usage
     onLocationUpdate: async (location) => {
-      // Only update DB if provider mode
+      // Throttle database updates to reduce load
+      const now = Date.now();
+      if (now - lastGpsUpdateRef.current < GPS_UPDATE_INTERVAL) return;
+      lastGpsUpdateRef.current = now;
+
       if (mode === 'provider' && profile?.user_id) {
         try {
           await supabase
@@ -129,7 +131,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   // Current destination based on phase
   const currentDestination = isGoingToVehicle ? chamado.origem : chamado.destino;
 
-  // Load navigation state from database on mount
+  // Load navigation state from database on mount (ONCE)
   useEffect(() => {
     const loadNavigationState = async () => {
       const { data, error } = await supabase
@@ -208,30 +210,19 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   }, [chamado.id, navigationPhase, routePolyline, mode]);
 
   // Calculate route ONCE when phase changes (provider only)
-  // AUDIT FIX: Added multiple guards to prevent duplicate API calls
   useEffect(() => {
-    // Guard 1: Only provider calculates routes
     if (mode !== 'provider') return;
-    
-    // Guard 2: Need valid locations
     if (!providerLocation || !currentDestination) return;
     
-    // Guard 3: Check if already calculated for this phase
     const routeKey = `${chamado.id}-${navigationPhase}`;
-    if (routeCalculatedRef.current === routeKey) {
-      console.log('[Navigation] Skipping route calculation - already done for:', navigationPhase);
-      return;
-    }
+    if (routeCalculatedRef.current === routeKey) return;
     
-    // Guard 4: Skip if we already have a polyline for this phase (loaded from DB)
     if (routePolyline && routeCalculatedRef.current.includes(chamado.id)) {
-      console.log('[Navigation] Skipping route calculation - polyline already loaded');
       routeCalculatedRef.current = routeKey;
       return;
     }
 
     const doCalculateRoute = async () => {
-      console.log('[Navigation] Initiating route calculation for phase:', navigationPhase);
       const result = await calculateRoute(
         providerLocation,
         currentDestination,
@@ -248,7 +239,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     };
 
     doCalculateRoute();
-  // AUDIT FIX: Minimal dependencies - only trigger when phase changes, not on GPS updates
   }, [mode, navigationPhase, chamado.id, !!providerLocation, !!currentDestination]);
 
   // Update route data when routeData changes
@@ -260,14 +250,12 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     }
   }, [routeData]);
 
-  // Track unread messages - when chat is closed and new messages arrive
+  // Track unread messages
   useEffect(() => {
     if (showChat) {
-      // When chat opens, mark all as read
       setHasUnreadMessages(false);
       setLastReadMessageCount(chatMessages.length);
     } else if (chatMessages.length > lastReadMessageCount) {
-      // New messages arrived while chat is closed
       setHasUnreadMessages(true);
     }
   }, [chatMessages.length, showChat, lastReadMessageCount]);
@@ -275,16 +263,10 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   // Handle call button click
   const handleCall = useCallback(() => {
     if (!otherPartyPhone) {
-      toast.error('Telefone não disponível', {
-        description: 'O número de telefone não foi cadastrado.'
-      });
+      toast.error('Telefone não disponível');
       return;
     }
-    
-    // Clean the phone number (remove non-digits except +)
     const cleanPhone = otherPartyPhone.replace(/[^\d+]/g, '');
-    
-    // Open native dialer
     window.location.href = `tel:${cleanPhone}`;
   }, [otherPartyPhone]);
 
@@ -300,7 +282,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     setIsConfirming(true);
 
     try {
-      // Update database with arrival status
       await supabase
         .from('chamados')
         .update({
@@ -309,17 +290,14 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         })
         .eq('id', chamado.id);
 
-      // Clear current route for recalculation
       clearRoute();
       routeCalculatedRef.current = '';
       
       setNavigationPhase('going_to_destination');
-      setEta('Calculando...');
-      setDistance('Calculando...');
+      setEta('');
+      setDistance('');
       
-      toast.success('Chegada confirmada!', {
-        description: 'Agora leve o veículo ao destino.',
-      });
+      toast.success('Chegada confirmada!');
     } catch (error) {
       console.error('[Navigation] Error confirming arrival:', error);
       toast.error('Erro ao confirmar chegada');
@@ -333,7 +311,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     setIsConfirming(true);
 
     try {
-      // Mark destination arrival
       await supabase
         .from('chamados')
         .update({
@@ -341,7 +318,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         })
         .eq('id', chamado.id);
 
-      // Finish the service (triggers payment flow)
       await finishService();
     } catch (error) {
       console.error('[Navigation] Error finishing service:', error);
@@ -351,17 +327,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     }
   };
 
-  /**
-   * Manual route recalculation (only when provider clicks the button)
-   * Performs exactly 1 API call to Directions
-   */
   const handleManualRecalculate = useCallback(async () => {
     if (!providerLocation || !currentDestination) {
       toast.error('Localização não disponível');
       return;
     }
     
-    toast.info('Recalculando rota...', { duration: 2000 });
+    toast.info('Recalculando rota...');
     
     const result = await forceRecalculateRoute(
       providerLocation,
@@ -376,8 +348,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       setEta(result.durationText);
       routeCalculatedRef.current = `${chamado.id}-${navigationPhase}`;
       toast.success('Rota atualizada!');
-    } else {
-      toast.error('Erro ao recalcular rota');
     }
   }, [providerLocation, currentDestination, chamado.id, navigationPhase, forceRecalculateRoute]);
 
@@ -395,7 +365,12 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     return `${hours}h ${mins}min`;
   }
 
-  // Provider GPS Error state
+  // Toggle controls visibility
+  const toggleControls = useCallback(() => {
+    setShowControls(prev => !prev);
+  }, []);
+
+  // GPS Error state
   if (mode === 'provider' && gpsError) {
     return (
       <div className="h-full flex items-center justify-center bg-background p-6">
@@ -403,9 +378,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-2">GPS Necessário</h2>
           <p className="text-muted-foreground mb-4">{gpsError}</p>
-          <p className="text-sm text-muted-foreground">
-            Ative a localização nas configurações do seu navegador para usar a navegação.
-          </p>
         </div>
       </div>
     );
@@ -418,18 +390,16 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
           <p className="font-medium">Iniciando navegação...</p>
-          <p className="text-sm text-muted-foreground">Aguarde a localização GPS</p>
         </div>
       </div>
     );
   }
 
   const themeClass = mode === 'provider' ? 'provider-theme' : '';
-  const primaryColor = mode === 'provider' ? 'provider-primary' : 'status-inService';
 
   return (
-    <div className={`relative h-full ${themeClass}`}>
-      {/* Full screen navigation map */}
+    <div className={`relative h-full ${themeClass}`} onClick={toggleControls}>
+      {/* Full screen map - takes 100% */}
       <OptimizedNavigationMap 
         providerLocation={providerLocation}
         destination={currentDestination}
@@ -439,268 +409,164 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         className="absolute inset-0" 
       />
 
-      {/* Navigation header - floating */}
-      <div className="absolute top-24 left-4 right-4 z-10 animate-slide-down">
-        <div className="glass-card rounded-2xl p-4 bg-white/95 backdrop-blur-sm shadow-lg">
+      {/* Minimal floating info bar - top */}
+      <div className={cn(
+        "absolute top-20 left-4 right-4 z-10 transition-all duration-300",
+        showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
+      )}>
+        <div className="bg-card/95 backdrop-blur-md rounded-2xl px-4 py-3 shadow-lg flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 bg-${primaryColor}/10 rounded-full flex items-center justify-center`}>
-              <Navigation className={`w-6 h-6 text-${primaryColor} animate-pulse`} />
+            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+              <Navigation className="w-5 h-5 text-primary" />
             </div>
-            <div className="flex-1">
-              <p className={`font-bold text-${primaryColor} text-lg`}>
+            <div>
+              <p className="font-semibold text-sm">
                 {isGoingToVehicle 
-                  ? (mode === 'provider' ? 'Indo até o veículo' : 'Prestador a caminho')
-                  : (mode === 'provider' ? 'Levando ao destino' : 'Indo ao destino')
+                  ? (mode === 'provider' ? 'Indo ao veículo' : 'A caminho')
+                  : (mode === 'provider' ? 'Indo ao destino' : 'Em trânsito')
                 }
               </p>
-              <p className="text-sm text-muted-foreground">
-                {serviceConfig.label} • R$ {chamado.valor?.toFixed(2)}
-              </p>
+              {(eta || distance) && (
+                <p className="text-xs text-muted-foreground">
+                  {eta && <span>{eta}</span>}
+                  {eta && distance && <span> • </span>}
+                  {distance && <span>{distance}</span>}
+                </p>
+              )}
             </div>
-            
-            {/* Route calculating indicator */}
+          </div>
+          
+          {/* Quick actions */}
+          <div className="flex items-center gap-2">
             {isCalculatingRoute && (
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
             )}
-            
-            {/* Manual recalculate button (provider only) */}
             {mode === 'provider' && !isCalculatingRoute && (
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={handleManualRecalculate}
-                className="h-10 w-10"
-                title="Recalcular rota"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleManualRecalculate();
+                }}
+                className="h-8 w-8"
               >
-                <RefreshCw className="w-5 h-5 text-muted-foreground" />
+                <RefreshCw className="w-4 h-4" />
               </Button>
             )}
-          </div>
-
-          {/* Approximate location warning (provider only) */}
-          {mode === 'provider' && isApproximateLocation && (
-            <div className="mt-2 flex items-center gap-2 p-2 bg-amber-500/10 rounded-lg">
-              <Wifi className="w-4 h-4 text-amber-600" />
-              <span className="text-xs text-amber-700">Localização aproximada - aguardando GPS</span>
-            </div>
-          )}
-
-          {/* ETA and Distance */}
-          <div className="mt-3 flex items-center gap-4 pt-3 border-t border-border">
-            <div className="flex items-center gap-2 flex-1">
-              <Clock className={`w-5 h-5 text-${primaryColor}`} />
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  {mode === 'provider' ? 'Tempo estimado' : 'Chegada em'}
-                </p>
-                <p className="font-bold text-lg">{eta}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-1">
-              <Route className={`w-5 h-5 text-${primaryColor}`} />
-              <div>
-                <p className="text-xs text-muted-foreground">Distância</p>
-                <p className="font-bold text-lg">{distance}</p>
-              </div>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Step indicator - floating (only for services with destination) */}
-      {hasDestination && (
-        <div className="absolute top-56 left-1/2 -translate-x-1/2 z-10 animate-fade-in">
-          <div className="flex items-center gap-2 bg-white/95 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-              isGoingToVehicle 
-                ? `bg-${primaryColor} text-white` 
-                : 'bg-green-500 text-white'
-            }`}>
-              {isGoingToVehicle ? '1' : <CheckCircle className="w-4 h-4" />}
-            </div>
-            <ArrowRight className="w-4 h-4 text-muted-foreground" />
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-              !isGoingToVehicle 
-                ? `bg-${primaryColor} text-white` 
-                : 'bg-muted text-muted-foreground'
-            }`}>
-              2
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom action card */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-3xl shadow-uber-lg">
-          {/* Current step info */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-3">
-              {mode === 'client' && provider && (
-                <img 
-                  src={provider.avatar} 
-                  alt={provider.name}
-                  className="w-14 h-14 rounded-full border-2 border-status-inService"
-                />
-              )}
-              {mode === 'provider' && (
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center ${
-                  isGoingToVehicle ? 'bg-provider-primary/10' : 'bg-green-500/10'
-                }`}>
-                  {isGoingToVehicle ? (
-                    <MapPin className="w-7 h-7 text-provider-primary" />
-                  ) : (
-                    <Flag className="w-7 h-7 text-green-500" />
-                  )}
-                </div>
-              )}
-              <div className="flex-1">
-                <p className="font-bold text-lg">
-                  {mode === 'client' && provider 
-                    ? provider.name 
-                    : (isGoingToVehicle ? 'Chegue até o veículo' : 'Leve ao destino final')
-                  }
-                </p>
-                <p className="text-sm text-muted-foreground line-clamp-1">
-                  {currentDestination?.address}
-                </p>
-                {mode === 'client' && provider?.vehiclePlate && (
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Car className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm font-medium bg-secondary px-2 py-0.5 rounded">
-                      {provider.vehiclePlate}
-                    </span>
-                  </div>
-                )}
-              </div>
-              {mode === 'provider' && (
-                <div className="text-right">
-                  <p className="text-xl font-bold text-provider-primary">
-                    R$ {chamado.valor?.toFixed(2)}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Progress indicator (provider only, services with destination) */}
-          {mode === 'provider' && hasDestination && (
-            <div className="px-4 py-3 border-b border-border">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted-foreground">Progresso</span>
-                <span className="text-sm font-medium">
-                  {isGoingToVehicle ? 'Etapa 1 de 2' : 'Etapa 2 de 2'}
-                </span>
-              </div>
-              <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-provider-primary rounded-full transition-all duration-500"
-                  style={{ width: isGoingToVehicle ? '25%' : '75%' }}
-                />
-              </div>
-            </div>
+      {/* Contact buttons - floating left */}
+      <div className={cn(
+        "absolute left-4 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-2 transition-all duration-300",
+        showControls ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 pointer-events-none"
+      )}>
+        <Button 
+          variant="secondary" 
+          size="icon"
+          className="w-12 h-12 rounded-full shadow-lg bg-card/95 backdrop-blur-md"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCall();
+          }}
+          disabled={contactLoading}
+        >
+          <Phone className="w-5 h-5" />
+        </Button>
+        <Button 
+          variant="secondary" 
+          size="icon"
+          className={cn(
+            "w-12 h-12 rounded-full shadow-lg bg-card/95 backdrop-blur-md relative",
+            hasUnreadMessages && "ring-2 ring-primary"
           )}
-
-          {/* Live GPS indicator (client mode) */}
-          {mode === 'client' && providerLocation && (
-            <div className="px-4 py-3 border-b border-border">
-              <div className="flex items-center gap-3 p-3 bg-green-500/10 rounded-xl">
-                <div className="relative">
-                  <MapPin className="w-5 h-5 text-green-600" />
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-ping" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-green-700">GPS ativo em tempo real</p>
-                  <p className="text-xs text-green-600 truncate">{providerLocation.address}</p>
-                </div>
-              </div>
-            </div>
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenChat();
+          }}
+        >
+          <MessageCircle className="w-5 h-5" />
+          {hasUnreadMessages && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse" />
           )}
+        </Button>
+      </div>
 
-          {/* Contact buttons */}
-          <div className="p-4 flex gap-3">
+      {/* Bottom action button - always visible */}
+      <div className="absolute bottom-6 left-4 right-4 z-10">
+        {mode === 'provider' ? (
+          isGoingToVehicle && hasDestination ? (
             <Button 
-              variant="outline" 
-              className="flex-1" 
-              size="lg"
-              onClick={handleCall}
-              disabled={contactLoading}
+              variant="default"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowArrivalDialog(true);
+              }}
+              className="w-full h-14 rounded-2xl text-base font-semibold shadow-lg bg-provider-primary hover:bg-provider-primary/90"
+              disabled={isConfirming}
             >
-              <Phone className="w-5 h-5" />
-              Ligar
-            </Button>
-            <Button 
-              variant="outline" 
-              className={cn(
-                "flex-1 relative",
-                hasUnreadMessages && "border-primary ring-2 ring-primary/20"
-              )}
-              size="lg"
-              onClick={handleOpenChat}
-            >
-              <MessageCircle className={cn(
-                "w-5 h-5",
-                hasUnreadMessages && "text-primary"
-              )} />
-              Mensagem
-              {hasUnreadMessages && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse" />
-              )}
-            </Button>
-          </div>
-
-          {/* Main action buttons (provider only) */}
-          {mode === 'provider' && (
-            <div className="p-4 pt-0">
-              {isGoingToVehicle && hasDestination ? (
-                <Button 
-                  variant="provider"
-                  onClick={() => setShowArrivalDialog(true)}
-                  className="w-full"
-                  size="lg"
-                  disabled={isConfirming}
-                >
-                  {isConfirming ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-5 h-5" />
-                  )}
-                  Cheguei ao veículo
-                </Button>
+              {isConfirming ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <Button 
-                  variant="provider"
-                  onClick={() => setShowFinishDialog(true)}
-                  className="w-full"
-                  size="lg"
-                  disabled={isConfirming}
-                >
-                  {isConfirming ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Flag className="w-5 h-5" />
-                  )}
-                  Finalizar corrida
-                </Button>
+                <CheckCircle className="w-5 h-5 mr-2" />
               )}
-            </div>
-          )}
-
-          {/* Cancel button (client only) */}
-          {mode === 'client' && (
-            <div className="p-4 pt-0">
+              Cheguei ao veículo
+            </Button>
+          ) : (
+            <Button 
+              variant="default"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowFinishDialog(true);
+              }}
+              className="w-full h-14 rounded-2xl text-base font-semibold shadow-lg bg-green-600 hover:bg-green-700"
+              disabled={isConfirming}
+            >
+              {isConfirming ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Flag className="w-5 h-5 mr-2" />
+              )}
+              Finalizar corrida
+            </Button>
+          )
+        ) : (
+          <div className={cn(
+            "transition-all duration-300",
+            showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
+          )}>
+            <div className="bg-card/95 backdrop-blur-md rounded-2xl p-4 shadow-lg">
+              <div className="flex items-center gap-3 mb-3">
+                {provider && (
+                  <img 
+                    src={provider.avatar} 
+                    alt={provider.name}
+                    className="w-12 h-12 rounded-full border-2 border-primary"
+                  />
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold">{provider?.name || 'Prestador'}</p>
+                  <p className="text-xs text-muted-foreground">{serviceConfig.label}</p>
+                </div>
+                <p className="font-bold text-lg">R$ {chamado.valor?.toFixed(2)}</p>
+              </div>
               <button 
-                onClick={cancelChamado}
-                className="w-full text-center text-sm text-destructive py-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cancelChamado();
+                }}
+                className="w-full text-center text-sm text-destructive py-1"
               >
                 Cancelar serviço
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Arrival confirmation dialog */}
+      {/* Dialogs */}
       <AlertDialog open={showArrivalDialog} onOpenChange={setShowArrivalDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -710,7 +576,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               Você está confirmando que chegou ao local do veículo do cliente.
-              Após confirmar, você iniciará a navegação para o destino final.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -719,13 +584,12 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
               onClick={handleConfirmArrival}
               className="bg-provider-primary hover:bg-provider-primary/90"
             >
-              Confirmar chegada
+              Confirmar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Finish service dialog */}
       <AlertDialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -734,8 +598,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
               Finalizar corrida
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Você está confirmando que o serviço foi concluído com sucesso.
-              O pagamento será processado e o valor creditado na sua conta Stripe.
+              Confirme que o serviço foi concluído com sucesso.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -744,13 +607,12 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
               onClick={handleFinishService}
               className="bg-green-600 hover:bg-green-700"
             >
-              Finalizar corrida
+              Finalizar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Chat Modal */}
       <ChatModal
         isOpen={showChat}
         onClose={() => setShowChat(false)}
