@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { SearchingIndicator } from './SearchingIndicator';
@@ -12,6 +12,26 @@ import { toast } from 'sonner';
 export function ClientSearchingView() {
   const { chamado, cancelChamado } = useApp();
   const previousDeclinedRef = useRef<string[]>([]);
+  const [declinedProviderIdsFromDb, setDeclinedProviderIdsFromDb] = useState<string[]>([]);
+
+  // Load initial declined providers from DB when chamado changes
+  useEffect(() => {
+    if (!chamado?.id) return;
+
+    const loadDeclinedProviders = async () => {
+      const { data } = await supabase
+        .from('chamados')
+        .select('declined_provider_ids')
+        .eq('id', chamado.id)
+        .single();
+
+      const declinedIds = data?.declined_provider_ids || [];
+      setDeclinedProviderIdsFromDb(declinedIds);
+      previousDeclinedRef.current = declinedIds;
+    };
+
+    loadDeclinedProviders();
+  }, [chamado?.id]);
 
   // Progressive search when searching
   const {
@@ -25,6 +45,7 @@ export function ClientSearchingView() {
     userLocation: chamado?.origem || null,
     serviceType: chamado?.tipoServico || 'guincho',
     enabled: !!chamado && chamado.status === 'searching',
+    excludedProviderIds: declinedProviderIdsFromDb,
   });
 
   // Subscribe to chamado updates to detect when providers decline
@@ -52,6 +73,9 @@ export function ClientSearchingView() {
           if (newDeclines.length > 0) {
             console.log('[ClientSearching] Provider(s) declined:', newDeclines);
             toast.info('Prestador não disponível, expandindo busca...');
+            
+            // Update local state
+            setDeclinedProviderIdsFromDb(newDeclined);
             
             // Force expand radius for each new decline
             newDeclines.forEach(declinedId => {
