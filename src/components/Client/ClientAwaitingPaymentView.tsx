@@ -437,53 +437,53 @@ export function ClientAwaitingPaymentView() {
             <div className="p-4 border-b border-border">
               <button
                 onClick={() => setShowSavedCards(!showSavedCards)}
-                className="w-full flex items-center justify-between mb-3"
+                className="w-full flex items-center justify-between mb-2"
               >
                 <div className="flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  <span className="font-medium">Cartões salvos</span>
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  <CreditCard className="w-4 h-4 text-primary" />
+                  <span className="font-medium text-sm">Cartões salvos</span>
+                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
                     {savedCards.length}
                   </span>
                 </div>
                 {showSavedCards ? (
-                  <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
                 ) : (
-                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
                 )}
               </button>
 
               {showSavedCards && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {savedCards.map((card) => (
                     <button
                       key={card.id}
                       onClick={() => setSelectedSavedCard(card.id)}
                       disabled={payingWithSavedCard}
-                      className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all ${
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
                         selectedSavedCard === card.id
-                          ? 'bg-primary/10 border-2 border-primary'
-                          : 'bg-secondary border-2 border-transparent'
+                          ? 'bg-primary/10 border border-primary'
+                          : 'bg-secondary/80 border border-transparent'
                       }`}
                     >
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                         selectedSavedCard === card.id ? 'bg-primary text-primary-foreground' : 'bg-background'
                       }`}>
-                        <CreditCard className="w-5 h-5" />
+                        <CreditCard className="w-4 h-4" />
                       </div>
                       <div className="flex-1 text-left">
-                        <p className="font-medium capitalize">{card.brand}</p>
-                        <p className="text-sm text-muted-foreground">
-                          **** {card.last4}
+                        <p className="font-medium text-sm capitalize">{card.brand}</p>
+                        <p className="text-xs text-muted-foreground">
+                          •••• {card.last4}
                           {card.exp_month && card.exp_year && (
-                            <span className="ml-2">
+                            <span className="ml-1.5">
                               {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)}
                             </span>
                           )}
                         </p>
                       </div>
                       {selectedSavedCard === card.id && (
-                        <Check className="w-5 h-5 text-primary" />
+                        <Check className="w-4 h-4 text-primary" />
                       )}
                     </button>
                   ))}
@@ -492,27 +492,26 @@ export function ClientAwaitingPaymentView() {
                   <Button
                     onClick={handlePayWithSavedCard}
                     disabled={!selectedSavedCard || payingWithSavedCard}
-                    className="w-full mt-3"
-                    size="lg"
+                    className="w-full mt-2 h-11"
                   >
                     {payingWithSavedCard ? (
                       <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Processando pagamento...
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Processando...
                       </>
                     ) : (
                       <>
-                        <Lock className="w-5 h-5" />
-                        Pagar R$ {chamado.valor?.toFixed(2)} com cartão salvo
+                        <Lock className="w-4 h-4" />
+                        Pagar R$ {chamado.valor?.toFixed(2)}
                       </>
                     )}
                   </Button>
 
-                  <div className="relative my-4">
+                  <div className="relative my-3">
                     <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-border" />
+                      <div className="w-full border-t border-border/50" />
                     </div>
-                    <div className="relative flex justify-center text-xs uppercase">
+                    <div className="relative flex justify-center text-[10px] uppercase">
                       <span className="bg-card px-2 text-muted-foreground">ou pague com</span>
                     </div>
                   </div>
@@ -521,43 +520,43 @@ export function ClientAwaitingPaymentView() {
             </div>
           )}
 
-          {/* Payment methods selection */}
-          <div className="p-4 border-b border-border">
-            <p className="text-sm font-medium text-muted-foreground mb-3">Forma de pagamento</p>
-            <div className="space-y-2">
+          {/* Payment methods selection - compact */}
+          <div className="p-3 border-b border-border/30">
+            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Forma de pagamento</p>
+            <div className="space-y-1.5">
               {paymentMethods.map((method) => (
                 <button
                   key={method.id}
                   onClick={() => method.available && handlePaymentMethodChange(method.id)}
                   disabled={!method.available || isProcessing || loadingPayment}
-                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all ${
+                  className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
                     selectedPayment === method.id
-                      ? 'bg-primary/10 border-2 border-primary'
-                      : 'bg-secondary border-2 border-transparent'
+                      ? 'bg-primary/10 border border-primary'
+                      : 'bg-secondary/80 border border-transparent'
                   } ${!method.available ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                     selectedPayment === method.id ? 'bg-primary text-primary-foreground' : 'bg-background'
                   }`}>
-                    <method.icon className="w-5 h-5" />
+                    <method.icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="font-medium">{method.name}</p>
-                    <p className="text-sm text-muted-foreground">{method.description}</p>
+                    <p className="font-medium text-sm">{method.name}</p>
+                    <p className="text-xs text-muted-foreground">{method.description}</p>
                   </div>
                   {selectedPayment === method.id && (
-                    <Check className="w-5 h-5 text-primary" />
+                    <Check className="w-4 h-4 text-primary" />
                   )}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Payment Form */}
-          <div className="p-4 space-y-4">
+          {/* Payment Form - compact */}
+          <div className="p-3 space-y-3">
             {paymentError && (
-              <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="flex items-center gap-2 p-2 bg-destructive/10 text-destructive rounded-lg text-xs">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {paymentError}
               </div>
             )}

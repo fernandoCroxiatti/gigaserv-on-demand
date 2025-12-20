@@ -409,25 +409,25 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         className="absolute inset-0" 
       />
 
-      {/* Minimal floating info bar - top */}
+      {/* Minimal floating info bar - top - compact */}
       <div className={cn(
-        "absolute top-20 left-4 right-4 z-10 transition-all duration-300",
+        "absolute top-20 left-3 right-3 z-10 transition-all duration-300",
         showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
       )}>
-        <div className="bg-card/95 backdrop-blur-md rounded-2xl px-4 py-3 shadow-lg flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-              <Navigation className="w-5 h-5 text-primary" />
+        <div className="bg-card/95 backdrop-blur-md rounded-xl px-3 py-2.5 shadow-card flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+              <Navigation className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="font-semibold text-sm">
+              <p className="font-semibold text-xs">
                 {isGoingToVehicle 
                   ? (mode === 'provider' ? 'Indo ao veículo' : 'A caminho')
                   : (mode === 'provider' ? 'Indo ao destino' : 'Em trânsito')
                 }
               </p>
               {(eta || distance) && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground">
                   {eta && <span>{eta}</span>}
                   {eta && distance && <span> • </span>}
                   {distance && <span>{distance}</span>}
@@ -437,9 +437,9 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           </div>
           
           {/* Quick actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {isCalculatingRoute && (
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
             )}
             {mode === 'provider' && !isCalculatingRoute && (
               <Button 
@@ -449,37 +449,37 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
                   e.stopPropagation();
                   handleManualRecalculate();
                 }}
-                className="h-8 w-8"
+                className="h-7 w-7"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-3.5 h-3.5" />
               </Button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Contact buttons - floating left */}
+      {/* Contact buttons - floating left - compact */}
       <div className={cn(
-        "absolute left-4 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-2 transition-all duration-300",
+        "absolute left-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-1.5 transition-all duration-300",
         showControls ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 pointer-events-none"
       )}>
         <Button 
           variant="secondary" 
           size="icon"
-          className="w-12 h-12 rounded-full shadow-lg bg-card/95 backdrop-blur-md"
+          className="w-10 h-10 rounded-full shadow-card bg-card/95 backdrop-blur-md"
           onClick={(e) => {
             e.stopPropagation();
             handleCall();
           }}
           disabled={contactLoading}
         >
-          <Phone className="w-5 h-5" />
+          <Phone className="w-4 h-4" />
         </Button>
         <Button 
           variant="secondary" 
           size="icon"
           className={cn(
-            "w-12 h-12 rounded-full shadow-lg bg-card/95 backdrop-blur-md relative",
+            "w-10 h-10 rounded-full shadow-card bg-card/95 backdrop-blur-md relative",
             hasUnreadMessages && "ring-2 ring-primary"
           )}
           onClick={(e) => {
@@ -487,15 +487,15 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
             handleOpenChat();
           }}
         >
-          <MessageCircle className="w-5 h-5" />
+          <MessageCircle className="w-4 h-4" />
           {hasUnreadMessages && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse" />
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-primary rounded-full animate-pulse" />
           )}
         </Button>
       </div>
 
-      {/* Bottom action button - always visible */}
-      <div className="absolute bottom-6 left-4 right-4 z-10">
+      {/* Bottom action button - always visible - compact */}
+      <div className="absolute bottom-4 left-3 right-3 z-10">
         {mode === 'provider' ? (
           isGoingToVehicle && hasDestination ? (
             <Button 
@@ -504,13 +504,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
                 e.stopPropagation();
                 setShowArrivalDialog(true);
               }}
-              className="w-full h-14 rounded-2xl text-base font-semibold shadow-lg bg-provider-primary hover:bg-provider-primary/90"
+              className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg bg-provider-primary hover:bg-provider-primary/90"
               disabled={isConfirming}
             >
               {isConfirming ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <CheckCircle className="w-5 h-5 mr-2" />
+                <CheckCircle className="w-4 h-4 mr-1.5" />
               )}
               Cheguei ao veículo
             </Button>
@@ -521,13 +521,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
                 e.stopPropagation();
                 setShowFinishDialog(true);
               }}
-              className="w-full h-14 rounded-2xl text-base font-semibold shadow-lg bg-green-600 hover:bg-green-700"
+              className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg bg-green-600 hover:bg-green-700"
               disabled={isConfirming}
             >
               {isConfirming ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Flag className="w-5 h-5 mr-2" />
+                <Flag className="w-4 h-4 mr-1.5" />
               )}
               Finalizar corrida
             </Button>
@@ -537,27 +537,27 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
             "transition-all duration-300",
             showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
           )}>
-            <div className="bg-card/95 backdrop-blur-md rounded-2xl p-4 shadow-lg">
-              <div className="flex items-center gap-3 mb-3">
+            <div className="bg-card/95 backdrop-blur-md rounded-xl p-3 shadow-card">
+              <div className="flex items-center gap-2.5 mb-2">
                 {provider && (
                   <img 
                     src={provider.avatar} 
                     alt={provider.name}
-                    className="w-12 h-12 rounded-full border-2 border-primary"
+                    className="w-10 h-10 rounded-full border-2 border-primary/20"
                   />
                 )}
-                <div className="flex-1">
-                  <p className="font-semibold">{provider?.name || 'Prestador'}</p>
-                  <p className="text-xs text-muted-foreground">{serviceConfig.label}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{provider?.name || 'Prestador'}</p>
+                  <p className="text-[10px] text-muted-foreground">{serviceConfig.label}</p>
                 </div>
-                <p className="font-bold text-lg">R$ {chamado.valor?.toFixed(2)}</p>
+                <p className="font-bold text-base">R$ {chamado.valor?.toFixed(2)}</p>
               </div>
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
                   cancelChamado();
                 }}
-                className="w-full text-center text-sm text-destructive py-1"
+                className="w-full text-center text-xs text-destructive py-1"
               >
                 Cancelar serviço
               </button>
