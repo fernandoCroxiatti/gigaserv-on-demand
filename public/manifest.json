@@ -27,5 +27,15 @@
     }
   ],
   "categories": ["utilities", "lifestyle"],
-  "lang": "pt-BR"
+  "lang": "pt-BR",
+  "permissions": [
+    "geolocation",
+    "notifications",
+    "vibrate"
+  ],
+  "permissions_policy": {
+    "geolocation": ["self"],
+    "camera": ["self"],
+    "microphone": []
+  }
 }
