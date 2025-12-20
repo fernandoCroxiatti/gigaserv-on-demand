@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import { useProviderFinancialData } from '@/hooks/useProviderFinancialData';
 import { Button } from '../ui/button';
 import { 
@@ -19,7 +20,8 @@ import {
   AlertTriangle,
   Menu,
   X,
-  FileText
+  FileText,
+  Settings
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderRegistrationForm } from '../Provider/ProviderRegistrationForm';
@@ -61,6 +63,7 @@ interface StripeAccountStatus {
 export function ProviderProfile() {
   const { user, profile, providerData } = useApp();
   const { signOut } = useAuth();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
@@ -251,6 +254,19 @@ export function ProviderProfile() {
                     <span className="font-medium">{tabLabels[tab].label}</span>
                   </button>
                 ))}
+
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      navigate('/admin');
+                    }}
+                    className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors text-primary"
+                  >
+                    <Settings className="w-5 h-5" />
+                    <span className="font-medium">Administração</span>
+                  </button>
+                )}
 
                 <div className="border-t border-border my-4 pt-4">
                   <button
