@@ -239,13 +239,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (updated.status === 'accepted') {
               toast.success('Um prestador aceitou seu chamado!');
             } else if (updated.status === 'in_service') {
-              toast.success('Serviço iniciado!');
+              toast.success('Pagamento aprovado! Serviço iniciado.');
             } else if (updated.status === 'finished') {
               toast.success('Serviço finalizado!');
-            } else if (updated.status === 'searching' && oldStatus !== 'searching') {
-              // Status changed to searching (e.g., after provider canceled)
-              toast.info('Buscando prestadores próximos...');
             }
+            // Removed: searching status toast - too noisy
           }
         }
       )
@@ -648,7 +646,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       setChamado(mapDbChamadoToChamado(data));
-      toast.info('Buscando prestadores na sua região...');
+      // Removed noisy toast - user can see the searching state in UI
     } catch (error) {
       console.error('Error creating chamado:', error);
       toast.error('Erro ao criar chamado');
@@ -720,8 +718,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         sender_type: profile?.active_profile || 'client',
         message: `Valor proposto: R$ ${value.toFixed(2)}`,
       });
-
-      toast.info(`Valor de R$ ${value.toFixed(2)} proposto`);
+      // Removed toast - value proposal is visible in chat
     } catch (error) {
       console.error('Error proposing value:', error);
       toast.error('Erro ao propor valor');
@@ -838,8 +835,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .eq('id', chamado.id);
 
         if (error) throw error;
-
-        toast.info('Chamado devolvido para busca');
+        // Removed toast - provider already sees the state change
         
         // Clear provider's local chamado state
         setTimeout(() => {
@@ -1104,8 +1100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('[Chamado] Error recording decline:', err);
     }
-
-    toast.info('Chamado recusado');
+    // Removed toast - UI state change is clear enough
   }, [incomingRequest, authUser]);
 
   const setChamadoStatus = useCallback((status: ChamadoStatus) => {

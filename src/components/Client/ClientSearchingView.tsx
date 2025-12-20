@@ -72,7 +72,7 @@ export function ClientSearchingView() {
           
           if (newDeclines.length > 0) {
             console.log('[ClientSearching] Provider(s) declined:', newDeclines);
-            toast.info('Prestador não disponível, expandindo busca...');
+            // Removed toast notification - too noisy for user
             
             // Update local state
             setDeclinedProviderIdsFromDb(newDeclined);
