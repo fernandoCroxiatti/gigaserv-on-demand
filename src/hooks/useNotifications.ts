@@ -9,9 +9,23 @@ interface NotificationPreferences {
   promotional: boolean;
 }
 
-// VAPID public key would be generated and stored in environment
-// For web push, we need VAPID keys - for now using browser notifications API
-const VAPID_PUBLIC_KEY = '';
+// VAPID public key - must match the one in edge function secrets
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 export function useNotifications() {
   const { user } = useAuth();
@@ -61,7 +75,7 @@ export function useNotifications() {
     loadPreferences();
   }, [user?.id]);
 
-  // Register service worker
+  // Register service worker and get push subscription
   const registerServiceWorker = useCallback(async () => {
     if (!('serviceWorker' in navigator)) {
       console.log('Service workers not supported');
@@ -79,6 +93,67 @@ export function useNotifications() {
       return null;
     }
   }, []);
+
+  // Subscribe to push notifications
+  const subscribeToPush = useCallback(async (registration: ServiceWorkerRegistration) => {
+    if (!VAPID_PUBLIC_KEY) {
+      console.log('VAPID public key not configured');
+      return null;
+    }
+
+    try {
+      // Check if already subscribed
+      let subscription = await registration.pushManager.getSubscription();
+      
+      if (!subscription) {
+        // Subscribe to push
+        const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: applicationServerKey.buffer as ArrayBuffer
+        });
+        console.log('Push subscription created:', subscription);
+      }
+
+      return subscription;
+    } catch (error) {
+      console.error('Push subscription failed:', error);
+      return null;
+    }
+  }, []);
+
+  // Save push subscription to database
+  const savePushSubscription = useCallback(async (subscription: PushSubscription) => {
+    if (!user?.id) return;
+
+    try {
+      const subscriptionJson = subscription.toJSON();
+      const p256dh = subscriptionJson.keys?.p256dh || '';
+      const auth = subscriptionJson.keys?.auth || '';
+
+      // Upsert subscription (update if endpoint exists)
+      const { error } = await supabase
+        .from('notification_subscriptions')
+        .upsert({
+          user_id: user.id,
+          endpoint: subscription.endpoint,
+          p256dh,
+          auth,
+          user_agent: navigator.userAgent,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'endpoint'
+        });
+
+      if (error) {
+        console.error('Error saving push subscription:', error);
+      } else {
+        console.log('Push subscription saved to database');
+      }
+    } catch (error) {
+      console.error('Error saving push subscription:', error);
+    }
+  }, [user?.id]);
 
   // Request notification permission
   const requestPermission = useCallback(async (): Promise<boolean> => {
@@ -106,7 +181,13 @@ export function useNotifications() {
 
         if (result === 'granted') {
           // Register service worker and subscribe to push
-          await registerServiceWorker();
+          const registration = await registerServiceWorker();
+          if (registration) {
+            const subscription = await subscribeToPush(registration);
+            if (subscription) {
+              await savePushSubscription(subscription);
+            }
+          }
         }
       }
 
@@ -115,7 +196,7 @@ export function useNotifications() {
       console.error('Error requesting notification permission:', error);
       return false;
     }
-  }, [user?.id, registerServiceWorker]);
+  }, [user?.id, registerServiceWorker, subscribeToPush, savePushSubscription]);
 
   // Show permission modal (triggered at right moment)
   const triggerPermissionFlow = useCallback(() => {
@@ -194,6 +275,17 @@ export function useNotifications() {
   // Check if should ask for permission
   const shouldAskPermission = permission === 'default' && !preferences?.permission_granted;
 
+  // Re-subscribe to push (useful after re-opening app)
+  const resubscribeToPush = useCallback(async () => {
+    if (permission !== 'granted' || !user?.id) return;
+    
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await subscribeToPush(registration);
+    if (subscription) {
+      await savePushSubscription(subscription);
+    }
+  }, [permission, user?.id, subscribeToPush, savePushSubscription]);
+
   return {
     permission,
     preferences,
@@ -206,6 +298,7 @@ export function useNotifications() {
     requestPermission,
     updatePreferences,
     sendLocalNotification,
-    registerServiceWorker
+    registerServiceWorker,
+    resubscribeToPush
   };
 }
