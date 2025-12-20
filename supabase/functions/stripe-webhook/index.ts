@@ -70,23 +70,27 @@ serve(async (req) => {
           paymentIntentId: paymentIntent.id,
           amount: paymentIntent.amount,
           metadata: paymentIntent.metadata,
+          paymentMethodTypes: paymentIntent.payment_method_types,
         });
 
         const chamadoId = paymentIntent.metadata?.chamado_id;
         if (chamadoId) {
+          const paymentMethod = paymentIntent.payment_method_types?.includes('pix') ? 'pix' : 'card';
+          
           const { error } = await supabaseClient
             .from('chamados')
             .update({
               payment_status: 'paid_stripe',
               status: 'in_service',
               payment_completed_at: new Date().toISOString(),
+              payment_method: paymentMethod,
             })
             .eq('id', chamadoId);
 
           if (error) {
             logStep("Error updating chamado", { error: error.message });
           } else {
-            logStep("Chamado updated to in_service", { chamadoId });
+            logStep("Chamado updated to in_service", { chamadoId, paymentMethod });
           }
         }
         break;
@@ -97,6 +101,7 @@ serve(async (req) => {
         logStep("Payment failed", { 
           paymentIntentId: paymentIntent.id,
           error: paymentIntent.last_payment_error?.message,
+          errorCode: paymentIntent.last_payment_error?.code,
         });
 
         const chamadoId = paymentIntent.metadata?.chamado_id;
@@ -110,8 +115,54 @@ serve(async (req) => {
 
           if (error) {
             logStep("Error updating chamado", { error: error.message });
+          } else {
+            logStep("Chamado payment marked as failed", { chamadoId });
           }
         }
+        break;
+      }
+
+      case "payment_intent.canceled": {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        logStep("Payment canceled (PIX expired or user canceled)", { 
+          paymentIntentId: paymentIntent.id,
+          cancellationReason: paymentIntent.cancellation_reason,
+        });
+
+        const chamadoId = paymentIntent.metadata?.chamado_id;
+        if (chamadoId) {
+          // Only update if still awaiting payment
+          const { data: existingChamado } = await supabaseClient
+            .from('chamados')
+            .select('status, payment_status')
+            .eq('id', chamadoId)
+            .single();
+
+          if (existingChamado?.status === 'awaiting_payment' && existingChamado?.payment_status === 'pending') {
+            const { error } = await supabaseClient
+              .from('chamados')
+              .update({
+                payment_status: 'failed',
+              })
+              .eq('id', chamadoId);
+
+            if (error) {
+              logStep("Error updating chamado", { error: error.message });
+            } else {
+              logStep("Chamado payment marked as failed due to cancellation/expiration", { chamadoId });
+            }
+          }
+        }
+        break;
+      }
+
+      case "payment_intent.processing": {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        logStep("Payment processing", { 
+          paymentIntentId: paymentIntent.id,
+        });
+        // PIX payments go through processing state briefly
+        // No database update needed - we'll wait for succeeded or failed
         break;
       }
 

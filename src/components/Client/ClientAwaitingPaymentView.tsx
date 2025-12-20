@@ -109,28 +109,38 @@ interface PixPaymentInfo {
   expiresAt: Date;
 }
 
+type PixStatus = 'generating' | 'waiting' | 'processing' | 'success' | 'expired' | 'failed';
+
 function PixPaymentForm({
   clientSecret,
   onSuccess,
   onError,
   amount,
+  chamadoId,
 }: {
   clientSecret: string;
   onSuccess: () => void;
   onError: (error: string) => void;
   amount: number;
+  chamadoId: string;
 }) {
   const [pixInfo, setPixInfo] = useState<PixPaymentInfo | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [pixStatus, setPixStatus] = useState<PixStatus>('generating');
   const [copied, setCopied] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [stripe, setStripe] = useState<Stripe | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
-  // Initialize Stripe lazily (avoid calling Stripe() with empty key at import time)
+  // PIX expiration time in minutes
+  const PIX_EXPIRATION_MINUTES = 15;
+
+  // Initialize Stripe lazily
   useEffect(() => {
     getStripePromise()
       .then((s) => setStripe(s))
-      .catch((e) => onError(e?.message || 'Stripe não configurado'));
+      .catch((e) => {
+        setPixStatus('failed');
+        onError(e?.message || 'Stripe não configurado');
+      });
   }, [onError]);
 
   // Confirm PIX payment and get QR code
@@ -138,14 +148,15 @@ function PixPaymentForm({
     if (!stripe || !clientSecret) return;
 
     const confirmPix = async () => {
-      setIsProcessing(true);
+      setPixStatus('generating');
       try {
         const { paymentIntent, error } = await stripe.confirmPixPayment(clientSecret, {
           payment_method: {},
         });
 
         if (error) {
-          onError(error.message || 'Erro ao gerar PIX');
+          setPixStatus('failed');
+          onError(getPixErrorMessage(error.code || 'unknown'));
           return;
         }
 
@@ -153,43 +164,82 @@ function PixPaymentForm({
         const nextAction = paymentIntent?.next_action as any;
         if (nextAction?.pix_display_qr_code) {
           const pixData = nextAction.pix_display_qr_code;
+          const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MINUTES * 60 * 1000);
           setPixInfo({
             qrCode: pixData.data || '',
             qrCodeUrl: pixData.image_url_png || '',
-            expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
+            expiresAt,
           });
+          setPixStatus('waiting');
+        } else {
+          setPixStatus('failed');
+          onError('Erro ao gerar QR Code PIX');
         }
       } catch (err) {
+        setPixStatus('failed');
         onError('Erro ao iniciar pagamento PIX');
-      } finally {
-        setIsProcessing(false);
       }
     };
 
     confirmPix();
-  }, [stripe, clientSecret]);
+  }, [stripe, clientSecret, onError]);
 
-  // Poll for payment confirmation
+  // Timer for expiration countdown
   useEffect(() => {
-    if (!stripe || !clientSecret || !pixInfo) return;
+    if (!pixInfo || pixStatus !== 'waiting') return;
 
-    const interval = setInterval(async () => {
-      setChecking(true);
-      try {
-        const { paymentIntent } = await stripe.retrievePaymentIntent(clientSecret);
-        if (paymentIntent?.status === 'succeeded') {
-          clearInterval(interval);
-          onSuccess();
-        }
-      } catch (err) {
-        console.error('Error checking payment status:', err);
-      } finally {
-        setChecking(false);
+    const updateTimer = () => {
+      const now = new Date();
+      const diff = Math.max(0, Math.floor((pixInfo.expiresAt.getTime() - now.getTime()) / 1000));
+      setTimeRemaining(diff);
+
+      if (diff === 0 && pixStatus === 'waiting') {
+        setPixStatus('expired');
       }
-    }, 3000); // Check every 3 seconds
+    };
 
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [stripe, clientSecret, pixInfo, onSuccess]);
+  }, [pixInfo, pixStatus]);
+
+  // Listen to realtime database updates for payment confirmation via webhook
+  // This is the CORRECT way - don't poll Stripe directly, wait for webhook to update DB
+  useEffect(() => {
+    if (!chamadoId || pixStatus === 'expired' || pixStatus === 'success') return;
+
+    const channel = supabase
+      .channel(`pix-payment-${chamadoId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chamados',
+          filter: `id=eq.${chamadoId}`,
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          
+          // Payment confirmed by webhook
+          if (newData.payment_status === 'paid_stripe' || newData.status === 'in_service') {
+            setPixStatus('success');
+            onSuccess();
+          }
+          
+          // Payment failed
+          if (newData.payment_status === 'failed') {
+            setPixStatus('failed');
+            onError('Falha no pagamento. Tente novamente.');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chamadoId, pixStatus, onSuccess, onError]);
 
   const handleCopyCode = async () => {
     if (!pixInfo?.qrCode) return;
@@ -204,7 +254,38 @@ function PixPaymentForm({
     }
   };
 
-  if (isProcessing) {
+  const handleRetryPix = () => {
+    // Reload page to generate new PIX
+    window.location.reload();
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Status messages
+  const getStatusMessage = () => {
+    switch (pixStatus) {
+      case 'generating':
+        return 'Gerando QR Code PIX...';
+      case 'waiting':
+        return 'Aguardando pagamento do PIX';
+      case 'processing':
+        return 'Processando pagamento...';
+      case 'success':
+        return 'Pagamento confirmado com sucesso!';
+      case 'expired':
+        return 'PIX expirado. Gere um novo pagamento.';
+      case 'failed':
+        return 'Falha no pagamento. Tente novamente.';
+      default:
+        return 'Aguardando...';
+    }
+  };
+
+  if (pixStatus === 'generating') {
     return (
       <div className="flex flex-col items-center justify-center py-8 space-y-4">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -213,17 +294,62 @@ function PixPaymentForm({
     );
   }
 
-  if (!pixInfo) {
+  if (pixStatus === 'success') {
     return (
       <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <AlertCircle className="w-8 h-8 text-destructive" />
-        <p className="text-sm text-muted-foreground">Erro ao gerar PIX. Tente outro método.</p>
+        <div className="w-16 h-16 bg-status-finished/20 rounded-full flex items-center justify-center">
+          <CheckCircle className="w-10 h-10 text-status-finished" />
+        </div>
+        <p className="text-lg font-semibold text-status-finished">Pagamento confirmado!</p>
+        <p className="text-sm text-muted-foreground text-center">
+          O serviço será iniciado em instantes.
+        </p>
+      </div>
+    );
+  }
+
+  if (pixStatus === 'expired') {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 space-y-4">
+        <div className="w-16 h-16 bg-status-searching/20 rounded-full flex items-center justify-center">
+          <Clock className="w-10 h-10 text-status-searching" />
+        </div>
+        <p className="text-lg font-semibold text-status-searching">PIX expirado</p>
+        <p className="text-sm text-muted-foreground text-center">
+          O tempo para pagamento expirou. Gere um novo QR Code para continuar.
+        </p>
+        <Button onClick={handleRetryPix} className="w-full">
+          Gerar novo PIX
+        </Button>
+      </div>
+    );
+  }
+
+  if (pixStatus === 'failed' || !pixInfo) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 space-y-4">
+        <div className="w-16 h-16 bg-destructive/20 rounded-full flex items-center justify-center">
+          <AlertCircle className="w-10 h-10 text-destructive" />
+        </div>
+        <p className="text-lg font-semibold text-destructive">Falha no pagamento</p>
+        <p className="text-sm text-muted-foreground text-center">
+          Não foi possível processar o PIX. Tente outro método de pagamento.
+        </p>
+        <Button onClick={handleRetryPix} variant="outline" className="w-full">
+          Tentar novamente
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {/* Status indicator */}
+      <div className="flex items-center justify-center gap-2 p-2 bg-status-searching/10 rounded-lg">
+        <Loader2 className="w-4 h-4 animate-spin text-status-searching" />
+        <span className="text-sm font-medium text-status-searching">{getStatusMessage()}</span>
+      </div>
+
       {/* QR Code */}
       <div className="flex flex-col items-center p-6 bg-white rounded-xl">
         {pixInfo.qrCodeUrl ? (
@@ -240,6 +366,16 @@ function PixPaymentForm({
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Escaneie o QR Code com o app do seu banco
         </p>
+      </div>
+
+      {/* Expiration timer */}
+      <div className="flex items-center justify-center gap-2 text-sm">
+        <Clock className="w-4 h-4 text-muted-foreground" />
+        <span className="text-muted-foreground">
+          Expira em: <span className={`font-mono font-semibold ${timeRemaining < 120 ? 'text-destructive' : 'text-foreground'}`}>
+            {formatTime(timeRemaining)}
+          </span>
+        </span>
       </div>
 
       {/* Copy Code */}
@@ -271,20 +407,27 @@ function PixPaymentForm({
         <p className="text-sm text-muted-foreground">Valor a pagar</p>
         <p className="text-2xl font-bold">R$ {(amount / 100).toFixed(2)}</p>
         <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          {checking ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Clock className="w-4 h-4" />
-          )}
-          <span>Aguardando pagamento...</span>
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Aguardando confirmação do pagamento...</span>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        O pagamento será confirmado automaticamente após a transferência
+        O serviço será liberado automaticamente após a confirmação do pagamento pelo seu banco.
       </p>
     </div>
   );
+}
+
+// Helper function for PIX error messages
+function getPixErrorMessage(errorCode: string): string {
+  const errorMessages: Record<string, string> = {
+    'payment_intent_unexpected_state': 'Pagamento já foi processado ou expirou.',
+    'expired_card': 'Método de pagamento expirado.',
+    'processing_error': 'Erro ao processar. Tente novamente.',
+    'insufficient_funds': 'Saldo insuficiente.',
+  };
+  return errorMessages[errorCode] || 'Erro ao processar PIX. Tente novamente.';
 }
 
 export function ClientAwaitingPaymentView() {
@@ -420,9 +563,12 @@ export function ClientAwaitingPaymentView() {
     }
   }, [walletAvailable]);
 
+  // For PIX: Don't call processPayment - the webhook handles status update
+  // For Card/Wallet: The webhook also handles it, but we can show success immediately
   const handlePaymentSuccess = () => {
     toast.success('Pagamento confirmado! O serviço será iniciado.');
-    processPayment();
+    // Don't call processPayment() - the webhook will update the status to 'in_service'
+    // The realtime subscription in AppContext will automatically update the chamado state
   };
 
   const handlePaymentError = (error: string) => {
@@ -599,12 +745,13 @@ export function ClientAwaitingPaymentView() {
             )}
 
             {/* PIX Payment */}
-            {clientSecret && !loadingPayment && currentPaymentMethod === 'pix' && (
+            {clientSecret && !loadingPayment && currentPaymentMethod === 'pix' && chamado && (
               <PixPaymentForm
                 clientSecret={clientSecret}
                 onSuccess={handlePaymentSuccess}
                 onError={handlePaymentError}
                 amount={paymentAmount}
+                chamadoId={chamado.id}
               />
             )}
 

@@ -631,8 +631,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [chamado]);
 
+  // Note: For Stripe payments (card/PIX), the webhook handles status updates.
+  // This function is kept for manual/mock payments only.
+  // The frontend should NOT call this for Stripe payments - the webhook will do it.
   const processPayment = useCallback(async () => {
     if (!chamado) return;
+
+    // Check if this is a Stripe payment - if so, don't update manually
+    // The webhook will handle the status update
+    if (chamado.payment?.provider === 'stripe') {
+      console.log('[Payment] Stripe payment - status will be updated by webhook');
+      // Don't update here - wait for webhook
+      return;
+    }
 
     try {
       const { error } = await supabase
