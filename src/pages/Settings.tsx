@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotifications } from '@/hooks/useNotifications';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,7 +20,8 @@ import {
   AlertTriangle,
   Smartphone,
   MapPin,
-  MessageSquare
+  MessageSquare,
+  BellOff
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -37,12 +39,27 @@ export default function Settings() {
   const navigate = useNavigate();
   const { user } = useApp();
   const { signOut } = useAuth();
+  const { 
+    permission, 
+    preferences, 
+    updatePreferences,
+    requestPermission
+  } = useNotifications();
   const [deletingAccount, setDeletingAccount] = useState(false);
   
-  // Notification preferences (would be stored in database in production)
+  // Notification preferences from hook
   const [notifChamados, setNotifChamados] = useState(true);
-  const [notifMensagens, setNotifMensagens] = useState(true);
-  const [notifPromocoes, setNotifPromocoes] = useState(false);
+  const [notifPromocoes, setNotifPromocoes] = useState(true);
+  const [notifEnabled, setNotifEnabled] = useState(true);
+
+  // Sync with saved preferences
+  useEffect(() => {
+    if (preferences) {
+      setNotifChamados(preferences.chamado_updates);
+      setNotifPromocoes(preferences.promotional);
+      setNotifEnabled(preferences.enabled);
+    }
+  }, [preferences]);
 
   const handleDeleteAccount = async () => {
     setDeletingAccount(true);
@@ -70,7 +87,31 @@ export default function Settings() {
     navigate('/auth');
   };
 
+  const handleNotifChamadosChange = async (value: boolean) => {
+    setNotifChamados(value);
+    await updatePreferences({ chamado_updates: value });
+  };
+
+  const handleNotifPromocoesChange = async (value: boolean) => {
+    setNotifPromocoes(value);
+    await updatePreferences({ promotional: value });
+  };
+
+  const handleNotifEnabledChange = async (value: boolean) => {
+    if (value && permission === 'default') {
+      // Request permission first
+      const granted = await requestPermission();
+      if (!granted) {
+        toast.error('Permissão de notificações negada');
+        return;
+      }
+    }
+    setNotifEnabled(value);
+    await updatePreferences({ enabled: value });
+  };
+
   const isProvider = user?.activeProfile === 'provider';
+  const notificationsBlocked = permission === 'denied';
 
   return (
     <div className={`min-h-screen bg-background ${isProvider ? 'provider-theme' : ''}`}>
@@ -139,11 +180,31 @@ export default function Settings() {
         <div className="bg-card rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-border">
             <h2 className="font-semibold text-lg flex items-center gap-2">
-              <Bell className="w-5 h-5 text-primary" />
+              {notificationsBlocked ? <BellOff className="w-5 h-5 text-destructive" /> : <Bell className="w-5 h-5 text-primary" />}
               Notificações
             </h2>
+            {notificationsBlocked && (
+              <p className="text-xs text-destructive mt-1">
+                Notificações bloqueadas. Ative nas configurações do dispositivo.
+              </p>
+            )}
           </div>
           <div className="divide-y divide-border">
+            <div className="flex items-center gap-4 p-4">
+              <Bell className="w-5 h-5 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="font-medium">Ativar notificações</p>
+                <p className="text-sm text-muted-foreground">
+                  Receba alertas importantes
+                </p>
+              </div>
+              <Switch 
+                checked={notifEnabled && !notificationsBlocked} 
+                onCheckedChange={handleNotifEnabledChange}
+                disabled={notificationsBlocked}
+              />
+            </div>
+            
             <div className="flex items-center gap-4 p-4">
               <Smartphone className="w-5 h-5 text-muted-foreground" />
               <div className="flex-1">
@@ -154,21 +215,8 @@ export default function Settings() {
               </div>
               <Switch 
                 checked={notifChamados} 
-                onCheckedChange={setNotifChamados}
-              />
-            </div>
-            
-            <div className="flex items-center gap-4 p-4">
-              <MessageSquare className="w-5 h-5 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="font-medium">Mensagens</p>
-                <p className="text-sm text-muted-foreground">
-                  Chat com {isProvider ? 'clientes' : 'prestadores'}
-                </p>
-              </div>
-              <Switch 
-                checked={notifMensagens} 
-                onCheckedChange={setNotifMensagens}
+                onCheckedChange={handleNotifChamadosChange}
+                disabled={!notifEnabled || notificationsBlocked}
               />
             </div>
             
@@ -182,7 +230,8 @@ export default function Settings() {
               </div>
               <Switch 
                 checked={notifPromocoes} 
-                onCheckedChange={setNotifPromocoes}
+                onCheckedChange={handleNotifPromocoesChange}
+                disabled={!notifEnabled || notificationsBlocked}
               />
             </div>
           </div>
