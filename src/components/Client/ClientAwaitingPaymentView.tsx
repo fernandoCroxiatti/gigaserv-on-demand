@@ -330,10 +330,12 @@ export function ClientAwaitingPaymentView() {
     }
   }, [walletAvailable]);
 
-  // For PIX: Don't call processPayment - the webhook handles status update
-  // For Card/Wallet: The webhook also handles it, but we can show success immediately
+  // For Card/Wallet: The webhook handles status update, but we can show success immediately
   const handlePaymentSuccess = () => {
-    toast.success('Pagamento confirmado! O serviço será iniciado.');
+    toast.success('Pagamento aprovado!', {
+      description: 'O serviço será iniciado em instantes.',
+      duration: 3000,
+    });
     // Don't call processPayment() - the webhook will update the status to 'in_service'
     // The realtime subscription in AppContext will automatically update the chamado state
   };
