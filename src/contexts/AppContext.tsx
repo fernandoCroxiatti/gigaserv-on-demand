@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef } from 'react';
 import { 
   Chamado, 
   ChamadoStatus, 
@@ -116,6 +116,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [incomingRequest, setIncomingRequest] = useState<Chamado | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Track recently declined chamados by this provider to prevent immediate re-showing
+  const recentlyDeclinedRef = useRef<Set<string>>(new Set());
 
   // CRITICAL: Determine if user can access provider features
   const perfilPrincipal = (profile?.perfil_principal as 'client' | 'provider') || 'client';
@@ -504,21 +507,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
               stopRideAlertLoop();
               return;
             }
+            
+            // If chamado is still searching but declined_provider_ids was updated (someone declined)
+            // and we are the one who declined, just ignore (don't re-show)
+            const declinedProviderIds = dbChamado.declined_provider_ids || [];
+            if (declinedProviderIds.includes(authUser.id)) {
+              console.log(`[Chamados] UPDATE on our incomingRequest but we already declined, ignoring`);
+              // Don't clear incomingRequest here - it was already cleared in declineIncomingRequest
+              return;
+            }
           }
           
-          // Only process if status changed TO searching (returned after provider cancel)
+          // Only process UPDATE if it's for a chamado going TO searching status
+          // OR if declined_provider_ids changed (someone declined)
           if (dbChamado.status !== 'searching' || dbChamado.prestador_id !== null) {
             return;
           }
           
-          const chamadoData = mapDbChamadoToChamado(dbChamado);
-          
-          // Check if this provider has already declined this chamado
+          // IMPORTANT: Check if this provider has already declined this chamado
+          // This prevents the loop where a provider declines and immediately gets the chamado back
           const declinedProviderIds = dbChamado.declined_provider_ids || [];
           if (declinedProviderIds.includes(authUser.id)) {
-            console.log(`[Chamados] Updated chamado ${chamadoData.id}: provider already declined, skipping`);
+            console.log(`[Chamados] Updated chamado ${dbChamado.id}: provider already declined (in DB), skipping`);
             return;
           }
+          
+          // Also check our local recently declined set (for race conditions)
+          if (recentlyDeclinedRef.current.has(dbChamado.id)) {
+            console.log(`[Chamados] Updated chamado ${dbChamado.id}: provider recently declined (local), skipping`);
+            return;
+          }
+          
+          // Don't re-trigger for the same chamado we already have as incomingRequest
+          if (incomingRequest && incomingRequest.id === dbChamado.id) {
+            console.log(`[Chamados] Updated chamado ${dbChamado.id}: already showing as incomingRequest`);
+            return;
+          }
+          
+          const chamadoData = mapDbChamadoToChamado(dbChamado);
           
           const services = providerData.services_offered || ['guincho'];
           const radarRange = providerData.radar_range || 15;
@@ -1048,12 +1074,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const chamadoId = incomingRequest.id;
+    
+    // IMMEDIATELY add to local recently declined set to prevent race conditions
+    recentlyDeclinedRef.current.add(chamadoId);
+    
+    // Clear the incoming request immediately
+    setIncomingRequest(null);
+
     // Record the decline in the chamado so client can track and expand radius
     try {
       const { data: currentChamado } = await supabase
         .from('chamados')
         .select('declined_provider_ids')
-        .eq('id', incomingRequest.id)
+        .eq('id', chamadoId)
         .single();
 
       const currentDeclined = (currentChamado?.declined_provider_ids as string[]) || [];
@@ -1063,7 +1097,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .update({ 
             declined_provider_ids: [...currentDeclined, authUser.id] 
           })
-          .eq('id', incomingRequest.id);
+          .eq('id', chamadoId);
       }
 
       console.log('[Chamado] Provider declined, recorded in chamado');
@@ -1071,7 +1105,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.error('[Chamado] Error recording decline:', err);
     }
 
-    setIncomingRequest(null);
     toast.info('Chamado recusado');
   }, [incomingRequest, authUser]);
 
