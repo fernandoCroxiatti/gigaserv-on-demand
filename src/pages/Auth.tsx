@@ -194,17 +194,17 @@ export default function Auth() {
   const isProvider = profileType === 'provider';
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/30 flex flex-col">
       {/* Hero Logo Section - Only show on select step */}
       {step === 'select' && (
-        <div className="flex-1 flex flex-col items-center justify-center px-8 pt-16 pb-8">
+        <div className="flex-1 flex flex-col items-center justify-center px-6 pt-12 pb-6">
           {/* Large Logo */}
-          <div className="mb-8 animate-fade-in">
-            <div className="w-28 h-28 rounded-full bg-primary/10 flex items-center justify-center mb-6 mx-auto">
-              <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center">
+          <div className="mb-10 animate-fade-in">
+            <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-5 mx-auto shadow-lg">
+              <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center shadow-md">
                 <svg 
                   viewBox="0 0 24 24" 
-                  className="w-10 h-10 text-primary-foreground"
+                  className="w-8 h-8 text-primary-foreground"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
@@ -220,27 +220,27 @@ export default function Auth() {
             
             {/* Brand Name */}
             <div className="text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <div className="w-4 h-4 rounded-full bg-primary animate-pulse" />
-                <span className="font-black text-4xl tracking-tight text-foreground">GIGA</span>
-                <span className="font-black text-4xl text-primary">S.O.S</span>
+              <div className="flex items-center justify-center gap-1.5 mb-1.5">
+                <div className="w-3 h-3 rounded-full bg-primary animate-pulse" />
+                <span className="font-black text-3xl tracking-tight text-foreground">GIGA</span>
+                <span className="font-black text-3xl text-primary">S.O.S</span>
               </div>
-              <p className="text-muted-foreground text-base font-medium">Serviços automotivos 24h</p>
+              <p className="text-muted-foreground text-sm font-medium">Serviços automotivos 24h</p>
             </div>
           </div>
 
           {/* Features */}
-          <div className="flex items-center justify-center gap-6 mb-12 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
+          <div className="flex items-center justify-center gap-5 mb-10 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary" />
               <span>Guincho</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary" />
               <span>Mecânica</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary" />
               <span>Chaveiro</span>
             </div>
           </div>
@@ -249,28 +249,28 @@ export default function Auth() {
 
       {/* Compact Header for login/register steps */}
       {step !== 'select' && (
-        <div className="px-6 pt-12 pb-6">
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-primary" />
-            <span className="font-bold text-xl tracking-tight text-foreground">GIGA</span>
-            <span className="font-bold text-xl text-primary">S.O.S</span>
+        <div className="px-6 pt-10 pb-4">
+          <div className="flex items-center justify-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+            <span className="font-bold text-lg tracking-tight text-foreground">GIGA</span>
+            <span className="font-bold text-lg text-primary">S.O.S</span>
           </div>
         </div>
       )}
 
       {/* Content */}
-      <div className={`px-6 pb-8 ${step === 'select' ? '' : 'flex-1 flex items-start pt-4'}`}>
-        <div className="w-full max-w-md mx-auto">
-          <div className="bg-card rounded-3xl shadow-uber-lg p-8 space-y-6">
+      <div className={`px-5 pb-6 ${step === 'select' ? '' : 'flex-1 flex items-start pt-2'}`}>
+        <div className="w-full max-w-sm mx-auto">
+          <div className="bg-card rounded-2xl shadow-card p-6 space-y-5">
             
             {/* Step: Select Profile */}
             {step === 'select' && (
-              <div className="space-y-5">
-                <h2 className="text-xl font-semibold text-center text-foreground">Como deseja entrar?</h2>
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-center text-foreground">Como deseja entrar?</h2>
                 
                 <Button
                   onClick={() => handleSelectProfile('client')}
-                  className="w-full h-14 rounded-2xl text-lg font-semibold shadow-md"
+                  className="w-full h-12 rounded-xl text-base font-semibold shadow-sm hover:shadow-md transition-shadow"
                   variant="default"
                 >
                   Login Cliente
@@ -278,13 +278,12 @@ export default function Auth() {
                 
                 <Button
                   onClick={() => handleSelectProfile('provider')}
-                  className="w-full h-14 rounded-2xl text-lg font-semibold shadow-md"
-                  variant="provider"
+                  className="w-full h-12 rounded-xl text-base font-semibold shadow-sm hover:shadow-md transition-shadow bg-blue-500/90 hover:bg-blue-500 text-white"
                 >
                   Login Prestador
                 </Button>
 
-                <p className="text-center text-xs text-muted-foreground pt-4">
+                <p className="text-center text-[10px] text-muted-foreground/70 pt-2 leading-relaxed">
                   Ao continuar, você concorda com nossos Termos de Uso e Política de Privacidade
                 </p>
               </div>
@@ -293,42 +292,42 @@ export default function Auth() {
             {/* Step: Login */}
             {step === 'login' && (
               <>
-                <div className="flex items-center gap-3">
-                  <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors">
-                    <ArrowLeft className="w-5 h-5" />
+                <div className="flex items-center gap-2">
+                  <button onClick={handleBack} className="p-1.5 -ml-1 rounded-full hover:bg-secondary/80 transition-colors">
+                    <ArrowLeft className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <h2 className="text-xl font-semibold text-foreground">
+                  <h2 className="text-base font-semibold text-foreground">
                     Login {isProvider ? 'Prestador' : 'Cliente'}
                   </h2>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-foreground">Telefone</Label>
+                <form onSubmit={handleLogin} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone" className="text-foreground text-sm">Telefone</Label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="phone"
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(11) 99999-9999"
-                        className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                        className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-foreground">Senha</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password" className="text-foreground text-sm">Senha</Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="password"
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Sua senha"
-                        className="pl-10 pr-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                        className="pl-9 pr-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
                       />
                       <button
                         type="button"
@@ -336,9 +335,9 @@ export default function Auth() {
                         className="absolute right-3 top-1/2 -translate-y-1/2"
                       >
                         {showPassword ? (
-                          <EyeOff className="w-5 h-5 text-muted-foreground" />
+                          <EyeOff className="w-4 h-4 text-muted-foreground" />
                         ) : (
-                          <Eye className="w-5 h-5 text-muted-foreground" />
+                          <Eye className="w-4 h-4 text-muted-foreground" />
                         )}
                       </button>
                     </div>
@@ -347,18 +346,18 @@ export default function Auth() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 rounded-xl font-semibold mt-2"
-                    variant={isProvider ? 'provider' : 'default'}
+                    className={`w-full h-11 rounded-xl font-semibold mt-3 shadow-sm hover:shadow-md transition-shadow ${isProvider ? 'bg-blue-500/90 hover:bg-blue-500 text-white' : ''}`}
+                    variant={isProvider ? undefined : 'default'}
                   >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Entrar'}
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Entrar'}
                   </Button>
                 </form>
 
-                <p className="text-center text-sm text-muted-foreground">
+                <p className="text-center text-xs text-muted-foreground">
                   Não tem conta?{' '}
                   <button
                     onClick={() => setStep('register')}
-                    className={`font-semibold ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
+                    className={`font-semibold ${isProvider ? 'text-blue-500' : 'text-primary'}`}
                   >
                     Cadastre-se
                   </button>
@@ -369,82 +368,82 @@ export default function Auth() {
             {/* Step: Register */}
             {step === 'register' && (
               <>
-                <div className="flex items-center gap-3">
-                  <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors">
-                    <ArrowLeft className="w-5 h-5" />
+                <div className="flex items-center gap-2">
+                  <button onClick={handleBack} className="p-1.5 -ml-1 rounded-full hover:bg-secondary/80 transition-colors">
+                    <ArrowLeft className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <h2 className="text-xl font-semibold text-foreground">
+                  <h2 className="text-base font-semibold text-foreground">
                     Cadastro {isProvider ? 'Prestador' : 'Cliente'}
                   </h2>
                 </div>
 
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name" className="text-foreground">Nome completo</Label>
+                <form onSubmit={handleRegister} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="name" className="text-foreground text-sm">Nome completo</Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="name"
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Seu nome"
-                        className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                        className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-foreground">Telefone</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone" className="text-foreground text-sm">Telefone</Label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="phone"
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(11) 99999-9999"
-                        className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                        className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
                       />
                     </div>
                   </div>
 
                   {isProvider && (
                     <>
-                      <div className="space-y-2">
-                        <Label htmlFor="cpf" className="text-foreground">CPF</Label>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cpf" className="text-foreground text-sm">CPF</Label>
                         <div className="relative">
-                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <Input
                             id="cpf"
                             type="text"
                             value={cpf}
                             onChange={(e) => setCpf(formatCPF(e.target.value))}
                             placeholder="000.000.000-00"
-                            className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                            className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
                           />
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="vehiclePlate" className="text-foreground">Placa do veículo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="vehiclePlate" className="text-foreground text-sm">Placa do veículo <span className="text-muted-foreground text-[10px] font-normal">(opcional)</span></Label>
                         <div className="relative">
-                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <Input
                             id="vehiclePlate"
                             type="text"
                             value={vehiclePlate}
                             onChange={(e) => setVehiclePlate(e.target.value.toUpperCase().slice(0, 7))}
                             placeholder="ABC-1D23"
-                            className="pl-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary uppercase"
+                            className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary uppercase text-sm"
                           />
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label className="text-foreground">Serviços oferecidos</Label>
-                        <p className="text-xs text-muted-foreground">Selecione os serviços que você realiza</p>
-                        <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-foreground text-sm">Serviços oferecidos</Label>
+                        <p className="text-[10px] text-muted-foreground">Selecione os serviços que você realiza</p>
+                        <div className="grid grid-cols-2 gap-1.5">
                           {ALL_SERVICES.map((service) => {
                             const config = SERVICE_CONFIG[service];
                             const isSelected = selectedServices.includes(service);
@@ -453,17 +452,17 @@ export default function Auth() {
                                 key={service}
                                 type="button"
                                 onClick={() => toggleService(service)}
-                                className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                                className={`flex items-center gap-1.5 p-2.5 rounded-lg border transition-all ${
                                   isSelected 
-                                    ? 'border-provider-primary bg-provider-primary/10' 
-                                    : 'border-border bg-secondary/50 hover:border-provider-primary/50'
+                                    ? 'border-blue-500 bg-blue-500/10' 
+                                    : 'border-border/50 bg-secondary/40 hover:border-blue-500/50'
                                 }`}
                               >
-                                <span className="text-lg">{config.icon}</span>
-                                <span className={`text-sm font-medium ${isSelected ? 'text-provider-primary' : 'text-foreground'}`}>
+                                <span className="text-sm">{config.icon}</span>
+                                <span className={`text-xs font-medium ${isSelected ? 'text-blue-600' : 'text-foreground'}`}>
                                   {config.label}
                                 </span>
-                                {isSelected && <Check className="w-4 h-4 ml-auto text-provider-primary" />}
+                                {isSelected && <Check className="w-3 h-3 ml-auto text-blue-500" />}
                               </button>
                             );
                           })}
@@ -472,17 +471,17 @@ export default function Auth() {
                     </>
                   )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-foreground">Senha</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password" className="text-foreground text-sm">Senha</Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="password"
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Mínimo 6 caracteres"
-                        className="pl-10 pr-10 h-12 rounded-xl bg-secondary/50 border-0 focus:ring-2 focus:ring-primary"
+                        className="pl-9 pr-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
                       />
                       <button
                         type="button"
@@ -490,9 +489,9 @@ export default function Auth() {
                         className="absolute right-3 top-1/2 -translate-y-1/2"
                       >
                         {showPassword ? (
-                          <EyeOff className="w-5 h-5 text-muted-foreground" />
+                          <EyeOff className="w-4 h-4 text-muted-foreground" />
                         ) : (
-                          <Eye className="w-5 h-5 text-muted-foreground" />
+                          <Eye className="w-4 h-4 text-muted-foreground" />
                         )}
                       </button>
                     </div>
@@ -501,18 +500,18 @@ export default function Auth() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 rounded-xl font-semibold mt-2"
-                    variant={isProvider ? 'provider' : 'default'}
+                    className={`w-full h-11 rounded-xl font-semibold mt-3 shadow-sm hover:shadow-md transition-shadow ${isProvider ? 'bg-blue-500/90 hover:bg-blue-500 text-white' : ''}`}
+                    variant={isProvider ? undefined : 'default'}
                   >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Cadastrar'}
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Cadastrar'}
                   </Button>
                 </form>
 
-                <p className="text-center text-sm text-muted-foreground">
+                <p className="text-center text-xs text-muted-foreground">
                   Já tem conta?{' '}
                   <button
                     onClick={() => setStep('login')}
-                    className={`font-semibold ${isProvider ? 'text-provider-primary' : 'text-primary'}`}
+                    className={`font-semibold ${isProvider ? 'text-blue-500' : 'text-primary'}`}
                   >
                     Faça login
                   </button>
