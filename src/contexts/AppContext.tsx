@@ -494,6 +494,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const dbChamado = payload.new as DbChamado;
           
+          // COMPETITIVE: Clear incomingRequest if this chamado was taken by another provider
+          // or canceled by client
+          if (incomingRequest && dbChamado.id === incomingRequest.id) {
+            const wasAccepted = dbChamado.status !== 'searching' || dbChamado.prestador_id !== null;
+            if (wasAccepted) {
+              console.log(`[Chamados] Chamado ${dbChamado.id} was accepted by another provider or status changed`);
+              setIncomingRequest(null);
+              stopRideAlertLoop();
+              return;
+            }
+          }
+          
           // Only process if status changed TO searching (returned after provider cancel)
           if (dbChamado.status !== 'searching' || dbChamado.prestador_id !== null) {
             return;
@@ -543,7 +555,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, canAccessProviderFeatures, profile?.active_profile, providerData?.is_online, providerData?.services_offered, providerData?.radar_range, providerData?.current_lat, providerData?.current_lng, chamado]);
+  }, [authUser, canAccessProviderFeatures, profile?.active_profile, providerData?.is_online, providerData?.services_offered, providerData?.radar_range, providerData?.current_lat, providerData?.current_lng, chamado, incomingRequest]);
 
   const setActiveProfile = useCallback(async (newProfile: UserProfile) => {
     if (!authUser || !profile) return;
@@ -627,6 +639,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // COMPETITIVE ACCEPT: Only update if chamado is still searching and has no provider
+      // This prevents race conditions when multiple providers try to accept
       const { data, error } = await supabase
         .from('chamados')
         .update({
@@ -634,17 +648,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: 'negotiating',
         })
         .eq('id', chamadoId)
+        .eq('status', 'searching') // Only accept if still searching
+        .is('prestador_id', null) // Only accept if no provider assigned yet
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // If error is "no rows returned", it means another provider already accepted
+        console.log('[AcceptChamado] Could not accept - likely already taken:', error);
+        setIncomingRequest(null);
+        toast.error('Chamado já foi aceito por outro prestador');
+        return;
+      }
+
+      if (!data) {
+        setIncomingRequest(null);
+        toast.error('Chamado já foi aceito por outro prestador');
+        return;
+      }
 
       setChamado(mapDbChamadoToChamado(data));
       setIncomingRequest(null);
       toast.success('Chamado aceito! Inicie a negociação.');
     } catch (error) {
       console.error('Error accepting chamado:', error);
-      toast.error('Erro ao aceitar chamado');
+      setIncomingRequest(null);
+      toast.error('Chamado já foi aceito por outro prestador');
     }
   }, [authUser, canAccessProviderFeatures]);
 
