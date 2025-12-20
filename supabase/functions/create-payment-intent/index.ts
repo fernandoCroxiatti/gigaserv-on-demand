@@ -235,7 +235,34 @@ serve(async (req) => {
 
     // Create PaymentIntent with explicit payment methods (NOT automatic)
     // Stripe Connect: payment goes to platform, then transfer to provider
-    const paymentIntent = await stripe.paymentIntents.create(paymentIntentOptions);
+    let paymentIntent: Stripe.PaymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.create(paymentIntentOptions);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+
+      // If PIX is not enabled for the platform account, Stripe rejects the payment method type.
+      // In this case, return a user-friendly error so the frontend can disable PIX.
+      if (
+        payment_method_type === 'pix' &&
+        /payment method type\s+"pix"\s+is invalid/i.test(msg)
+      ) {
+        logStep('PIX not enabled on platform account', { message: msg });
+        return new Response(
+          JSON.stringify({
+            error:
+              'PIX indisponível no momento. Ative PIX na sua conta de pagamentos para usar este método.',
+            error_code: 'pix_not_enabled',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        );
+      }
+
+      throw err;
+    }
 
     logStep("PaymentIntent created", { 
       paymentIntentId: paymentIntent.id,
