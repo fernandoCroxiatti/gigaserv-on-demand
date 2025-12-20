@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { MapPin, Navigation, Clock, DollarSign, X, Check, Route, Car } from 'lucide-react';
+import { Navigation, Clock, DollarSign, X, Check, Route } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
 import { startRideAlertLoop, stopRideAlertLoop, cleanupRideAlert } from '@/lib/rideAlertSound';
@@ -102,134 +102,132 @@ export function IncomingRequestCard() {
     <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/50 pointer-events-auto"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto"
         onClick={declineIncomingRequest}
       />
 
-      {/* Card */}
-      <div className="relative w-full max-w-lg bg-card rounded-t-3xl shadow-uber-lg animate-slide-up pointer-events-auto provider-theme">
+      {/* Card - compact and premium */}
+      <div className="relative w-full max-w-lg bg-card rounded-t-2xl shadow-uber-lg animate-slide-up pointer-events-auto provider-theme">
         {/* Timer bar */}
-        <div className="h-1 bg-secondary rounded-t-3xl overflow-hidden">
+        <div className="h-0.5 bg-secondary rounded-t-2xl overflow-hidden">
           <div 
             className="h-full bg-provider-primary transition-all duration-1000"
             style={{ width: `${(timeLeft / 30) * 100}%` }}
           />
         </div>
 
-        {/* Header */}
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-provider-primary/10 rounded-full flex items-center justify-center">
-              <span className="text-2xl">{serviceConfig.icon}</span>
+        {/* Header - compact */}
+        <div className="p-3 border-b border-border/50 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 bg-provider-primary/10 rounded-full flex items-center justify-center">
+              <span className="text-xl">{serviceConfig.icon}</span>
             </div>
             <div>
-              <h3 className="font-semibold">Novo chamado!</h3>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="status-badge bg-provider-primary/10 text-provider-primary text-xs">
+              <h3 className="font-semibold text-sm">Novo chamado!</h3>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs bg-provider-primary/10 text-provider-primary px-1.5 py-0.5 rounded-full font-medium">
                   {serviceConfig.label}
                 </span>
                 {vehicleTypeConfig && (
-                  <span className="status-badge bg-secondary text-foreground text-xs">
+                  <span className="text-[10px] bg-secondary text-foreground px-1.5 py-0.5 rounded-full">
                     {vehicleTypeConfig.icon} {vehicleTypeConfig.label}
                   </span>
                 )}
-                <span className="text-sm text-muted-foreground">• {timeLeft}s</span>
+                <span className="text-xs text-muted-foreground">• {timeLeft}s</span>
               </div>
             </div>
           </div>
           <button 
             onClick={declineIncomingRequest}
-            className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center hover:bg-secondary/80"
+            className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-secondary/80"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Route info */}
-        <div className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="flex flex-col items-center gap-1">
-              <div className="w-3 h-3 bg-provider-primary rounded-full" />
+        {/* Route info - compact */}
+        <div className="p-3">
+          <div className="flex items-start gap-2.5">
+            <div className="flex flex-col items-center gap-0.5 pt-0.5">
+              <div className="w-2 h-2 bg-provider-primary rounded-full" />
               {hasDestination && (
                 <>
-                  <div className="w-0.5 h-12 bg-border" />
-                  <div className="w-3 h-3 bg-foreground rounded-full" />
+                  <div className="w-px h-8 bg-border" />
+                  <div className="w-2 h-2 bg-foreground rounded-full" />
                 </>
               )}
             </div>
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 min-w-0 space-y-3">
               <div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
                   {hasDestination ? 'Buscar veículo em' : 'Atender em'}
                 </p>
-                <p className="font-medium">{incomingRequest.origem.address}</p>
+                <p className="font-medium text-xs truncate">{incomingRequest.origem.address}</p>
               </div>
               {hasDestination && incomingRequest.destino && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Levar até</p>
-                  <p className="font-medium">{incomingRequest.destino.address}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Levar até</p>
+                  <p className="font-medium text-xs truncate">{incomingRequest.destino.address}</p>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className={`px-4 pb-4 grid gap-3 ${hasDestination ? 'grid-cols-4' : 'grid-cols-3'}`}>
-          <div className="bg-secondary rounded-xl p-3 text-center">
-            <Navigation className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="font-semibold">{formattedDistance}</p>
-            <p className="text-xs text-muted-foreground">Até cliente</p>
+        {/* Stats - compact */}
+        <div className={`px-3 pb-3 grid gap-1.5 ${hasDestination ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          <div className="bg-secondary/80 rounded-lg p-2 text-center">
+            <Navigation className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
+            <p className="font-semibold text-xs">{formattedDistance}</p>
+            <p className="text-[10px] text-muted-foreground">Até cliente</p>
           </div>
           {hasDestination && (
-            <div className="bg-secondary rounded-xl p-3 text-center">
-              <Route className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-              <p className="font-semibold">{formattedDistanceToDestination}</p>
-              <p className="text-xs text-muted-foreground">Até entrega</p>
+            <div className="bg-secondary/80 rounded-lg p-2 text-center">
+              <Route className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
+              <p className="font-semibold text-xs">{formattedDistanceToDestination}</p>
+              <p className="text-[10px] text-muted-foreground">Até entrega</p>
             </div>
           )}
-          <div className="bg-secondary rounded-xl p-3 text-center">
-            <Clock className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="font-semibold">{serviceConfig.estimatedTime}</p>
-            <p className="text-xs text-muted-foreground">Estimado</p>
+          <div className="bg-secondary/80 rounded-lg p-2 text-center">
+            <Clock className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
+            <p className="font-semibold text-xs">{serviceConfig.estimatedTime}</p>
+            <p className="text-[10px] text-muted-foreground">Estimado</p>
           </div>
-          <div className="bg-secondary rounded-xl p-3 text-center">
-            <DollarSign className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="font-semibold">A combinar</p>
-            <p className="text-xs text-muted-foreground">Valor</p>
+          <div className="bg-secondary/80 rounded-lg p-2 text-center">
+            <DollarSign className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
+            <p className="font-semibold text-xs">A combinar</p>
+            <p className="text-[10px] text-muted-foreground">Valor</p>
           </div>
         </div>
 
-        {/* Service type info */}
+        {/* Service type info - compact */}
         {!hasDestination && (
-          <div className="px-4 pb-4">
-            <div className="flex items-center gap-2 p-3 bg-provider-primary/5 rounded-xl">
-              <Check className="w-4 h-4 text-provider-primary" />
-              <p className="text-sm text-muted-foreground">
+          <div className="px-3 pb-3">
+            <div className="flex items-center gap-1.5 p-2 bg-provider-primary/5 rounded-lg">
+              <Check className="w-3 h-3 text-provider-primary" />
+              <p className="text-xs text-muted-foreground">
                 Serviço no local - sem necessidade de reboque
               </p>
             </div>
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="p-4 pt-0 flex gap-3">
+        {/* Action buttons - wider */}
+        <div className="p-3 pt-0 flex gap-2">
           <Button 
             variant="outline" 
             onClick={declineIncomingRequest}
-            className="flex-1"
-            size="lg"
+            className="flex-1 h-11"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
             Recusar
           </Button>
           <Button 
             variant="provider"
             onClick={acceptIncomingRequest}
-            className="flex-1"
-            size="lg"
+            className="flex-1 h-11"
           >
-            <Check className="w-5 h-5" />
+            <Check className="w-4 h-4" />
             Aceitar
           </Button>
         </div>

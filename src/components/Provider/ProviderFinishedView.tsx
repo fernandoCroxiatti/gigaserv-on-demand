@@ -39,18 +39,18 @@ export function ProviderFinishedView() {
 
   if (showRating) {
     return (
-      <div className="h-full bg-gradient-to-b from-provider-primary/10 to-background flex flex-col items-center justify-center p-6 provider-theme">
-        <div className="w-full max-w-md animate-scale-in">
-          {/* Title */}
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold mb-2">Avaliar cliente</h1>
-            <p className="text-muted-foreground">Como foi a experiência com este cliente?</p>
+      <div className="h-full bg-gradient-to-b from-provider-primary/5 to-background flex flex-col items-center justify-center p-4 provider-theme">
+        <div className="w-full max-w-sm animate-scale-in">
+          {/* Title - compact */}
+          <div className="text-center mb-5">
+            <h1 className="text-xl font-bold mb-1">Avaliar cliente</h1>
+            <p className="text-sm text-muted-foreground">Como foi a experiência?</p>
           </div>
 
-          {/* Rating card */}
-          <div className="bg-card rounded-2xl shadow-uber p-6 mb-6">
-            {/* Rating stars */}
-            <div className="flex justify-center gap-2 mb-6">
+          {/* Rating card - compact */}
+          <div className="bg-card rounded-xl shadow-card p-4 mb-4">
+            {/* Rating stars - compact */}
+            <div className="flex justify-center gap-1.5 mb-4">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
@@ -58,7 +58,7 @@ export function ProviderFinishedView() {
                   className="transition-transform hover:scale-110 active:scale-95"
                 >
                   <Star 
-                    className={`w-10 h-10 ${
+                    className={`w-8 h-8 ${
                       star <= rating 
                         ? 'text-provider-primary fill-current' 
                         : 'text-muted'
@@ -68,58 +68,57 @@ export function ProviderFinishedView() {
               ))}
             </div>
 
-            {/* Quick feedback tags */}
-            <div className="flex justify-center gap-3 mb-6 flex-wrap">
+            {/* Quick feedback tags - compact */}
+            <div className="flex justify-center gap-2 mb-4 flex-wrap">
               <button 
                 onClick={() => toggleTag('educado')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all ${
                   selectedTags.includes('educado')
-                    ? 'bg-provider-primary text-white'
+                    ? 'bg-provider-primary text-white shadow-sm'
                     : 'bg-secondary hover:bg-secondary/80'
                 }`}
               >
-                <ThumbsUp className="w-4 h-4" />
+                <ThumbsUp className="w-3 h-3" />
                 Educado
               </button>
               <button 
                 onClick={() => toggleTag('comunicativo')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all ${
                   selectedTags.includes('comunicativo')
-                    ? 'bg-provider-primary text-white'
+                    ? 'bg-provider-primary text-white shadow-sm'
                     : 'bg-secondary hover:bg-secondary/80'
                 }`}
               >
-                <MessageCircle className="w-4 h-4" />
+                <MessageCircle className="w-3 h-3" />
                 Comunicativo
               </button>
               <button 
                 onClick={() => toggleTag('problematico')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all ${
                   selectedTags.includes('problematico')
-                    ? 'bg-destructive text-destructive-foreground'
+                    ? 'bg-destructive text-destructive-foreground shadow-sm'
                     : 'bg-secondary hover:bg-secondary/80'
                 }`}
               >
-                <ThumbsDown className="w-4 h-4" />
+                <ThumbsDown className="w-3 h-3" />
                 Problemático
               </button>
             </div>
 
-            {/* Comment input */}
+            {/* Comment input - compact */}
             <textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="Deixe um comentário (opcional)"
-              className="w-full bg-secondary rounded-xl p-4 resize-none focus:outline-none focus:ring-2 focus:ring-provider-primary"
-              rows={3}
+              className="w-full bg-secondary/80 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-provider-primary/50"
+              rows={2}
             />
           </div>
 
-          {/* Submit button */}
+          {/* Submit button - wider */}
           <Button 
             variant="provider"
-            className="w-full" 
-            size="lg"
+            className="w-full h-11" 
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
@@ -127,7 +126,7 @@ export function ProviderFinishedView() {
           </Button>
 
           <button 
-            className="w-full text-center text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors"
+            className="w-full text-center text-xs text-muted-foreground mt-3 hover:text-foreground transition-colors"
             onClick={resetChamado}
             disabled={isSubmitting}
           >
@@ -139,67 +138,67 @@ export function ProviderFinishedView() {
   }
 
   return (
-    <div className="h-full bg-gradient-to-b from-provider-primary/10 to-background flex flex-col items-center justify-center p-6 provider-theme">
-      <div className="w-full max-w-md animate-scale-in">
-        {/* Success icon */}
-        <div className="flex justify-center mb-6">
+    <div className="h-full bg-gradient-to-b from-provider-primary/5 to-background flex flex-col items-center justify-center p-4 provider-theme">
+      <div className="w-full max-w-sm animate-scale-in">
+        {/* Success icon - compact */}
+        <div className="flex justify-center mb-4">
           <div className="relative">
-            <div className="w-24 h-24 bg-provider-primary rounded-full flex items-center justify-center">
-              <Check className="w-12 h-12 text-white" />
+            <div className="w-16 h-16 bg-provider-primary rounded-full flex items-center justify-center shadow-lg">
+              <Check className="w-8 h-8 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-full border-4 border-provider-primary/30 animate-ping" />
+            <div className="absolute inset-0 rounded-full border-2 border-provider-primary/30 animate-ping" />
           </div>
         </div>
 
-        {/* Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-2">Serviço finalizado!</h1>
-          <p className="text-muted-foreground">Parabéns pelo trabalho concluído</p>
+        {/* Title - compact */}
+        <div className="text-center mb-5">
+          <h1 className="text-xl font-bold mb-1">Serviço finalizado!</h1>
+          <p className="text-sm text-muted-foreground">Parabéns pelo trabalho</p>
         </div>
 
-        {/* Earnings card */}
-        <div className="bg-card rounded-2xl shadow-uber p-6 mb-6">
-          <div className="text-center mb-6">
-            <p className="text-sm text-muted-foreground mb-1">Você ganhou</p>
-            <div className="flex items-center justify-center gap-2">
-              <DollarSign className="w-8 h-8 text-provider-primary" />
-              <span className="text-4xl font-bold">R$ {chamado.valor?.toFixed(2)}</span>
+        {/* Earnings card - compact and premium */}
+        <div className="bg-card rounded-xl shadow-card p-4 mb-4">
+          <div className="text-center mb-4">
+            <p className="text-xs text-muted-foreground mb-0.5">Você ganhou</p>
+            <div className="flex items-center justify-center gap-1.5">
+              <DollarSign className="w-6 h-6 text-provider-primary" />
+              <span className="text-3xl font-bold">R$ {chamado.valor?.toFixed(2)}</span>
             </div>
           </div>
 
-          {/* Service stats */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Service stats - compact */}
+          <div className="grid grid-cols-3 gap-2">
             <div className="text-center">
-              <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center mx-auto mb-2">
-                <Navigation className="w-5 h-5 text-provider-primary" />
+              <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center mx-auto mb-1">
+                <Navigation className="w-4 h-4 text-provider-primary" />
               </div>
-              <p className="text-lg font-semibold">--</p>
-              <p className="text-xs text-muted-foreground">Percorrido</p>
+              <p className="text-sm font-semibold">--</p>
+              <p className="text-[10px] text-muted-foreground">Percorrido</p>
             </div>
             <div className="text-center">
-              <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center mx-auto mb-2">
-                <Clock className="w-5 h-5 text-provider-primary" />
+              <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center mx-auto mb-1">
+                <Clock className="w-4 h-4 text-provider-primary" />
               </div>
-              <p className="text-lg font-semibold">--</p>
-              <p className="text-xs text-muted-foreground">Duração</p>
+              <p className="text-sm font-semibold">--</p>
+              <p className="text-[10px] text-muted-foreground">Duração</p>
             </div>
             <div className="text-center">
-              <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center mx-auto mb-2">
-                <TrendingUp className="w-5 h-5 text-provider-primary" />
+              <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center mx-auto mb-1">
+                <TrendingUp className="w-4 h-4 text-provider-primary" />
               </div>
-              <p className="text-lg font-semibold">{user?.providerData?.totalServices || 0}</p>
-              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-sm font-semibold">{user?.providerData?.totalServices || 0}</p>
+              <p className="text-[10px] text-muted-foreground">Total</p>
             </div>
           </div>
         </div>
 
-        {/* Continue button */}
-        <Button variant="provider" className="w-full" size="lg" onClick={handleBackToMap}>
+        {/* Continue button - wider */}
+        <Button variant="provider" className="w-full h-11" onClick={handleBackToMap}>
           Avaliar cliente
         </Button>
 
         <button 
-          className="w-full text-center text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors"
+          className="w-full text-center text-xs text-muted-foreground mt-3 hover:text-foreground transition-colors"
           onClick={resetChamado}
         >
           Pular avaliação

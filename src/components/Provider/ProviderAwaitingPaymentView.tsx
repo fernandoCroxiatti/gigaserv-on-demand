@@ -5,7 +5,6 @@ import { Button } from '../ui/button';
 import { 
   Clock, 
   User, 
-  DollarSign, 
   Navigation, 
   Loader2,
   CreditCard,
@@ -31,150 +30,146 @@ export function ProviderAwaitingPaymentView() {
         className="absolute inset-0" 
       />
 
-      {/* Status header */}
-      <div className="absolute top-24 left-4 right-4 z-10 animate-slide-down">
-        <div className="glass-card rounded-2xl p-4">
+      {/* Status header - compact */}
+      <div className="absolute top-20 left-3 right-3 z-10 animate-slide-down">
+        <div className="bg-card/95 backdrop-blur-md rounded-xl p-3 shadow-card">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-12 h-12 bg-status-searching/10 rounded-full flex items-center justify-center">
-                <CreditCard className="w-6 h-6 text-status-searching" />
+              <div className="w-10 h-10 bg-status-searching/10 rounded-full flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-status-searching" />
               </div>
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-status-searching rounded-full flex items-center justify-center">
-                <Loader2 className="w-3 h-3 text-white animate-spin" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-status-searching rounded-full flex items-center justify-center">
+                <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />
               </div>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-status-searching">Aguardando pagamento</p>
-              <p className="text-sm text-muted-foreground">Cliente confirmando pagamento</p>
+              <p className="font-semibold text-sm text-status-searching">Aguardando pagamento</p>
+              <p className="text-xs text-muted-foreground">Cliente confirmando</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom info panel */}
+      {/* Bottom info panel - compact */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-3xl shadow-uber-lg">
-          {/* Payment waiting header */}
-          <div className="p-6 border-b border-border text-center">
-            <div className="w-16 h-16 bg-status-searching/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Clock className="w-8 h-8 text-status-searching animate-pulse" />
+        <div className="bg-card rounded-t-2xl shadow-uber-lg">
+          {/* Payment waiting header - compact */}
+          <div className="p-4 border-b border-border/50 text-center">
+            <div className="w-12 h-12 bg-status-searching/10 rounded-full flex items-center justify-center mx-auto mb-2">
+              <Clock className="w-6 h-6 text-status-searching animate-pulse" />
             </div>
-            <h3 className="text-lg font-semibold mb-1">Aguardando pagamento do cliente</h3>
-            <p className="text-sm text-muted-foreground">
-              Você será notificado assim que o pagamento for confirmado
+            <h3 className="text-sm font-semibold mb-0.5">Aguardando pagamento</h3>
+            <p className="text-xs text-muted-foreground">
+              Você será notificado quando confirmado
             </p>
           </div>
 
-          {/* Service details */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center">
-                <User className="w-6 h-6 text-muted-foreground" />
+          {/* Service details - compact */}
+          <div className="p-3 border-b border-border/30">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
+                <User className="w-5 h-5 text-muted-foreground" />
               </div>
               <div className="flex-1">
-                <p className="font-medium">Cliente</p>
-                <p className="text-sm text-muted-foreground">Aguardando confirmação</p>
+                <p className="font-medium text-sm">Cliente</p>
+                <p className="text-xs text-muted-foreground">Aguardando confirmação</p>
               </div>
               <div className="text-right">
-                <p className="text-xl font-bold text-provider-primary">R$ {chamado.valor?.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Valor acordado</p>
+                <p className="text-lg font-bold text-provider-primary">R$ {chamado.valor?.toFixed(2)}</p>
+                <p className="text-[10px] text-muted-foreground">Valor acordado</p>
               </div>
             </div>
 
-            {/* Payment status indicator */}
-            <div className="flex items-center gap-3 p-3 bg-status-searching/10 rounded-xl">
-              <Loader2 className="w-5 h-5 text-status-searching animate-spin" />
+            {/* Payment status indicator - compact */}
+            <div className="flex items-center gap-2 p-2 bg-status-searching/10 rounded-lg">
+              <Loader2 className="w-4 h-4 text-status-searching animate-spin" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-status-searching">Processando pagamento</p>
-                <p className="text-xs text-muted-foreground">
-                  O serviço iniciará automaticamente após confirmação
+                <p className="text-xs font-medium text-status-searching">Processando pagamento</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Serviço inicia após confirmação
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Route info */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-start gap-3">
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-3 h-3 bg-provider-primary rounded-full" />
+          {/* Route info - compact */}
+          <div className="p-3 border-b border-border/30">
+            <div className="flex items-start gap-2">
+              <div className="flex flex-col items-center gap-0.5 pt-0.5">
+                <div className="w-2 h-2 bg-provider-primary rounded-full" />
                 {hasDestination && (
                   <>
-                    <div className="w-0.5 h-8 bg-border" />
-                    <div className="w-3 h-3 border-2 border-foreground rounded-full" />
+                    <div className="w-px h-5 bg-border" />
+                    <div className="w-2 h-2 border border-foreground rounded-full" />
                   </>
                 )}
               </div>
-              <div className="flex-1 space-y-3">
+              <div className="flex-1 min-w-0 space-y-2">
                 <div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
                     {hasDestination ? 'Buscar cliente em' : 'Local do atendimento'}
                   </p>
-                  <p className="font-medium text-sm">{chamado.origem.address}</p>
+                  <p className="font-medium text-xs truncate">{chamado.origem.address}</p>
                 </div>
                 {hasDestination && chamado.destino && (
                   <div>
-                    <p className="text-xs text-muted-foreground">Destino final</p>
-                    <p className="font-medium text-sm">{chamado.destino.address}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Destino final</p>
+                    <p className="font-medium text-xs truncate">{chamado.destino.address}</p>
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                <Navigation className="w-4 h-4 text-provider-primary" />
-                <span>--</span>
-              </div>
             </div>
           </div>
 
-          {/* What happens next */}
-          <div className="p-4 border-b border-border">
-            <p className="text-sm font-medium text-muted-foreground mb-3">Próximos passos</p>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-status-searching/10 rounded-full flex items-center justify-center">
-                  <CreditCard className="w-4 h-4 text-status-searching" />
+          {/* What happens next - compact */}
+          <div className="p-3 border-b border-border/30">
+            <p className="text-[10px] font-medium text-muted-foreground mb-2 uppercase tracking-wide">Próximos passos</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-status-searching/10 rounded-full flex items-center justify-center">
+                  <CreditCard className="w-3 h-3 text-status-searching" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm">Cliente confirma pagamento</p>
+                  <p className="text-xs">Cliente confirma pagamento</p>
                 </div>
-                <Loader2 className="w-4 h-4 text-status-searching animate-spin" />
+                <Loader2 className="w-3 h-3 text-status-searching animate-spin" />
               </div>
-              <div className="flex items-center gap-3 opacity-50">
-                <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 opacity-50">
+                <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-3 h-3 text-muted-foreground" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm">Navegação é liberada</p>
+                  <p className="text-xs">Navegação é liberada</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 opacity-50">
-                <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
-                  <Navigation className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 opacity-50">
+                <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center">
+                  <Navigation className="w-3 h-3 text-muted-foreground" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm">Inicie o serviço</p>
+                  <p className="text-xs">Inicie o serviço</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Contact buttons */}
-          <div className="p-4 flex gap-3">
-            <Button variant="outline" className="flex-1" size="lg">
-              <Phone className="w-5 h-5" />
+          {/* Contact buttons - compact */}
+          <div className="p-3 flex gap-2">
+            <Button variant="outline" className="flex-1 h-10 text-sm" size="sm">
+              <Phone className="w-4 h-4" />
               Ligar
             </Button>
-            <Button variant="outline" className="flex-1" size="lg">
-              <MessageCircle className="w-5 h-5" />
+            <Button variant="outline" className="flex-1 h-10 text-sm" size="sm">
+              <MessageCircle className="w-4 h-4" />
               Mensagem
             </Button>
           </div>
 
           {/* Cancel option */}
-          <div className="p-4 pt-0">
+          <div className="px-4 pb-4">
             <button 
               onClick={cancelChamado}
-              className="w-full text-center text-sm text-destructive py-2"
+              className="w-full text-center text-xs text-destructive py-1.5"
             >
               Cancelar serviço
             </button>
