@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { SearchingIndicator } from './SearchingIndicator';
@@ -6,9 +6,12 @@ import { useProgressiveSearch } from '@/hooks/useProgressiveSearch';
 import { Button } from '../ui/button';
 import { X } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export function ClientSearchingView() {
   const { chamado, cancelChamado } = useApp();
+  const previousDeclinedRef = useRef<string[]>([]);
 
   // Progressive search when searching
   const {
@@ -17,11 +20,54 @@ export function ClientSearchingView() {
     nearbyProviders,
     radiusIndex,
     totalRadii,
+    forceExpandRadius,
   } = useProgressiveSearch({
     userLocation: chamado?.origem || null,
     serviceType: chamado?.tipoServico || 'guincho',
     enabled: !!chamado && chamado.status === 'searching',
   });
+
+  // Subscribe to chamado updates to detect when providers decline
+  useEffect(() => {
+    if (!chamado?.id || chamado.status !== 'searching') return;
+
+    const channel = supabase
+      .channel(`chamado-declines-${chamado.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chamados',
+          filter: `id=eq.${chamado.id}`,
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          const newDeclined = (newData.declined_provider_ids as string[]) || [];
+          const previousDeclined = previousDeclinedRef.current;
+
+          // Check if there are new declines
+          const newDeclines = newDeclined.filter(id => !previousDeclined.includes(id));
+          
+          if (newDeclines.length > 0) {
+            console.log('[ClientSearching] Provider(s) declined:', newDeclines);
+            toast.info('Prestador não disponível, expandindo busca...');
+            
+            // Force expand radius for each new decline
+            newDeclines.forEach(declinedId => {
+              forceExpandRadius(declinedId);
+            });
+          }
+
+          previousDeclinedRef.current = newDeclined;
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chamado?.id, chamado?.status, forceExpandRadius]);
 
   if (!chamado) return null;
 
@@ -127,7 +173,9 @@ export function ClientSearchingView() {
             <span className="text-sm text-muted-foreground">
               {searchState === 'timeout' 
                 ? 'Nenhum prestador encontrado'
-                : 'Aguardando resposta'}
+                : searchState === 'expanding_radius'
+                  ? `Expandindo busca para ${currentRadius}km...`
+                  : 'Aguardando resposta'}
             </span>
           </div>
 

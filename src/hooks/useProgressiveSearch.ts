@@ -26,11 +26,15 @@ interface UseProgressiveSearchOptions {
   userLocation: Location | null;
   serviceType: ServiceType;
   enabled: boolean;
+  /** Called externally when a provider declines/timeouts to trigger radius expansion */
+  onProviderDeclined?: () => void;
 }
 
 const SEARCH_RADII = [3, 5, 10, 20, 50, 100]; // km
 const EXPANSION_INTERVAL = 6000; // 6 seconds between expansions
 const POSITION_UPDATE_INTERVAL = 5000; // 5 seconds for real-time position updates
+// After a provider declines, wait this long before expanding radius
+const DECLINE_EXPANSION_DELAY = 2000; // 2 seconds
 
 export function useProgressiveSearch({ 
   userLocation, 
@@ -41,10 +45,12 @@ export function useProgressiveSearch({
   const [currentRadius, setCurrentRadius] = useState(SEARCH_RADII[0]);
   const [nearbyProviders, setNearbyProviders] = useState<NearbyProvider[]>([]);
   const [radiusIndex, setRadiusIndex] = useState(0);
+  const [declinedProviderIds, setDeclinedProviderIds] = useState<Set<string>>(new Set());
   
   const expansionTimerRef = useRef<NodeJS.Timeout | null>(null);
   const searchActiveRef = useRef(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const radiusIndexRef = useRef(0);
 
   // Fetch providers within radius
   const fetchProvidersInRadius = useCallback(async (
@@ -259,8 +265,10 @@ export function useProgressiveSearch({
     searchActiveRef.current = true;
     setSearchState('searching');
     setRadiusIndex(0);
+    radiusIndexRef.current = 0;
     setCurrentRadius(SEARCH_RADII[0]);
     setNearbyProviders([]);
+    setDeclinedProviderIds(new Set());
 
     // Subscribe to real-time updates
     subscribeToProviderUpdates(userLocation, SEARCH_RADII[SEARCH_RADII.length - 1], serviceType);
@@ -282,6 +290,7 @@ export function useProgressiveSearch({
       if (!searchActiveRef.current) return;
       
       currentIndex++;
+      radiusIndexRef.current = currentIndex;
       
       if (currentIndex >= SEARCH_RADII.length) {
         setSearchState('timeout');
@@ -335,8 +344,73 @@ export function useProgressiveSearch({
     setSearchState('idle');
     setCurrentRadius(SEARCH_RADII[0]);
     setRadiusIndex(0);
+    radiusIndexRef.current = 0;
     setNearbyProviders([]);
+    setDeclinedProviderIds(new Set());
   }, [cancelSearch]);
+
+  // Force expand radius (called when provider declines or times out)
+  const forceExpandRadius = useCallback(async (declinedProviderId?: string) => {
+    if (!userLocation || !searchActiveRef.current) return;
+    
+    console.log('[ProgressiveSearch] Provider declined, forcing radius expansion');
+    
+    // Track declined provider
+    if (declinedProviderId) {
+      setDeclinedProviderIds(prev => new Set([...prev, declinedProviderId]));
+    }
+
+    // Remove declined provider from list
+    if (declinedProviderId) {
+      setNearbyProviders(prev => prev.filter(p => p.id !== declinedProviderId));
+    }
+
+    // Check if there are still available providers (excluding declined ones)
+    const remainingProviders = nearbyProviders.filter(
+      p => !declinedProviderIds.has(p.id) && p.id !== declinedProviderId
+    );
+
+    if (remainingProviders.length > 0) {
+      console.log('[ProgressiveSearch] Still have remaining providers, not expanding yet');
+      setNearbyProviders(remainingProviders);
+      return;
+    }
+
+    // No more providers at current radius, expand
+    const nextIndex = radiusIndexRef.current + 1;
+    
+    if (nextIndex >= SEARCH_RADII.length) {
+      console.log('[ProgressiveSearch] Max radius reached, timeout');
+      setSearchState('timeout');
+      return;
+    }
+
+    // Wait a bit before expanding to give UI time to update
+    setTimeout(async () => {
+      if (!searchActiveRef.current || !userLocation) return;
+      
+      const newRadius = SEARCH_RADII[nextIndex];
+      console.log(`[ProgressiveSearch] Expanding radius to ${newRadius}km after decline`);
+      
+      setRadiusIndex(nextIndex);
+      radiusIndexRef.current = nextIndex;
+      setCurrentRadius(newRadius);
+      setSearchState('expanding_radius');
+
+      const providers = await fetchProvidersInRadius(userLocation, newRadius, serviceType);
+      
+      // Filter out already declined providers
+      const availableProviders = providers.filter(p => !declinedProviderIds.has(p.id));
+      
+      if (availableProviders.length > 0) {
+        setNearbyProviders(availableProviders);
+        setSearchState('provider_found');
+      } else {
+        // Continue expanding
+        forceExpandRadius();
+      }
+    }, DECLINE_EXPANSION_DELAY);
+  }, [userLocation, nearbyProviders, declinedProviderIds, fetchProvidersInRadius, serviceType]);
 
   // Auto-start search when enabled and location available
   useEffect(() => {
@@ -367,5 +441,7 @@ export function useProgressiveSearch({
     startSearch,
     cancelSearch,
     resetSearch,
+    forceExpandRadius,
+    declinedProviderIds,
   };
 }
