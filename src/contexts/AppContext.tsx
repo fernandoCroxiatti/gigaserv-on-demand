@@ -224,9 +224,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
           table: 'chamados',
           filter: `id=eq.${chamado.id}`,
         },
-        (payload) => {
+        async (payload) => {
           if (payload.eventType === 'UPDATE') {
             const updated = mapDbChamadoToChamado(payload.new as DbChamado);
+            const oldStatus = chamado.status;
+            const newStatus = updated.status;
+            
+            // CRITICAL: If provider canceled before service started, resume search automatically
+            // This happens when status goes from negotiating/awaiting_payment back to canceled
+            // AND the service hadn't started yet (not in_service or finished)
+            const providerCanceledBeforeStart = 
+              newStatus === 'canceled' && 
+              ['negotiating', 'awaiting_payment', 'accepted'].includes(oldStatus) &&
+              profile?.active_profile === 'client';
+            
+            if (providerCanceledBeforeStart && authUser) {
+              console.log('[Chamado] Provider canceled before service started, resuming search...');
+              toast.info('O prestador cancelou. Buscando outro prestador...');
+              
+              // Reset chamado to searching status to find another provider
+              const { error } = await supabase
+                .from('chamados')
+                .update({ 
+                  status: 'searching',
+                  prestador_id: null,
+                  valor_proposto: null,
+                  valor: null,
+                  payment_status: null,
+                  stripe_payment_intent_id: null,
+                })
+                .eq('id', chamado.id);
+              
+              if (error) {
+                console.error('Error resuming search:', error);
+                toast.error('Erro ao retomar busca');
+              }
+              return; // Don't update state yet, the subscription will receive the new update
+            }
+            
             setChamado(updated);
             
             if (updated.status === 'accepted') {
@@ -235,6 +270,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
               toast.success('Serviço iniciado!');
             } else if (updated.status === 'finished') {
               toast.success('Serviço finalizado!');
+            } else if (updated.status === 'searching' && oldStatus !== 'searching') {
+              // Status changed to searching (e.g., after provider declined)
+              toast.info('Buscando prestadores próximos...');
             }
           }
         }
@@ -244,7 +282,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chamado?.id]);
+  }, [chamado?.id, chamado?.status, profile?.active_profile, authUser]);
 
   // Load chat messages for active chamado
   useEffect(() => {
@@ -885,10 +923,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await acceptChamado(incomingRequest.id);
   }, [incomingRequest, acceptChamado, canAccessProviderFeatures]);
 
-  const declineIncomingRequest = useCallback(() => {
+  const declineIncomingRequest = useCallback(async () => {
+    if (!incomingRequest || !authUser) {
+      setIncomingRequest(null);
+      return;
+    }
+
+    // Record the decline in the chamado so client can track and expand radius
+    try {
+      const { data: currentChamado } = await supabase
+        .from('chamados')
+        .select('declined_provider_ids')
+        .eq('id', incomingRequest.id)
+        .single();
+
+      const currentDeclined = (currentChamado?.declined_provider_ids as string[]) || [];
+      if (!currentDeclined.includes(authUser.id)) {
+        await supabase
+          .from('chamados')
+          .update({ 
+            declined_provider_ids: [...currentDeclined, authUser.id] 
+          })
+          .eq('id', incomingRequest.id);
+      }
+
+      console.log('[Chamado] Provider declined, recorded in chamado');
+    } catch (err) {
+      console.error('[Chamado] Error recording decline:', err);
+    }
+
     setIncomingRequest(null);
     toast.info('Chamado recusado');
-  }, []);
+  }, [incomingRequest, authUser]);
 
   const setChamadoStatus = useCallback((status: ChamadoStatus) => {
     setChamado(prev => prev ? { ...prev, status, updatedAt: new Date() } : null);

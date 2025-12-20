@@ -80,6 +80,7 @@ export type Database = {
           commission_amount: number | null
           commission_percentage: number | null
           created_at: string
+          declined_provider_ids: string[] | null
           destino_address: string | null
           destino_lat: number | null
           destino_lng: number | null
@@ -113,6 +114,7 @@ export type Database = {
           commission_amount?: number | null
           commission_percentage?: number | null
           created_at?: string
+          declined_provider_ids?: string[] | null
           destino_address?: string | null
           destino_lat?: number | null
           destino_lng?: number | null
@@ -146,6 +148,7 @@ export type Database = {
           commission_amount?: number | null
           commission_percentage?: number | null
           created_at?: string
+          declined_provider_ids?: string[] | null
           destino_address?: string | null
           destino_lat?: number | null
           destino_lng?: number | null
