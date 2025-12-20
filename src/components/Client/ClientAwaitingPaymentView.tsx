@@ -28,7 +28,7 @@ type ExtendedPaymentMethod = PaymentMethod | 'wallet';
 
 const basePaymentMethods: { id: ExtendedPaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean; walletOnly?: boolean }[] = [
   { id: 'wallet', name: 'Apple Pay / Google Pay', icon: Smartphone, description: 'Carteira digital', available: true, walletOnly: true },
-  { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento via Stripe', available: true },
+  { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento seguro', available: true },
   { id: 'pix', name: 'PIX', icon: Wallet, description: 'Pagamento instantâneo', available: true },
   { id: 'cash', name: 'Dinheiro', icon: Banknote, description: 'Pagar ao prestador (em breve)', available: false },
 ];
@@ -624,7 +624,7 @@ export function ClientAwaitingPaymentView() {
             <div className="flex items-start gap-3 p-3 bg-status-searching/10 rounded-xl">
               <Shield className="w-5 h-5 text-status-searching flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-status-searching">Pagamento seguro via Stripe</p>
+                <p className="text-sm font-medium text-status-searching">Pagamento seguro e protegido</p>
                 <p className="text-xs text-muted-foreground">
                   O prestador recebe automaticamente após a confirmação. Seu dinheiro está protegido.
                 </p>
