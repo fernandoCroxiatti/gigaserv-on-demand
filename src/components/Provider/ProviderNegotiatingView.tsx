@@ -6,6 +6,7 @@ import { Send, MessageCircle, User, Navigation, Clock, ArrowRight, Check, Route,
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
 import { calculateDistance } from '@/lib/distance';
+import { VEHICLE_TYPES, VehicleType } from '@/types/vehicleTypes';
 
 export function ProviderNegotiatingView() {
   const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, providerData } = useApp();
@@ -53,6 +54,9 @@ export function ProviderNegotiatingView() {
 
   const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
   const hasDestination = chamado.destino !== null;
+  const vehicleTypeConfig = chamado.vehicleType 
+    ? VEHICLE_TYPES[chamado.vehicleType as VehicleType] 
+    : null;
 
   const formattedDistanceToClient = distanceToClient !== null 
     ? distanceToClient < 1 
@@ -114,11 +118,16 @@ export function ProviderNegotiatingView() {
             </div>
             <div className="flex-1">
               <h3 className="font-semibold">{contactLoading ? 'Carregando...' : clientName}</h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="status-badge bg-provider-primary/10 text-provider-primary text-xs">
                   <span className="mr-1">{serviceConfig.icon}</span>
                   {serviceConfig.label}
                 </span>
+                {vehicleTypeConfig && (
+                  <span className="status-badge bg-secondary text-foreground text-xs">
+                    {vehicleTypeConfig.icon} {vehicleTypeConfig.label}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex flex-col items-end gap-1 text-sm">

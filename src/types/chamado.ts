@@ -111,6 +111,7 @@ export interface Chamado {
   valor: number | null;
   valorProposto: number | null;
   payment: Payment | null;
+  vehicleType: string | null; // Vehicle type selected by client
   createdAt: Date;
   updatedAt: Date;
 }

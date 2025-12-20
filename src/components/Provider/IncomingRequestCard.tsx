@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { MapPin, Navigation, Clock, DollarSign, X, Check, Route } from 'lucide-react';
+import { MapPin, Navigation, Clock, DollarSign, X, Check, Route, Car } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
 import { startRideAlertLoop, stopRideAlertLoop, cleanupRideAlert } from '@/lib/rideAlertSound';
+import { VEHICLE_TYPES, VehicleType } from '@/types/vehicleTypes';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
@@ -93,6 +94,9 @@ export function IncomingRequestCard() {
 
   const serviceConfig = SERVICE_CONFIG[incomingRequest.tipoServico];
   const hasDestination = incomingRequest.destino !== null;
+  const vehicleTypeConfig = incomingRequest.vehicleType 
+    ? VEHICLE_TYPES[incomingRequest.vehicleType as VehicleType] 
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none">
@@ -120,10 +124,15 @@ export function IncomingRequestCard() {
             </div>
             <div>
               <h3 className="font-semibold">Novo chamado!</h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="status-badge bg-provider-primary/10 text-provider-primary text-xs">
                   {serviceConfig.label}
                 </span>
+                {vehicleTypeConfig && (
+                  <span className="status-badge bg-secondary text-foreground text-xs">
+                    {vehicleTypeConfig.icon} {vehicleTypeConfig.label}
+                  </span>
+                )}
                 <span className="text-sm text-muted-foreground">• {timeLeft}s</span>
               </div>
             </div>
