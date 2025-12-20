@@ -153,6 +153,9 @@ serve(async (req) => {
       providerReceives: totalAmountCentavos - applicationFeeAmount,
     });
 
+    // Get origin for return_url
+    const origin = req.headers.get("origin") || "https://giga-sos.lovable.app";
+    
     // Create PaymentIntent with saved card
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalAmountCentavos,
@@ -161,6 +164,7 @@ serve(async (req) => {
       payment_method: payment_method_id,
       off_session: false,
       confirm: true,
+      return_url: `${origin}/`,
       application_fee_amount: applicationFeeAmount,
       transfer_data: {
         destination: providerData.stripe_account_id,
