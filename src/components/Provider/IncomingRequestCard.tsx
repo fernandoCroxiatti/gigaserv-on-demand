@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { MapPin, Navigation, Clock, DollarSign, X, Check, Route } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
+import { startRideAlertLoop, stopRideAlertLoop, cleanupRideAlert } from '@/lib/rideAlertSound';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
@@ -53,13 +54,21 @@ export function IncomingRequestCard() {
       : `${distanceToDestination.toFixed(1)} km`
     : '--';
 
+  // Start alert sound when request comes in, stop on accept/decline/expire
   useEffect(() => {
-    if (!incomingRequest) return;
+    if (!incomingRequest) {
+      stopRideAlertLoop();
+      return;
+    }
+    
+    // Start the urgent alert loop
+    startRideAlertLoop();
     
     setTimeLeft(30);
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
+          stopRideAlertLoop();
           declineIncomingRequest();
           return 0;
         }
@@ -67,8 +76,18 @@ export function IncomingRequestCard() {
       });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      stopRideAlertLoop();
+    };
   }, [incomingRequest, declineIncomingRequest]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupRideAlert();
+    };
+  }, []);
 
   if (!incomingRequest) return null;
 
