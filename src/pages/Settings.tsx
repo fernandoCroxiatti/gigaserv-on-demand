@@ -19,7 +19,8 @@ import {
   AlertTriangle,
   Smartphone,
   MapPin,
-  MessageSquare
+  MessageSquare,
+  FileText
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -217,6 +218,18 @@ export default function Settings() {
               <div className="flex-1 text-left">
                 <p className="font-medium">Termos de Uso</p>
                 <p className="text-sm text-muted-foreground">Regras de utilização</p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+
+            <button 
+              onClick={() => navigate('/stripe-audit')}
+              className="flex items-center gap-4 p-4 w-full hover:bg-secondary/50 transition-colors"
+            >
+              <FileText className="w-5 h-5 text-muted-foreground" />
+              <div className="flex-1 text-left">
+                <p className="font-medium">Relatório Técnico Stripe</p>
+                <p className="text-sm text-muted-foreground">Auditoria para suporte</p>
               </div>
               <ChevronRight className="w-5 h-5 text-muted-foreground" />
             </button>

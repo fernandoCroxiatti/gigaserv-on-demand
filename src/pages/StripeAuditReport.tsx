@@ -1,12 +1,35 @@
 import { Button } from "@/components/ui/button";
-import { FileDown, ArrowLeft } from "lucide-react";
+import { FileDown, ArrowLeft, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useRef, useState } from "react";
+import html2pdf from "html2pdf.js";
 
 const StripeAuditReport = () => {
   const navigate = useNavigate();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
 
-  const handleDownloadPDF = () => {
-    window.print();
+  const handleDownloadPDF = async () => {
+    if (!contentRef.current) return;
+    
+    setDownloading(true);
+    
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: `GIGA_SOS_Auditoria_Stripe_${new Date().toISOString().split('T')[0]}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    try {
+      await html2pdf().set(opt).from(contentRef.current).save();
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -17,14 +40,18 @@ const StripeAuditReport = () => {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Voltar
         </Button>
-        <Button onClick={handleDownloadPDF}>
-          <FileDown className="w-4 h-4 mr-2" />
-          Baixar PDF
+        <Button onClick={handleDownloadPDF} disabled={downloading}>
+          {downloading ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <FileDown className="w-4 h-4 mr-2" />
+          )}
+          {downloading ? 'Gerando PDF...' : 'Baixar PDF'}
         </Button>
       </div>
 
       {/* Conteúdo do Relatório */}
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div ref={contentRef} className="max-w-4xl mx-auto space-y-8 bg-white">
         <header className="text-center border-b pb-6">
           <h1 className="text-3xl font-bold">AUDITORIA TÉCNICA STRIPE</h1>
           <h2 className="text-xl text-gray-600 mt-2">GIGA S.O.S - Extração de Código</h2>
