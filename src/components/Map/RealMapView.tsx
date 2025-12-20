@@ -55,14 +55,21 @@ const mapOptions: google.maps.MapOptions = {
 
 const defaultCenter = { lat: -23.5505, lng: -46.6333 }; // São Paulo
 
-// Calculate zoom level based on radius
+// Calculate zoom level based on radius (in km) to properly frame the circle
+// Uses logarithmic scale for smooth transitions across the 5-100km range
 function getZoomForRadius(radiusKm: number): number {
-  if (radiusKm <= 3) return 14;
-  if (radiusKm <= 5) return 13;
-  if (radiusKm <= 10) return 12;
-  if (radiusKm <= 20) return 11;
-  if (radiusKm <= 50) return 10;
-  return 9;
+  // Zoom levels calibrated to frame the full circle diameter on screen
+  // At equator: zoom 15 ≈ 1.5km view, each zoom level doubles the view area
+  if (radiusKm <= 5) return 12;      // ~5km radius fits well at zoom 12
+  if (radiusKm <= 10) return 11;     // ~10km radius
+  if (radiusKm <= 15) return 10.5;   // ~15km radius
+  if (radiusKm <= 20) return 10;     // ~20km radius
+  if (radiusKm <= 30) return 9.5;    // ~30km radius
+  if (radiusKm <= 40) return 9;      // ~40km radius
+  if (radiusKm <= 50) return 8.5;    // ~50km radius
+  if (radiusKm <= 70) return 8;      // ~70km radius
+  if (radiusKm <= 100) return 7.5;   // ~100km radius
+  return 7;                          // >100km
 }
 
 export function RealMapView({
@@ -212,17 +219,18 @@ export function RealMapView({
         onClick={handleMapClick}
         options={mapOptions}
       >
-        {/* Search radius circle */}
+        {/* Search radius circle - synced with slider value */}
         {showSearchRadius && mapCenter && (
           <Circle
             center={mapCenter}
-            radius={searchRadius * 1000} // Convert km to meters
+            radius={searchRadius * 1000} // Convert km to meters (accurate conversion)
             options={{
-              fillColor: '#3B82F6',
-              fillOpacity: 0.1,
-              strokeColor: '#3B82F6',
-              strokeOpacity: 0.4,
+              fillColor: '#2563EB',
+              fillOpacity: 0.08,
+              strokeColor: '#2563EB',
+              strokeOpacity: 0.5,
               strokeWeight: 2,
+              clickable: false,
             }}
           />
         )}
