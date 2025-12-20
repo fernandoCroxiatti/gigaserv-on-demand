@@ -79,14 +79,24 @@ export function ProviderProfile() {
   // Financial data hook
   const { data: financialData, loading: loadingFinancial, refetch: refetchFinancial } = useProviderFinancialData();
 
+  // Handle tab from URL params (e.g., /profile?tab=bank)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'bank' || tabParam === 'profile' || tabParam === 'rides') {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [searchParams]);
+
   // Check for Stripe return
   useEffect(() => {
     const stripeParam = searchParams.get('stripe');
     if (stripeParam === 'success') {
       toast.success('Conta Stripe configurada! Verificando status...');
+      setActiveTab('bank'); // Navigate to bank tab on success
       checkStripeStatus();
     } else if (stripeParam === 'refresh') {
       toast.info('Complete o cadastro Stripe para receber pagamentos');
+      setActiveTab('bank'); // Navigate to bank tab on refresh
       checkStripeStatus();
     }
   }, [searchParams]);
@@ -317,35 +327,47 @@ export function ProviderProfile() {
         
         {activeTab === 'bank' && (
           <>
-            {!stripeStatus?.has_account && (
+            {loadingStripe ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : !stripeStatus?.has_account ? (
               <div className="p-4">
                 <div className="bg-card rounded-2xl p-6 text-center">
                   <Landmark className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="font-semibold text-lg mb-2">Configure sua conta bancária</h3>
+                  <h3 className="font-semibold text-lg mb-2">Configure seus recebimentos</h3>
                   <p className="text-muted-foreground mb-4">
-                    Conecte sua conta Stripe para receber pagamentos automaticamente.
+                    Conecte sua conta Stripe para receber pagamentos automaticamente após cada serviço.
                   </p>
                   <Button 
                     onClick={handleStripeOnboarding}
                     disabled={connectingStripe}
                     className="w-full"
+                    variant="provider"
                   >
                     {connectingStripe ? (
                       <Loader2 className="w-4 h-4 animate-spin mr-2" />
                     ) : null}
-                    Configurar conta bancária
+                    Configurar recebimentos
                   </Button>
                 </div>
               </div>
-            )}
-            {stripeStatus?.has_account && financialData && (
+            ) : (
               <ProviderBankTab
-                balance={financialData.balance}
-                earnings={financialData.earnings}
-                payouts={financialData.payouts}
-                stripeStatus={financialData.stripeStatus}
+                balance={financialData?.balance || { available: 0, pending: 0, paid: 0 }}
+                earnings={financialData?.earnings || { today: 0, week: 0, month: 0, total: 0, todayRides: 0, weekRides: 0, monthRides: 0, totalRides: 0 }}
+                payouts={financialData?.payouts || []}
+                stripeStatus={financialData?.stripeStatus || {
+                  connected: stripeStatus.charges_enabled && stripeStatus.payouts_enabled,
+                  chargesEnabled: stripeStatus.charges_enabled,
+                  payoutsEnabled: stripeStatus.payouts_enabled,
+                  status: stripeStatus.stripe_status || 'pending',
+                }}
                 loading={loadingFinancial}
-                onRefresh={refetchFinancial}
+                onRefresh={() => {
+                  refetchFinancial();
+                  checkStripeStatus();
+                }}
               />
             )}
           </>

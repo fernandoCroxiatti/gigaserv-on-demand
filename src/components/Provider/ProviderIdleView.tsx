@@ -31,8 +31,11 @@ export function ProviderIdleView() {
       try {
         const { data, error } = await supabase.functions.invoke('check-connect-status');
         if (!error && data) {
-          // Use stripe_status === 'verified' for proper validation
-          setStripeVerified(data.stripe_status === 'verified');
+          // Check both stripe_status === 'verified' AND payouts_enabled for proper validation
+          const isVerified = data.stripe_status === 'verified' && 
+                            data.charges_enabled === true && 
+                            data.payouts_enabled === true;
+          setStripeVerified(isVerified);
         }
       } catch (err) {
         console.error('Error checking Stripe status:', err);
@@ -67,10 +70,10 @@ export function ProviderIdleView() {
       }
 
       if (!stripeVerified) {
-        toast.error('Finalize seu cadastro e ative os recebimentos para começar a atender.', {
+        toast.error('Ative os recebimentos para começar a atender.', {
           action: {
             label: 'Configurar',
-            onClick: () => navigate('/profile'),
+            onClick: () => navigate('/profile?tab=bank'),
           },
         });
         return;
@@ -184,7 +187,7 @@ export function ProviderIdleView() {
                 <Button 
                   variant="link" 
                   className="p-0 h-auto text-sm text-provider-primary"
-                  onClick={() => navigate('/profile')}
+                  onClick={() => navigate(!isRegistrationComplete ? '/profile' : '/profile?tab=bank')}
                 >
                   {!isRegistrationComplete ? 'Completar cadastro' : 'Configurar recebimentos'}
                 </Button>
