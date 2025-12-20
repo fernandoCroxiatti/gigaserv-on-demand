@@ -177,8 +177,8 @@ async function sendWebPush(subscription: { endpoint: string; p256dh: string; aut
       {
         name: 'HKDF',
         hash: 'SHA-256',
-        salt: new Uint8Array(0).buffer,
-        info: new TextEncoder().encode('Content-Encoding: aes128gcm\0').buffer
+        salt: new ArrayBuffer(0),
+        info: new TextEncoder().encode('Content-Encoding: aes128gcm\0').buffer as ArrayBuffer
       },
       prkKey,
       { name: 'AES-GCM', length: 128 },
@@ -191,8 +191,8 @@ async function sendWebPush(subscription: { endpoint: string; p256dh: string; aut
       {
         name: 'HKDF',
         hash: 'SHA-256',
-        salt: new Uint8Array(0).buffer,
-        info: new TextEncoder().encode('Content-Encoding: nonce\0').buffer
+        salt: new ArrayBuffer(0),
+        info: new TextEncoder().encode('Content-Encoding: nonce\0').buffer as ArrayBuffer
       },
       prkKey,
       96
