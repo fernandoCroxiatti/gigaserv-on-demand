@@ -176,25 +176,37 @@ serve(async (req) => {
     logStep("Customer ready", { customerId });
 
     // Determine payment method types based on request
-    const paymentMethodTypes = payment_method_type === 'pix' 
+    // IMPORTANT: Explicitly set payment_method_types instead of using automatic_payment_methods
+    // This ensures PIX works correctly in Brazil via PaymentIntent (not Checkout)
+    const paymentMethodTypes: ('card' | 'pix')[] = payment_method_type === 'pix' 
       ? ['pix'] 
       : ['card'];
     
-    logStep("Creating PaymentIntent", { paymentMethodTypes, paymentMethodType: payment_method_type });
+    logStep("Creating PaymentIntent", { 
+      paymentMethodTypes, 
+      paymentMethodType: payment_method_type,
+      currency: 'brl',
+      automaticPaymentMethodsDisabled: true,
+    });
 
-    // PIX expiration in seconds (15 minutes)
+    // PIX expiration in seconds (15 minutes = 900 seconds)
     const PIX_EXPIRATION_SECONDS = 900;
 
-    // Build payment intent options
-    const paymentIntentOptions: any = {
+    // Build payment intent options - NEVER use automatic_payment_methods
+    // This ensures full control over payment methods and PIX works correctly
+    const paymentIntentOptions: Stripe.PaymentIntentCreateParams = {
       amount: totalAmountCentavos,
-      currency: "brl",
+      currency: "brl", // Required for PIX - must be BRL
       customer: customerId,
       application_fee_amount: applicationFeeAmount,
       transfer_data: {
         destination: providerData.stripe_account_id,
       },
+      // CRITICAL: Explicitly define payment_method_types instead of automatic_payment_methods
+      // This is required for PIX to work correctly in-app
       payment_method_types: paymentMethodTypes,
+      // Explicitly disable automatic_payment_methods to avoid conflicts
+      // automatic_payment_methods: { enabled: false }, // Not needed when payment_method_types is set
       metadata: {
         chamado_id: chamado_id,
         cliente_id: user.id,
@@ -205,22 +217,31 @@ serve(async (req) => {
       },
     };
 
-    // Add PIX-specific options for expiration
+    // Add PIX-specific options for expiration (15 minutes)
+    // This generates QR Code and copy-paste code directly via PaymentIntent
     if (payment_method_type === 'pix') {
       paymentIntentOptions.payment_method_options = {
         pix: {
           expires_after_seconds: PIX_EXPIRATION_SECONDS,
         },
       };
-      logStep("PIX expiration configured", { expiresAfterSeconds: PIX_EXPIRATION_SECONDS });
+      logStep("PIX configuration", { 
+        expiresAfterSeconds: PIX_EXPIRATION_SECONDS,
+        expiresIn: '15 minutes',
+        willGenerateQRCode: true,
+        willGenerateCopyPasteCode: true,
+      });
     }
 
-    // Create PaymentIntent with automatic transfer
+    // Create PaymentIntent with explicit payment methods (NOT automatic)
+    // Stripe Connect: payment goes to platform, then transfer to provider
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentOptions);
 
     logStep("PaymentIntent created", { 
       paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret ? "present" : "missing",
+      status: paymentIntent.status,
+      paymentMethodTypes: paymentIntent.payment_method_types,
     });
 
     // Update chamado with payment intent
@@ -232,6 +253,7 @@ serve(async (req) => {
         commission_amount: applicationFeeAmount / 100,
         provider_amount: (totalAmountCentavos - applicationFeeAmount) / 100,
         payment_provider: 'stripe',
+        payment_method: payment_method_type, // Track the payment method used
       })
       .eq('id', chamado_id);
 
@@ -239,6 +261,18 @@ serve(async (req) => {
       logStep("Error updating chamado", { error: updateError.message });
     }
 
+    // Log success for debugging
+    logStep("PaymentIntent ready for client", {
+      paymentIntentId: paymentIntent.id,
+      paymentMethod: payment_method_type,
+      amountBRL: (totalAmountCentavos / 100).toFixed(2),
+      applicationFeeBRL: (applicationFeeAmount / 100).toFixed(2),
+      providerReceivesBRL: ((totalAmountCentavos - applicationFeeAmount) / 100).toFixed(2),
+    });
+
+    // Response includes all data needed for frontend to handle payment
+    // For PIX: client will use confirmPixPayment to get QR code and copy-paste code
+    // For Card: client will use PaymentElement with confirmPayment
     return new Response(JSON.stringify({
       client_secret: paymentIntent.client_secret,
       payment_intent_id: paymentIntent.id,
@@ -246,6 +280,9 @@ serve(async (req) => {
       application_fee: applicationFeeAmount,
       publishable_key: Deno.env.get("VITE_STRIPE_PUBLIC_KEY"),
       payment_method_type: payment_method_type,
+      currency: 'brl',
+      // Additional info for PIX
+      pix_expires_in_seconds: payment_method_type === 'pix' ? 900 : null,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
