@@ -1,0 +1,247 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Location } from '@/types/chamado';
+
+export interface NavigationInstruction {
+  icon: 'straight' | 'turn_left' | 'turn_right' | 'slight_left' | 'slight_right' | 'sharp_left' | 'sharp_right' | 'uturn_left' | 'uturn_right' | 'merge' | 'roundabout' | 'arrive' | 'depart';
+  text: string;
+  streetName: string;
+  distance: string;
+  distanceMeters: number;
+}
+
+export interface NavigationState {
+  currentInstruction: NavigationInstruction | null;
+  nextInstruction: NavigationInstruction | null;
+  instructions: NavigationInstruction[];
+  eta: string;
+  etaSeconds: number;
+  distance: string;
+  distanceMeters: number;
+  progress: number; // 0-100
+  isOffRoute: boolean;
+  clientStatus: 'a_caminho' | 'chegando' | 'no_local' | 'em_transito' | 'destino_final';
+}
+
+interface UseNavigationInstructionsOptions {
+  providerLocation: Location | null;
+  destination: Location | null;
+  phase: 'going_to_vehicle' | 'going_to_destination';
+  isProvider: boolean;
+}
+
+/**
+ * Hook to get turn-by-turn navigation instructions and status
+ */
+export function useNavigationInstructions({
+  providerLocation,
+  destination,
+  phase,
+  isProvider,
+}: UseNavigationInstructionsOptions): NavigationState {
+  const [state, setState] = useState<NavigationState>({
+    currentInstruction: null,
+    nextInstruction: null,
+    instructions: [],
+    eta: '',
+    etaSeconds: 0,
+    distance: '',
+    distanceMeters: 0,
+    progress: 0,
+    isOffRoute: false,
+    clientStatus: 'a_caminho',
+  });
+
+  const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
+  const lastCalculationRef = useRef<string>('');
+  const initialDistanceRef = useRef<number>(0);
+
+  // Calculate distance between two points (Haversine formula)
+  const calculateDistance = useCallback((from: Location, to: Location): number => {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = from.lat * Math.PI / 180;
+    const φ2 = to.lat * Math.PI / 180;
+    const Δφ = (to.lat - from.lat) * Math.PI / 180;
+    const Δλ = (to.lng - from.lng) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  }, []);
+
+  // Parse maneuver to icon type
+  const parseManeuver = useCallback((maneuver: string | undefined): NavigationInstruction['icon'] => {
+    if (!maneuver) return 'straight';
+    
+    const maneuverMap: Record<string, NavigationInstruction['icon']> = {
+      'turn-left': 'turn_left',
+      'turn-right': 'turn_right',
+      'turn-slight-left': 'slight_left',
+      'turn-slight-right': 'slight_right',
+      'turn-sharp-left': 'sharp_left',
+      'turn-sharp-right': 'sharp_right',
+      'uturn-left': 'uturn_left',
+      'uturn-right': 'uturn_right',
+      'merge': 'merge',
+      'roundabout-left': 'roundabout',
+      'roundabout-right': 'roundabout',
+      'straight': 'straight',
+      'ferry': 'straight',
+    };
+
+    return maneuverMap[maneuver] || 'straight';
+  }, []);
+
+  // Extract street name from instruction HTML
+  const extractStreetName = useCallback((instructionHtml: string): string => {
+    // Remove HTML tags and extract destination street
+    const text = instructionHtml.replace(/<[^>]*>/g, '');
+    
+    // Try to find "para" or "em" followed by street name
+    const match = text.match(/(?:para|em|na|pela)\s+(.+?)(?:\s*$)/i);
+    if (match) return match[1];
+    
+    // Fallback: return cleaned text
+    return text.slice(0, 50);
+  }, []);
+
+  // Get client status based on distance and phase
+  const getClientStatus = useCallback((distanceMeters: number, currentPhase: 'going_to_vehicle' | 'going_to_destination'): NavigationState['clientStatus'] => {
+    if (currentPhase === 'going_to_vehicle') {
+      if (distanceMeters <= 50) return 'no_local';
+      if (distanceMeters <= 200) return 'chegando';
+      return 'a_caminho';
+    } else {
+      if (distanceMeters <= 50) return 'destino_final';
+      if (distanceMeters <= 200) return 'chegando';
+      return 'em_transito';
+    }
+  }, []);
+
+  // Calculate and update navigation
+  useEffect(() => {
+    if (!providerLocation || !destination || typeof google === 'undefined') return;
+
+    const calculateKey = `${providerLocation.lat.toFixed(4)},${providerLocation.lng.toFixed(4)}`;
+    
+    // Throttle calculations - only recalculate if moved significantly
+    if (lastCalculationRef.current === calculateKey) return;
+    lastCalculationRef.current = calculateKey;
+
+    // Calculate direct distance for status
+    const directDistance = calculateDistance(providerLocation, destination);
+    
+    // Update status based on direct distance
+    const clientStatus = getClientStatus(directDistance, phase);
+    
+    setState(prev => ({
+      ...prev,
+      clientStatus,
+      distanceMeters: directDistance,
+      distance: directDistance < 1000 
+        ? `${Math.round(directDistance)} m` 
+        : `${(directDistance / 1000).toFixed(1)} km`,
+      progress: initialDistanceRef.current > 0 
+        ? Math.max(0, Math.min(100, 100 - (directDistance / initialDistanceRef.current * 100)))
+        : 0,
+    }));
+
+    // Only calculate detailed instructions for provider
+    if (!isProvider) return;
+
+    // Initialize directions service
+    if (!directionsServiceRef.current) {
+      directionsServiceRef.current = new google.maps.DirectionsService();
+    }
+
+    // Get detailed route with steps
+    directionsServiceRef.current.route({
+      origin: { lat: providerLocation.lat, lng: providerLocation.lng },
+      destination: { lat: destination.lat, lng: destination.lng },
+      travelMode: google.maps.TravelMode.DRIVING,
+    }).then(result => {
+      const leg = result.routes[0]?.legs[0];
+      if (!leg || !leg.steps) return;
+
+      // Set initial distance for progress calculation
+      if (initialDistanceRef.current === 0) {
+        initialDistanceRef.current = leg.distance?.value || 0;
+      }
+
+      // Parse instructions
+      const instructions: NavigationInstruction[] = leg.steps.map(step => ({
+        icon: parseManeuver(step.maneuver),
+        text: step.instructions?.replace(/<[^>]*>/g, '') || '',
+        streetName: extractStreetName(step.instructions || ''),
+        distance: step.distance?.text || '',
+        distanceMeters: step.distance?.value || 0,
+      }));
+
+      // Add arrival instruction
+      instructions.push({
+        icon: 'arrive',
+        text: phase === 'going_to_vehicle' ? 'Chegou ao veículo' : 'Chegou ao destino',
+        streetName: destination.address || 'Destino',
+        distance: '',
+        distanceMeters: 0,
+      });
+
+      setState(prev => ({
+        ...prev,
+        currentInstruction: instructions[0] || null,
+        nextInstruction: instructions[1] || null,
+        instructions,
+        eta: leg.duration?.text || '',
+        etaSeconds: leg.duration?.value || 0,
+        distance: leg.distance?.text || '',
+        distanceMeters: leg.distance?.value || 0,
+        isOffRoute: false,
+      }));
+    }).catch(err => {
+      console.error('[Navigation] Error getting instructions:', err);
+    });
+
+  }, [providerLocation, destination, phase, isProvider, calculateDistance, getClientStatus, parseManeuver, extractStreetName]);
+
+  return state;
+}
+
+/**
+ * Get human-readable status text for client
+ */
+export function getClientStatusText(status: NavigationState['clientStatus'], phase: 'going_to_vehicle' | 'going_to_destination', serviceType: string): string {
+  const statusMap: Record<NavigationState['clientStatus'], string> = {
+    'a_caminho': 'Prestador a caminho',
+    'chegando': 'Prestador chegando',
+    'no_local': 'Prestador no local',
+    'em_transito': serviceType === 'guincho' ? 'Veículo em transporte' : 'Serviço em andamento',
+    'destino_final': 'Chegando ao destino final',
+  };
+  
+  return statusMap[status] || 'Em atendimento';
+}
+
+/**
+ * Get icon name for navigation instruction
+ */
+export function getInstructionIconName(icon: NavigationInstruction['icon']): string {
+  const iconMap: Record<NavigationInstruction['icon'], string> = {
+    'straight': 'ArrowUp',
+    'turn_left': 'CornerUpLeft',
+    'turn_right': 'CornerUpRight',
+    'slight_left': 'ArrowUpLeft',
+    'slight_right': 'ArrowUpRight',
+    'sharp_left': 'CornerLeftDown',
+    'sharp_right': 'CornerRightDown',
+    'uturn_left': 'RotateCcw',
+    'uturn_right': 'RotateCw',
+    'merge': 'GitMerge',
+    'roundabout': 'RefreshCw',
+    'arrive': 'MapPin',
+    'depart': 'Navigation',
+  };
+  
+  return iconMap[icon] || 'ArrowUp';
+}

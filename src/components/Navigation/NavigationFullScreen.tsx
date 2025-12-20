@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { OptimizedNavigationMap } from '../Map/OptimizedNavigationMap';
+import { TurnByTurnDisplay } from './TurnByTurnDisplay';
+import { ClientStatusDisplay } from './ClientStatusDisplay';
 import { useNavigationRoute } from '@/hooks/useNavigationRoute';
+import { useNavigationInstructions } from '@/hooks/useNavigationInstructions';
 import { useRealtimeGPS } from '@/hooks/useRealtimeGPS';
 import { useProviderTracking } from '@/hooks/useProviderTracking';
 import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
@@ -130,6 +133,14 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
   // Current destination based on phase
   const currentDestination = isGoingToVehicle ? chamado.origem : chamado.destino;
+
+  // Use navigation instructions hook for turn-by-turn and status
+  const navigationState = useNavigationInstructions({
+    providerLocation,
+    destination: currentDestination,
+    phase: navigationPhase,
+    isProvider: mode === 'provider',
+  });
 
   // Load navigation state from database on mount (ONCE)
   useEffect(() => {
@@ -409,53 +420,56 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         className="absolute inset-0" 
       />
 
-      {/* Minimal floating info bar - top - compact */}
+      {/* Top info display - different for provider vs client */}
       <div className={cn(
         "absolute top-20 left-3 right-3 z-10 transition-all duration-300",
         showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
       )}>
-        <div className="bg-card/95 backdrop-blur-md rounded-xl px-3 py-2.5 shadow-card flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-              <Navigation className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <p className="font-semibold text-xs">
-                {isGoingToVehicle 
-                  ? (mode === 'provider' ? 'Indo ao veículo' : 'A caminho')
-                  : (mode === 'provider' ? 'Indo ao destino' : 'Em trânsito')
-                }
-              </p>
-              {(eta || distance) && (
-                <p className="text-[10px] text-muted-foreground">
-                  {eta && <span>{eta}</span>}
-                  {eta && distance && <span> • </span>}
-                  {distance && <span>{distance}</span>}
-                </p>
-              )}
-            </div>
-          </div>
-          
-          {/* Quick actions */}
-          <div className="flex items-center gap-1.5">
-            {isCalculatingRoute && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-            )}
-            {mode === 'provider' && !isCalculatingRoute && (
+        {mode === 'provider' ? (
+          /* Turn-by-turn navigation for provider - Google Maps style */
+          <TurnByTurnDisplay
+            currentInstruction={navigationState.currentInstruction}
+            nextInstruction={navigationState.nextInstruction}
+            eta={eta || navigationState.eta}
+            distance={distance || navigationState.distance}
+          />
+        ) : (
+          /* Client status display - Uber style */
+          <ClientStatusDisplay
+            status={navigationState.clientStatus}
+            eta={eta || navigationState.eta}
+            distance={distance || navigationState.distance}
+            progress={navigationState.progress}
+            phase={navigationPhase}
+            serviceType={chamado.tipoServico}
+            providerName={provider?.name}
+          />
+        )}
+        
+        {/* Recalculate button for provider */}
+        {mode === 'provider' && (
+          <div className="flex justify-end mt-2">
+            {isCalculatingRoute ? (
+              <div className="bg-card/90 backdrop-blur-md rounded-full px-3 py-1.5 flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Calculando...</span>
+              </div>
+            ) : (
               <Button 
-                variant="ghost" 
-                size="icon"
+                variant="secondary" 
+                size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleManualRecalculate();
                 }}
-                className="h-7 w-7"
+                className="h-8 rounded-full shadow-card bg-card/90 backdrop-blur-md"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                Recalcular
               </Button>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Contact buttons - floating left - compact */}
