@@ -371,6 +371,54 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_payouts: {
+        Row: {
+          amount: number
+          arrival_date: string | null
+          created_at: string
+          currency: string
+          failure_code: string | null
+          failure_message: string | null
+          id: string
+          paid_at: string | null
+          provider_id: string
+          status: string
+          stripe_account_id: string
+          stripe_payout_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          arrival_date?: string | null
+          created_at?: string
+          currency?: string
+          failure_code?: string | null
+          failure_message?: string | null
+          id?: string
+          paid_at?: string | null
+          provider_id: string
+          status?: string
+          stripe_account_id: string
+          stripe_payout_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          arrival_date?: string | null
+          created_at?: string
+          currency?: string
+          failure_code?: string | null
+          failure_message?: string | null
+          id?: string
+          paid_at?: string | null
+          provider_id?: string
+          status?: string
+          stripe_account_id?: string
+          stripe_payout_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       reviews: {
         Row: {
           chamado_id: string
