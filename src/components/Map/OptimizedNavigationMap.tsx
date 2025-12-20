@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { Location } from '@/types/chamado';
@@ -10,7 +10,7 @@ interface OptimizedNavigationMapProps {
   routePolyline?: string;
   className?: string;
   followProvider?: boolean;
-  providerHeading?: number;
+  providerHeading?: number | null;
 }
 
 const mapContainerStyle = {
@@ -38,6 +38,34 @@ const mapOptions: google.maps.MapOptions = {
     },
   ],
 };
+
+/**
+ * Calculate bearing between two points in degrees
+ */
+function calculateBearing(from: Location, to: Location): number {
+  const lat1 = from.lat * Math.PI / 180;
+  const lat2 = to.lat * Math.PI / 180;
+  const dLng = (to.lng - from.lng) * Math.PI / 180;
+
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  
+  const bearing = Math.atan2(y, x) * 180 / Math.PI;
+  return (bearing + 360) % 360;
+}
+
+/**
+ * Smoothly interpolate between two angles (handles 0/360 wraparound)
+ */
+function lerpAngle(from: number, to: number, t: number): number {
+  let diff = to - from;
+  
+  // Handle wraparound
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  
+  return (from + diff * t + 360) % 360;
+}
 
 /**
  * Decode Google Maps encoded polyline string to array of coordinates
@@ -81,16 +109,27 @@ function decodePolyline(encoded: string): Array<{ lat: number; lng: number }> {
   return poly;
 }
 
+// Animation constants
+const ROTATION_LERP_FACTOR = 0.15; // Smooth factor (0-1, lower = smoother)
+const ANIMATION_FRAME_RATE = 60; // fps
+
 export function OptimizedNavigationMap({
   providerLocation,
   destination,
   routePolyline,
   className = '',
   followProvider = true,
-  providerHeading = 0,
+  providerHeading = null,
 }: OptimizedNavigationMapProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  
+  // Smooth rotation state
+  const [smoothRotation, setSmoothRotation] = useState(0);
+  const lastLocationRef = useRef<Location | null>(null);
+  const targetRotationRef = useRef(0);
+  const currentRotationRef = useRef(0);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Decode polyline only when it changes
   const decodedPath = useMemo(() => {
@@ -102,6 +141,60 @@ export function OptimizedNavigationMap({
       return [];
     }
   }, [routePolyline]);
+
+  // Calculate target rotation based on GPS heading or movement direction
+  useEffect(() => {
+    if (!providerLocation) return;
+    
+    let newTargetRotation = targetRotationRef.current;
+    
+    // Priority 1: Use GPS heading if available and valid
+    if (providerHeading !== null && providerHeading !== undefined && !isNaN(providerHeading)) {
+      newTargetRotation = providerHeading;
+    }
+    // Priority 2: Calculate from movement if we have previous position
+    else if (lastLocationRef.current) {
+      const distance = Math.sqrt(
+        Math.pow(providerLocation.lat - lastLocationRef.current.lat, 2) +
+        Math.pow(providerLocation.lng - lastLocationRef.current.lng, 2)
+      );
+      
+      // Only update if moved significantly (avoid jitter when stationary)
+      if (distance > 0.00005) { // ~5 meters
+        newTargetRotation = calculateBearing(lastLocationRef.current, providerLocation);
+      }
+    }
+    
+    targetRotationRef.current = newTargetRotation;
+    lastLocationRef.current = providerLocation;
+  }, [providerLocation, providerHeading]);
+
+  // Smooth animation loop for rotation
+  useEffect(() => {
+    const animate = () => {
+      const current = currentRotationRef.current;
+      const target = targetRotationRef.current;
+      
+      // Smoothly interpolate towards target
+      const newRotation = lerpAngle(current, target, ROTATION_LERP_FACTOR);
+      currentRotationRef.current = newRotation;
+      
+      // Only update state if rotation changed significantly (avoid unnecessary re-renders)
+      if (Math.abs(newRotation - smoothRotation) > 0.5) {
+        setSmoothRotation(newRotation);
+      }
+      
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+    
+    animationFrameRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [smoothRotation]);
 
   // Follow provider on map with smooth animation
   useEffect(() => {
@@ -165,7 +258,7 @@ export function OptimizedNavigationMap({
         onUnmount={onUnmount}
         options={mapOptions}
       >
-        {/* Provider marker (navigation arrow) */}
+        {/* Provider marker (navigation arrow with smooth rotation) */}
         {providerLocation && (
           <Marker
             position={{ lat: providerLocation.lat, lng: providerLocation.lng }}
@@ -176,7 +269,7 @@ export function OptimizedNavigationMap({
               fillOpacity: 1,
               strokeColor: '#ffffff',
               strokeWeight: 3,
-              rotation: providerHeading,
+              rotation: smoothRotation,
               anchor: new google.maps.Point(0, 2.5),
             }}
             zIndex={100}
