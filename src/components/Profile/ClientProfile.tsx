@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import { Button } from '../ui/button';
 import { 
   User, 
@@ -13,7 +14,8 @@ import {
   Scale,
   Trash2,
   AlertTriangle,
-  Menu
+  Menu,
+  Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ClientProfileTab } from './Client/ClientProfileTab';
@@ -45,6 +47,7 @@ type TabType = 'profile' | 'rides' | 'payments';
 export function ClientProfile() {
   const { user, profile } = useApp();
   const { signOut } = useAuth();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -172,6 +175,19 @@ export function ClientProfile() {
                     <span className="font-medium">{tabLabels[tab].label}</span>
                   </button>
                 ))}
+
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      navigate('/admin');
+                    }}
+                    className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors text-primary"
+                  >
+                    <Settings className="w-5 h-5" />
+                    <span className="font-medium">Administração</span>
+                  </button>
+                )}
 
                 <div className="border-t border-border my-4 pt-4">
                   <button
