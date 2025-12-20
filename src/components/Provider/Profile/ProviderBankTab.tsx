@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   CheckCircle, 
   AlertCircle, 
@@ -11,12 +11,15 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import type { Balance, Earnings, Payout, StripeStatus } from '@/hooks/useProviderFinancialData';
 
 interface ProviderBankTabProps {
@@ -56,11 +59,47 @@ export function ProviderBankTab({
   loading,
   onRefresh,
 }: ProviderBankTabProps) {
+  const [updatingStripe, setUpdatingStripe] = useState(false);
+  
+  const isAccountRestricted = stripeStatus && (
+    stripeStatus.status === 'restricted' || 
+    stripeStatus.status === 'pending' ||
+    !stripeStatus.chargesEnabled ||
+    !stripeStatus.payoutsEnabled
+  );
+
+  const handleUpdateStripeData = async () => {
+    setUpdatingStripe(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account');
+      
+      if (error) {
+        toast.error('Não foi possível gerar o link. Tente novamente.');
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error('Erro ao obter link de atualização. Tente novamente.');
+      }
+    } catch (err) {
+      toast.error('Erro ao conectar com Stripe. Verifique sua conexão.');
+    } finally {
+      setUpdatingStripe(false);
+    }
+  };
   
   const getStripeStatusDisplay = () => {
     if (!stripeStatus) {
       return { label: 'Não configurada', icon: AlertCircle, color: 'text-muted-foreground' };
     }
+    
+    // Check actual capabilities
+    if (stripeStatus.chargesEnabled && stripeStatus.payoutsEnabled) {
+      return { label: 'Ativa', icon: CheckCircle, color: 'text-status-finished' };
+    }
+    
     switch (stripeStatus.status) {
       case 'verified':
         return { label: 'Ativa', icon: CheckCircle, color: 'text-status-finished' };
@@ -94,12 +133,42 @@ export function ProviderBankTab({
             <p className="font-medium">Conta Stripe</p>
             <p className={`text-sm ${statusDisplay.color}`}>{statusDisplay.label}</p>
           </div>
-          {stripeStatus?.payoutsEnabled && (
+          {stripeStatus?.payoutsEnabled && stripeStatus?.chargesEnabled && (
             <Badge className="bg-status-finished/20 text-status-finished border-0">
-              Pagamentos automáticos habilitados
+              Pagamentos habilitados
             </Badge>
           )}
         </div>
+
+        {/* Warning and action button for restricted/incomplete accounts */}
+        {isAccountRestricted && (
+          <div className="mt-4 p-4 bg-destructive/10 rounded-xl border border-destructive/20">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-destructive">Ação necessária</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {stripeStatus?.status === 'pending' 
+                    ? 'Complete seu cadastro na Stripe para começar a receber pagamentos.'
+                    : 'Sua conta Stripe precisa de atenção. Atualize seus dados para continuar recebendo.'}
+                </p>
+                <Button 
+                  onClick={handleUpdateStripeData}
+                  disabled={updatingStripe}
+                  className="mt-3 w-full"
+                  variant="destructive"
+                >
+                  {updatingStripe ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                  )}
+                  Atualizar dados na Stripe
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Balance Cards */}
