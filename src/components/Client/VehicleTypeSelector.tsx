@@ -11,7 +11,6 @@ export function VehicleTypeSelector({ value, onChange }: VehicleTypeSelectorProp
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLButtonElement>(null);
 
-  // Scroll to selected item when mounted
   useEffect(() => {
     if (value && selectedRef.current && scrollRef.current) {
       const container = scrollRef.current;
@@ -29,11 +28,10 @@ export function VehicleTypeSelector({ value, onChange }: VehicleTypeSelectorProp
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-muted-foreground">🚗 Tipo de veículo</p>
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tipo de veículo</p>
       <div 
         ref={scrollRef}
-        className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide snap-x snap-mandatory"
       >
         {VEHICLE_TYPE_ORDER.map((type) => {
           const config = VEHICLE_TYPES[type];
@@ -44,21 +42,21 @@ export function VehicleTypeSelector({ value, onChange }: VehicleTypeSelectorProp
               key={type}
               ref={isSelected ? selectedRef : undefined}
               onClick={() => onChange(type)}
-              className={`flex-shrink-0 snap-center flex flex-col items-center gap-1 p-3 rounded-xl transition-all min-w-[80px] ${
+              className={`flex-shrink-0 snap-center flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all min-w-[68px] ${
                 isSelected 
-                  ? 'bg-primary/10 border-2 border-primary' 
-                  : 'bg-secondary border-2 border-transparent hover:border-border'
+                  ? 'bg-primary/8 shadow-sm' 
+                  : 'bg-secondary/40 hover:bg-secondary/70'
               }`}
             >
               <div className="relative">
-                <span className="text-2xl">{config.icon}</span>
+                <span className="text-lg">{config.icon}</span>
                 {isSelected && (
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-white" />
+                  <div className="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center">
+                    <Check className="w-2 h-2 text-primary-foreground" />
                   </div>
                 )}
               </div>
-              <span className={`text-xs font-medium text-center leading-tight ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+              <span className={`text-[10px] font-medium text-center leading-tight ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                 {config.label}
               </span>
             </button>

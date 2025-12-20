@@ -5,7 +5,7 @@ import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { Button } from '../ui/button';
-import { Navigation, ChevronRight, Check, Loader2, RefreshCw, Crosshair } from 'lucide-react';
+import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 import { VehicleType } from '@/types/vehicleTypes';
 import { VehicleTypeSelector } from './VehicleTypeSelector';
@@ -27,17 +27,14 @@ export function ClientIdleView() {
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
 
-  // Location for fetching nearby providers
   const searchLocation = useMemo(() => origem || userLocation, [origem, userLocation]);
   
-  // Fetch nearby providers within 15km (no progressive search)
   const { providers: nearbyProviders, loading: providersLoading } = useNearbyProviders({
     userLocation: searchLocation,
     radiusKm: NEARBY_RADIUS_KM,
     enabled: !!searchLocation,
   });
 
-  // Convert nearby providers to map format
   const mapProviders: MapProvider[] = useMemo(() => {
     return nearbyProviders.map(p => ({
       id: p.id,
@@ -48,7 +45,6 @@ export function ClientIdleView() {
     }));
   }, [nearbyProviders]);
 
-  // Count providers for selected service
   const serviceProviderCount = useMemo(() => {
     return nearbyProviders.filter(p => p.services.includes(selectedService)).length;
   }, [nearbyProviders, selectedService]);
@@ -92,8 +88,6 @@ export function ClientIdleView() {
   const handleSolicitar = () => {
     if (!origem) return;
     if (needsDestination && !destino) return;
-    
-    // Progressive search will be activated in searching state
     createChamado(selectedService, origem, needsDestination ? destino : null, selectedVehicleType);
   };
 
@@ -101,7 +95,7 @@ export function ClientIdleView() {
 
   return (
     <div className="relative h-full">
-      {/* Real Google Map with provider markers */}
+      {/* Map */}
       <RealMapView 
         center={searchLocation}
         origem={origem}
@@ -114,28 +108,27 @@ export function ClientIdleView() {
         zoom={origem ? 14 : 13}
       />
       
-      {/* Providers indicator */}
-      <div className="absolute top-24 left-4 right-4 z-10">
-        <div className="glass-card rounded-2xl p-3 flex items-center gap-3 animate-fade-in">
-          <div className="relative">
-            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-              <Navigation className="w-5 h-5 text-primary" />
+      {/* Provider status - Compact floating card */}
+      <div className="absolute top-20 left-3 right-3 z-10">
+        <div className="bg-card rounded-xl px-4 py-3 shadow-sm flex items-center gap-3 animate-fade-in">
+          <div className="relative flex-shrink-0">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              nearbyProviders.length > 0 ? 'bg-primary/10' : 'bg-muted'
+            }`}>
+              <Car className={`w-5 h-5 ${nearbyProviders.length > 0 ? 'text-primary' : 'text-muted-foreground'}`} />
             </div>
             {nearbyProviders.length > 0 && (
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center text-[10px] text-white font-bold">
+              <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-primary rounded-full flex items-center justify-center text-[10px] text-primary-foreground font-semibold">
                 {nearbyProviders.length}
               </div>
             )}
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {providersLoading ? (
-              <>
-                <p className="text-sm font-medium flex items-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Buscando prestadores...
-                </p>
-                <p className="text-xs text-muted-foreground">Raio de {NEARBY_RADIUS_KM}km</p>
-              </>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Buscando prestadores...</p>
+              </div>
             ) : nearbyProviders.length > 0 ? (
               <>
                 <p className="text-sm font-medium">
@@ -144,27 +137,26 @@ export function ClientIdleView() {
                 <p className="text-xs text-muted-foreground">
                   {serviceProviderCount > 0 
                     ? `${serviceProviderCount} oferece${serviceProviderCount > 1 ? 'm' : ''} ${serviceConfig.label.toLowerCase()}`
-                    : `Nenhum oferece ${serviceConfig.label.toLowerCase()}`}
+                    : `Raio de ${NEARBY_RADIUS_KM}km`}
                 </p>
               </>
             ) : (
               <>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Nenhum prestador disponível
-                </p>
-                <p className="text-xs text-muted-foreground">Tente novamente em alguns minutos</p>
+                <p className="text-sm font-medium text-muted-foreground">Procurando prestadores...</p>
+                <p className="text-xs text-muted-foreground">Normalmente leva poucos minutos</p>
               </>
             )}
           </div>
         </div>
       </div>
 
-      {/* Bottom card */}
+      {/* Bottom panel */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-3xl shadow-uber-lg p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Service type selector */}
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-muted-foreground">Tipo de serviço</p>
+        <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-4 max-h-[65vh] overflow-y-auto">
+          
+          {/* Service type selector - Compact grid */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tipo de serviço</p>
             <div className="grid grid-cols-2 gap-2">
               {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType) => {
                 const config = SERVICE_CONFIG[serviceType];
@@ -183,33 +175,32 @@ export function ClientIdleView() {
                         setDestinoText('');
                       }
                     }}
-                    className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+                    className={`flex items-center gap-2.5 p-3 rounded-xl transition-all ${
                       isSelected 
-                        ? 'bg-primary/10 border-2 border-primary' 
-                        : 'bg-secondary border-2 border-transparent hover:border-border'
+                        ? 'bg-primary/8 shadow-sm' 
+                        : 'bg-secondary/50 hover:bg-secondary'
                     }`}
                   >
-                    <span className="text-2xl">{config.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-medium text-sm ${isSelected ? 'text-primary' : ''}`}>
+                    <span className="text-xl">{config.icon}</span>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                         {config.label}
                       </p>
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className="text-[10px] text-muted-foreground">
                         {typeProviderCount > 0 
                           ? `${typeProviderCount} disponíve${typeProviderCount > 1 ? 'is' : 'l'}` 
                           : config.estimatedTime}
                       </p>
                     </div>
                     {isSelected && (
-                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-primary-foreground" />
+                      </div>
                     )}
                   </button>
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded-lg">
-              {serviceConfig.description}
-            </p>
           </div>
 
           {/* Vehicle type selector */}
@@ -218,36 +209,30 @@ export function ClientIdleView() {
             onChange={setSelectedVehicleType} 
           />
 
-          {/* Location inputs */}
+          {/* Location inputs - Clean design */}
           <div className="space-y-3">
-            {/* Origin with Places Autocomplete */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-muted-foreground">
-                  🚗 Onde está o veículo?
-                </p>
-                {locationLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                )}
-              </div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Localização do veículo
+              </p>
 
-              {/* My Location Button */}
+              {/* GPS Button - Primary action */}
               <button
                 onClick={handleUseMyLocation}
                 disabled={locationLoading}
-                className={`w-full flex items-center gap-3 p-3 mb-2 rounded-xl transition-colors border disabled:opacity-50 ${
+                className={`w-full flex items-center gap-3 p-3 mb-2 rounded-xl transition-all ${
                   usingGpsLocation 
-                    ? 'bg-primary/20 border-primary' 
-                    : 'bg-secondary hover:bg-secondary/80 border-border'
+                    ? 'bg-primary/10 ring-1 ring-primary/30' 
+                    : 'bg-secondary/50 hover:bg-secondary'
                 }`}
               >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  usingGpsLocation ? 'bg-primary' : 'bg-muted-foreground/20'
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                  usingGpsLocation ? 'bg-primary' : 'bg-muted'
                 }`}>
                   {locationLoading ? (
-                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
                   ) : (
-                    <Crosshair className={`w-4 h-4 ${usingGpsLocation ? 'text-white' : 'text-muted-foreground'}`} />
+                    <Crosshair className={`w-4 h-4 ${usingGpsLocation ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
                   )}
                 </div>
                 <div className="flex-1 text-left">
@@ -255,61 +240,57 @@ export function ClientIdleView() {
                     Usar minha localização
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {usingGpsLocation ? 'Localização GPS ativa' : 'Detectar local exato via GPS'}
+                    {usingGpsLocation ? 'GPS ativo' : 'Detectar via GPS'}
                   </p>
                 </div>
                 {usingGpsLocation && (
-                  <Check className="w-5 h-5 text-primary" />
+                  <Check className="w-4 h-4 text-primary" />
                 )}
               </button>
 
-              <PlacesAutocomplete
-                value={origemText}
-                onChange={handleOrigemTextChange}
-                onSelect={handleOrigemSelect}
-                placeholder={locationLoading ? "Obtendo localização..." : "Ou digite o endereço"}
-                icon={
-                  <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                    <div className="w-2 h-2 bg-white rounded-full" />
-                  </div>
-                }
-              />
+              {/* Address input */}
+              <div className="relative">
+                <PlacesAutocomplete
+                  value={origemText}
+                  onChange={handleOrigemTextChange}
+                  onSelect={handleOrigemSelect}
+                  placeholder="Ou digite o endereço"
+                  icon={<Search className="w-4 h-4 text-muted-foreground" />}
+                />
+              </div>
+              
               {locationError && (
-                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3" />
+                <p className="text-xs text-destructive mt-1.5 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
                   {locationError}
                 </p>
               )}
             </div>
 
-            {/* Destination - only for guincho */}
+            {/* Destination */}
             {needsDestination && (
               <div className="animate-fade-in">
-                <p className="text-sm font-medium text-muted-foreground mb-2">
-                  📍 Para onde deseja levar?
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Destino
                 </p>
                 <PlacesAutocomplete
                   value={destinoText}
                   onChange={handleDestinoTextChange}
                   onSelect={handleDestinoSelect}
                   placeholder="Oficina, casa ou outro destino"
-                  icon={
-                    <div className="w-6 h-6 bg-foreground rounded-full flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-full" />
-                    </div>
-                  }
+                  icon={<MapPin className="w-4 h-4 text-muted-foreground" />}
                 />
               </div>
             )}
 
-            {/* Info for local services */}
-            {!needsDestination && (
-              <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-xl animate-fade-in">
-                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+            {/* Local service info */}
+            {!needsDestination && origem && (
+              <div className="flex items-center gap-2.5 p-3 bg-primary/5 rounded-xl animate-fade-in">
+                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
                   <Check className="w-4 h-4 text-primary" />
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  O prestador irá até você. Não é necessário informar destino.
+                <p className="text-xs text-muted-foreground">
+                  O prestador irá até você. Destino não necessário.
                 </p>
               </div>
             )}
@@ -318,13 +299,13 @@ export function ClientIdleView() {
           {/* Submit button */}
           <Button 
             onClick={handleSolicitar}
-            className="w-full"
+            className="w-full h-12 text-base font-semibold rounded-xl shadow-sm"
             size="lg"
             disabled={!canSubmit}
           >
             <span className="mr-2">{serviceConfig.icon}</span>
             Solicitar {serviceConfig.label}
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-5 h-5 ml-1" />
           </Button>
         </div>
       </div>

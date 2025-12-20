@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin, Settings2, Check, AlertCircle } from 'lucide-react';
+import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin, Settings2, Check, AlertCircle, ChevronDown } from 'lucide-react';
 import { Slider } from '../ui/slider';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
@@ -22,7 +22,6 @@ export function ProviderIdleView() {
   const [checkingStripe, setCheckingStripe] = useState(true);
   const navigate = useNavigate();
   
-  // Notification permission flow
   const { 
     permission: notifPermission, 
     shouldAskPermission,
@@ -36,13 +35,11 @@ export function ProviderIdleView() {
   const currentServices = (providerData?.services_offered as ServiceType[]) || ['guincho'];
   const isRegistrationComplete = providerData?.registration_complete === true;
 
-  // Check Stripe status on mount
   useEffect(() => {
     const checkStripeStatus = async () => {
       try {
         const { data, error } = await supabase.functions.invoke('check-connect-status');
         if (!error && data) {
-          // Check both stripe_status === 'verified' AND payouts_enabled for proper validation
           const isVerified = data.stripe_status === 'verified' && 
                             data.charges_enabled === true && 
                             data.payouts_enabled === true;
@@ -68,7 +65,6 @@ export function ProviderIdleView() {
   };
 
   const handleToggleOnline = async () => {
-    // If trying to go online, check requirements first
     if (!isOnline) {
       if (!isRegistrationComplete) {
         toast.error('Finalize seu cadastro para começar a atender.', {
@@ -90,11 +86,9 @@ export function ProviderIdleView() {
         return;
       }
       
-      // Check if we should ask for notification permission (first time going online)
       if (shouldAskPermission && !hasAskedNotifRef.current) {
         hasAskedNotifRef.current = true;
         setShowNotifModal(true);
-        // Continue with going online after modal
       }
     }
 
@@ -110,7 +104,6 @@ export function ProviderIdleView() {
     setShowNotifModal(false);
   };
 
-  // Update provider location when location changes
   useEffect(() => {
     if (isOnline && location) {
       updateProviderLocation({
@@ -123,7 +116,7 @@ export function ProviderIdleView() {
 
   return (
     <div className="relative h-full provider-theme">
-      {/* Map with search radius circle */}
+      {/* Map */}
       <RealMapView 
         className="absolute inset-0"
         center={location || undefined}
@@ -133,36 +126,36 @@ export function ProviderIdleView() {
 
       {/* GPS Error */}
       {geoError && (
-        <div className="absolute top-24 left-4 right-4 z-10">
-          <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-3 flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-destructive" />
+        <div className="absolute top-20 left-3 right-3 z-10">
+          <div className="bg-destructive/10 rounded-xl px-4 py-3 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-destructive flex-shrink-0" />
             <p className="text-sm text-destructive">{geoError}</p>
           </div>
         </div>
       )}
 
-      {/* Status card */}
-      <div className={`absolute ${geoError ? 'top-40' : 'top-24'} left-4 right-4 z-10 animate-slide-down`}>
-        <div className={`glass-card rounded-2xl p-4 ${isOnline ? 'border-2 border-provider-primary' : ''}`}>
-          <div className="flex items-center gap-4">
-            <div className="relative">
+      {/* Provider status card - Compact & Premium */}
+      <div className={`absolute ${geoError ? 'top-36' : 'top-20'} left-3 right-3 z-10 animate-slide-down`}>
+        <div className={`bg-card rounded-xl px-4 py-3 shadow-sm ${isOnline ? 'ring-1 ring-provider-primary/20' : ''}`}>
+          <div className="flex items-center gap-3">
+            <div className="relative flex-shrink-0">
               <img 
                 src={user?.avatar} 
                 alt={user?.name}
-                className={`w-14 h-14 rounded-full border-2 ${isOnline ? 'border-provider-primary' : 'border-muted'}`}
+                className="w-11 h-11 rounded-full object-cover"
               />
               {isOnline && (
-                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-provider-primary rounded-full flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-provider-primary rounded-full flex items-center justify-center ring-2 ring-card">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
                 </div>
               )}
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold">{user?.name}</h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Star className="w-4 h-4 text-status-searching fill-current" />
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-sm truncate">{user?.name}</h3>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Star className="w-3 h-3 text-status-searching fill-current" />
                 <span>{user?.providerData?.rating?.toFixed(1)}</span>
-                <span>•</span>
+                <span className="text-border">•</span>
                 <span>{user?.providerData?.totalServices} serviços</span>
               </div>
             </div>
@@ -177,43 +170,44 @@ export function ProviderIdleView() {
         </div>
       </div>
 
-      {/* Stats cards */}
+      {/* Stats cards - Compact */}
       {isOnline && (
-        <div className={`absolute ${geoError ? 'top-60' : 'top-44'} left-4 right-4 z-10 grid grid-cols-3 gap-2 animate-fade-in`} style={{ animationDelay: '0.2s' }}>
-          <div className="glass-card rounded-xl p-3 text-center">
-            <TrendingUp className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="text-lg font-bold">{user?.providerData?.totalServices || 0}</p>
-            <p className="text-xs text-muted-foreground">Total</p>
+        <div className={`absolute ${geoError ? 'top-52' : 'top-36'} left-3 right-3 z-10 grid grid-cols-3 gap-2 animate-fade-in`}>
+          <div className="bg-card rounded-xl p-2.5 text-center shadow-sm">
+            <TrendingUp className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
+            <p className="text-base font-bold">{user?.providerData?.totalServices || 0}</p>
+            <p className="text-[10px] text-muted-foreground">Total</p>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
-            <Clock className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="text-lg font-bold">--</p>
-            <p className="text-xs text-muted-foreground">Online</p>
+          <div className="bg-card rounded-xl p-2.5 text-center shadow-sm">
+            <Clock className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
+            <p className="text-base font-bold">--</p>
+            <p className="text-[10px] text-muted-foreground">Online</p>
           </div>
-          <div className="glass-card rounded-xl p-3 text-center">
-            <DollarSign className="w-5 h-5 mx-auto mb-1 text-provider-primary" />
-            <p className="text-lg font-bold">--</p>
-            <p className="text-xs text-muted-foreground">Ganhos</p>
+          <div className="bg-card rounded-xl p-2.5 text-center shadow-sm">
+            <DollarSign className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
+            <p className="text-base font-bold">--</p>
+            <p className="text-[10px] text-muted-foreground">Ganhos</p>
           </div>
         </div>
       )}
 
       {/* Bottom control panel */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-3xl shadow-uber-lg p-6 space-y-6">
+        <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-4">
+          
           {/* Requirements warning */}
           {!isOnline && (!isRegistrationComplete || !stripeVerified) && !checkingStripe && (
-            <div className="flex items-start gap-3 p-4 bg-status-searching/10 rounded-xl">
-              <AlertCircle className="w-5 h-5 text-status-searching flex-shrink-0 mt-0.5" />
-              <div>
+            <div className="flex items-start gap-3 p-3 bg-status-searching/10 rounded-xl">
+              <AlertCircle className="w-4 h-4 text-status-searching flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
                 <p className="text-sm font-medium text-status-searching">
                   {!isRegistrationComplete 
-                    ? 'Finalize seu cadastro para começar a atender'
-                    : 'Ative os recebimentos para começar a atender'}
+                    ? 'Finalize seu cadastro'
+                    : 'Ative os recebimentos'}
                 </p>
                 <Button 
                   variant="link" 
-                  className="p-0 h-auto text-sm text-provider-primary"
+                  className="p-0 h-auto text-xs text-provider-primary"
                   onClick={() => navigate(!isRegistrationComplete ? '/profile' : '/profile?tab=bank')}
                 >
                   {!isRegistrationComplete ? 'Completar cadastro' : 'Configurar recebimentos'}
@@ -222,34 +216,38 @@ export function ProviderIdleView() {
             </div>
           )}
 
-          {/* Online toggle */}
-          <div className="flex items-center justify-between">
+          {/* Online toggle - More prominent */}
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Power className={`w-6 h-6 ${isOnline ? 'text-provider-primary' : 'text-muted-foreground'}`} />
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                isOnline ? 'bg-provider-primary/10' : 'bg-muted'
+              }`}>
+                <Power className={`w-5 h-5 ${isOnline ? 'text-provider-primary' : 'text-muted-foreground'}`} />
+              </div>
               <div>
-                <p className="font-semibold">{isOnline ? 'Você está online' : 'Você está offline'}</p>
-                <p className="text-sm text-muted-foreground">
-                  {isOnline ? 'Recebendo chamados' : 'Ative para receber chamados'}
+                <p className="font-semibold text-sm">{isOnline ? 'Você está online' : 'Você está offline'}</p>
+                <p className="text-xs text-muted-foreground">
+                  {isOnline ? 'Recebendo chamados' : 'Ative para receber'}
                 </p>
               </div>
             </div>
             <Button
               variant={isOnline ? 'provider' : 'outline'}
               onClick={handleToggleOnline}
-              size="lg"
+              className="h-10 px-5 font-semibold"
               disabled={checkingStripe}
             >
               {isOnline ? 'Ficar offline' : 'Ficar online'}
             </Button>
           </div>
 
-          {/* Radar range slider */}
+          {/* Radar range slider - Cleaner */}
           {isOnline && (
-            <div className="space-y-4 animate-fade-in">
+            <div className="space-y-3 animate-fade-in pt-2 border-t border-border/50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Radar className="w-5 h-5 text-provider-primary" />
-                  <span className="font-medium">Raio de busca</span>
+                  <Radar className="w-4 h-4 text-provider-primary" />
+                  <span className="text-sm text-muted-foreground">Raio de busca</span>
                 </div>
                 <span className="text-lg font-bold text-provider-primary">{radarRange} km</span>
               </div>
@@ -261,31 +259,34 @@ export function ProviderIdleView() {
                 step={5}
                 className="provider-theme"
               />
-              <div className="flex justify-between text-xs text-muted-foreground">
+              <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>5 km</span>
                 <span>100 km</span>
               </div>
             </div>
           )}
 
-          {/* Service selection */}
+          {/* Service selection - Collapsible */}
           {isOnline && (
-            <div className="space-y-3 animate-fade-in">
+            <div className="space-y-2 animate-fade-in">
               <button 
                 onClick={() => setShowServiceConfig(!showServiceConfig)}
-                className="w-full flex items-center justify-between"
+                className="w-full flex items-center justify-between py-2"
               >
                 <div className="flex items-center gap-2">
-                  <Settings2 className="w-5 h-5 text-provider-primary" />
-                  <span className="font-medium">Serviços oferecidos</span>
+                  <Settings2 className="w-4 h-4 text-provider-primary" />
+                  <span className="text-sm font-medium">Serviços oferecidos</span>
                 </div>
-                <span className="text-sm text-muted-foreground">
-                  {currentServices.length} selecionado(s)
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    {currentServices.length} selecionado{currentServices.length > 1 ? 's' : ''}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showServiceConfig ? 'rotate-180' : ''}`} />
+                </div>
               </button>
               
               {showServiceConfig && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 animate-fade-in">
                   {ALL_SERVICES.map((service) => {
                     const config = SERVICE_CONFIG[service];
                     const isSelected = currentServices.includes(service);
@@ -293,17 +294,17 @@ export function ProviderIdleView() {
                       <button
                         key={service}
                         onClick={() => toggleService(service)}
-                        className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                        className={`flex items-center gap-2 p-2.5 rounded-xl transition-all ${
                           isSelected 
-                            ? 'border-provider-primary bg-provider-primary/10' 
-                            : 'border-border bg-secondary hover:border-provider-primary/50'
+                            ? 'bg-provider-primary/10 ring-1 ring-provider-primary/30' 
+                            : 'bg-secondary/50 hover:bg-secondary'
                         }`}
                       >
-                        <span className="text-xl">{config.icon}</span>
-                        <span className={`text-sm font-medium ${isSelected ? 'text-provider-primary' : ''}`}>
+                        <span className="text-lg">{config.icon}</span>
+                        <span className={`text-xs font-medium flex-1 text-left ${isSelected ? 'text-provider-primary' : ''}`}>
                           {config.label}
                         </span>
-                        {isSelected && <Check className="w-4 h-4 ml-auto text-provider-primary" />}
+                        {isSelected && <Check className="w-3.5 h-3.5 text-provider-primary" />}
                       </button>
                     );
                   })}
@@ -313,17 +314,16 @@ export function ProviderIdleView() {
           )}
 
           {/* Tips when offline */}
-          {!isOnline && (
-            <div className="bg-secondary rounded-xl p-4">
-              <p className="text-sm text-muted-foreground text-center">
-                💡 Fique online para começar a receber chamados de clientes na sua região
+          {!isOnline && isRegistrationComplete && stripeVerified && (
+            <div className="bg-secondary/50 rounded-xl p-3 text-center">
+              <p className="text-xs text-muted-foreground">
+                💡 Fique online para receber chamados na sua região
               </p>
             </div>
           )}
         </div>
       </div>
       
-      {/* Notification permission modal for providers */}
       <NotificationPermissionModal
         open={showNotifModal}
         onConfirm={handleNotifConfirm}
