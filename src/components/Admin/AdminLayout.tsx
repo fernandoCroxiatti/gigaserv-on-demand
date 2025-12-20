@@ -10,7 +10,8 @@ import {
   LogOut,
   Shield,
   Menu,
-  X
+  X,
+  FileCode
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/admin/providers', icon: UserCheck, label: 'Prestadores' },
   { to: '/admin/clients', icon: Users, label: 'Clientes' },
   { to: '/admin/chamados', icon: Car, label: 'Corridas' },
+  { to: '/stripe-audit', icon: FileCode, label: 'Auditoria Stripe' },
 ];
 
 export function AdminLayout() {
