@@ -26,8 +26,8 @@ interface UseProgressiveSearchOptions {
   userLocation: Location | null;
   serviceType: ServiceType;
   enabled: boolean;
-  /** Called externally when a provider declines/timeouts to trigger radius expansion */
-  onProviderDeclined?: () => void;
+  /** List of provider IDs that have already declined (from DB) */
+  excludedProviderIds?: string[];
 }
 
 const SEARCH_RADII = [3, 5, 10, 20, 50, 100]; // km
@@ -39,7 +39,8 @@ const DECLINE_EXPANSION_DELAY = 2000; // 2 seconds
 export function useProgressiveSearch({ 
   userLocation, 
   serviceType, 
-  enabled 
+  enabled,
+  excludedProviderIds = []
 }: UseProgressiveSearchOptions) {
   const [searchState, setSearchState] = useState<SearchState>('idle');
   const [currentRadius, setCurrentRadius] = useState(SEARCH_RADII[0]);
@@ -56,9 +57,10 @@ export function useProgressiveSearch({
   const fetchProvidersInRadius = useCallback(async (
     location: Location, 
     radiusKm: number,
-    service: ServiceType
+    service: ServiceType,
+    excludeProviderIds: string[] = []
   ): Promise<NearbyProvider[]> => {
-    console.log(`[ProgressiveSearch] Fetching providers within ${radiusKm}km for ${service}`);
+    console.log(`[ProgressiveSearch] Fetching providers within ${radiusKm}km for ${service}, excluding ${excludeProviderIds.length} providers`);
     
     try {
       // Fetch online providers with their profile data
@@ -97,11 +99,17 @@ export function useProgressiveSearch({
 
       const profileMap = new Map(profiles?.map(p => [p.user_id, p.name]) || []);
 
-      // Filter by distance, service type, and not in active service
+      // Filter by distance, service type, excluded providers, and not in active service
       const filteredProviders: NearbyProvider[] = [];
       
       for (const provider of providerData) {
         if (!provider.current_lat || !provider.current_lng) continue;
+        
+        // Skip excluded providers (those who already declined this chamado)
+        if (excludeProviderIds.includes(provider.user_id)) {
+          console.log(`[ProgressiveSearch] Provider ${provider.user_id} already declined, skipping`);
+          continue;
+        }
         
         // Check if provider offers this service
         const servicesOffered = provider.services_offered as ServiceType[] || ['guincho'];
@@ -268,13 +276,15 @@ export function useProgressiveSearch({
     radiusIndexRef.current = 0;
     setCurrentRadius(SEARCH_RADII[0]);
     setNearbyProviders([]);
-    setDeclinedProviderIds(new Set());
+    
+    // Initialize declined providers from DB
+    setDeclinedProviderIds(new Set(excludedProviderIds));
 
     // Subscribe to real-time updates
     subscribeToProviderUpdates(userLocation, SEARCH_RADII[SEARCH_RADII.length - 1], serviceType);
 
-    // Initial fetch
-    const providers = await fetchProvidersInRadius(userLocation, SEARCH_RADII[0], serviceType);
+    // Initial fetch - exclude already declined providers
+    const providers = await fetchProvidersInRadius(userLocation, SEARCH_RADII[0], serviceType, excludedProviderIds);
     
     if (providers.length > 0) {
       setNearbyProviders(providers);
@@ -302,7 +312,7 @@ export function useProgressiveSearch({
       setRadiusIndex(currentIndex);
       setCurrentRadius(newRadius);
 
-      const providers = await fetchProvidersInRadius(userLocation, newRadius, serviceType);
+      const providers = await fetchProvidersInRadius(userLocation, newRadius, serviceType, excludedProviderIds);
       
       if (providers.length > 0) {
         setNearbyProviders(providers);
@@ -319,7 +329,7 @@ export function useProgressiveSearch({
 
     // Schedule first expansion
     expansionTimerRef.current = setTimeout(expandRadius, EXPANSION_INTERVAL);
-  }, [userLocation, enabled, serviceType, fetchProvidersInRadius, subscribeToProviderUpdates]);
+  }, [userLocation, enabled, serviceType, fetchProvidersInRadius, subscribeToProviderUpdates, excludedProviderIds]);
 
   // Cancel search
   const cancelSearch = useCallback(() => {
