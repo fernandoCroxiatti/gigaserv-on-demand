@@ -27,6 +27,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderRegistrationForm } from '../Provider/ProviderRegistrationForm';
 import { ProviderProfileTab } from '../Provider/Profile/ProviderProfileTab';
 import { ProviderBankTab } from '../Provider/Profile/ProviderBankTab';
+import { ProviderFeesTab } from '../Provider/Profile/ProviderFeesTab';
 import { ProviderRidesHistoryTab } from '../Provider/Profile/ProviderRidesHistoryTab';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -49,7 +50,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-type TabType = 'profile' | 'bank' | 'rides';
+type TabType = 'profile' | 'bank' | 'fees' | 'rides';
 
 interface StripeAccountStatus {
   has_account: boolean;

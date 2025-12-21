@@ -84,6 +84,7 @@ export type Database = {
           destino_address: string | null
           destino_lat: number | null
           destino_lng: number | null
+          direct_payment_to_provider: boolean | null
           id: string
           navigation_phase: string | null
           origem_address: string
@@ -119,6 +120,7 @@ export type Database = {
           destino_address?: string | null
           destino_lat?: number | null
           destino_lng?: number | null
+          direct_payment_to_provider?: boolean | null
           id?: string
           navigation_phase?: string | null
           origem_address: string
@@ -154,6 +156,7 @@ export type Database = {
           destino_address?: string | null
           destino_lat?: number | null
           destino_lng?: number | null
+          direct_payment_to_provider?: boolean | null
           id?: string
           navigation_phase?: string | null
           origem_address?: string
@@ -394,10 +397,16 @@ export type Database = {
           current_address: string | null
           current_lat: number | null
           current_lng: number | null
+          financial_block_reason: string | null
+          financial_blocked: boolean | null
+          financial_status:
+            | Database["public"]["Enums"]["financial_status"]
+            | null
           id: string
           is_blocked: boolean | null
           is_online: boolean | null
           payout_enabled: boolean | null
+          pending_fee_balance: number | null
           radar_range: number | null
           rating: number | null
           registration_complete: boolean | null
@@ -425,10 +434,16 @@ export type Database = {
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          financial_block_reason?: string | null
+          financial_blocked?: boolean | null
+          financial_status?:
+            | Database["public"]["Enums"]["financial_status"]
+            | null
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
           payout_enabled?: boolean | null
+          pending_fee_balance?: number | null
           radar_range?: number | null
           rating?: number | null
           registration_complete?: boolean | null
@@ -458,10 +473,16 @@ export type Database = {
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          financial_block_reason?: string | null
+          financial_blocked?: boolean | null
+          financial_status?:
+            | Database["public"]["Enums"]["financial_status"]
+            | null
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
           payout_enabled?: boolean | null
+          pending_fee_balance?: number | null
           radar_range?: number | null
           rating?: number | null
           registration_complete?: boolean | null
@@ -484,6 +505,71 @@ export type Database = {
           vehicle_type?: string | null
         }
         Relationships: []
+      }
+      provider_fees: {
+        Row: {
+          chamado_id: string
+          created_at: string
+          fee_amount: number
+          fee_percentage: number
+          fee_type: Database["public"]["Enums"]["fee_type"]
+          id: string
+          payment_approved_at: string | null
+          payment_approved_by: string | null
+          payment_declared_at: string | null
+          payment_proof_url: string | null
+          payment_rejected_at: string | null
+          payment_rejected_by: string | null
+          provider_id: string
+          service_value: number
+          status: Database["public"]["Enums"]["financial_status"]
+          updated_at: string
+        }
+        Insert: {
+          chamado_id: string
+          created_at?: string
+          fee_amount: number
+          fee_percentage: number
+          fee_type: Database["public"]["Enums"]["fee_type"]
+          id?: string
+          payment_approved_at?: string | null
+          payment_approved_by?: string | null
+          payment_declared_at?: string | null
+          payment_proof_url?: string | null
+          payment_rejected_at?: string | null
+          payment_rejected_by?: string | null
+          provider_id: string
+          service_value: number
+          status?: Database["public"]["Enums"]["financial_status"]
+          updated_at?: string
+        }
+        Update: {
+          chamado_id?: string
+          created_at?: string
+          fee_amount?: number
+          fee_percentage?: number
+          fee_type?: Database["public"]["Enums"]["fee_type"]
+          id?: string
+          payment_approved_at?: string | null
+          payment_approved_by?: string | null
+          payment_declared_at?: string | null
+          payment_proof_url?: string | null
+          payment_rejected_at?: string | null
+          payment_rejected_by?: string | null
+          provider_id?: string
+          service_value?: number
+          status?: Database["public"]["Enums"]["financial_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_fees_chamado_id_fkey"
+            columns: ["chamado_id"]
+            isOneToOne: false
+            referencedRelation: "chamados"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       provider_payouts: {
         Row: {
@@ -653,6 +739,8 @@ export type Database = {
         | "in_service"
         | "finished"
         | "canceled"
+      fee_type: "STRIPE" | "MANUAL_PIX"
+      financial_status: "PAGO" | "DEVENDO" | "AGUARDANDO_APROVACAO"
       payment_status:
         | "pending"
         | "paid_mock"
@@ -813,6 +901,8 @@ export const Constants = {
         "finished",
         "canceled",
       ],
+      fee_type: ["STRIPE", "MANUAL_PIX"],
+      financial_status: ["PAGO", "DEVENDO", "AGUARDANDO_APROVACAO"],
       payment_status: [
         "pending",
         "paid_mock",
