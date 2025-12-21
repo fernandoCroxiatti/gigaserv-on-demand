@@ -45,7 +45,11 @@ export default function PrivacyPolicy() {
             </li>
             <li>
               <strong>Informações de Pagamento:</strong> Processamos pagamentos através do Stripe. 
-              Não armazenamos dados de cartão de crédito em nossos servidores.
+              Não armazenamos dados de cartão de crédito em nossos servidores. 
+              Alguns pagamentos podem ser realizados diretamente entre cliente e prestador, 
+              por meios externos ao aplicativo, como PIX ou dinheiro. Nesses casos, o 
+              aplicativo não processa nem armazena informações financeiras da transação, 
+              sendo responsabilidade das partes envolvidas a realização do pagamento.
             </li>
             <li>
               <strong>Informações de Uso:</strong> Dados sobre como você interage com o aplicativo.
