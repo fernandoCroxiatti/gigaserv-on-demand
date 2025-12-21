@@ -637,7 +637,7 @@ export function ClientAwaitingPaymentView() {
             </div>
           </div>
 
-          {/* Payment Form - compact */}
+          {/* Payment Form - compact - CONDITIONAL RENDERING */}
           <div className="p-3 space-y-3">
             {paymentError && (
               <div className="flex items-center gap-2 p-2 bg-destructive/10 text-destructive rounded-lg text-xs">
@@ -646,91 +646,113 @@ export function ClientAwaitingPaymentView() {
               </div>
             )}
 
-            {loadingPayment && (
+            {loadingPayment && selectedPayment !== 'direct_payment' && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
             )}
 
-            {/* Card Payment */}
-            {clientSecret && !loadingPayment && currentPaymentMethod === 'credit_card' && (
-              stripePromise ? (
-                <Elements 
-                  stripe={stripePromise} 
-                  options={{ 
-                    clientSecret,
-                    appearance: {
-                      theme: 'stripe',
-                      variables: {
-                        colorPrimary: 'hsl(var(--primary))',
+            {/* CARD PAYMENT - Only show when card is selected */}
+            {selectedPayment === 'credit_card' && !loadingPayment && (
+              <>
+                {clientSecret && stripePromise ? (
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{ 
+                      clientSecret,
+                      appearance: {
+                        theme: 'stripe',
+                        variables: {
+                          colorPrimary: 'hsl(var(--primary))',
+                        },
                       },
-                    },
-                  }}
-                >
-                  <CardPaymentForm 
-                    clientSecret={clientSecret}
-                    onSuccess={handlePaymentSuccess}
-                    onError={handlePaymentError}
-                    amount={paymentAmount}
-                  />
-                </Elements>
-              ) : (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                </div>
-              )
-            )}
-            {/* Wallet Payment (Apple Pay / Google Pay) */}
-            {clientSecret && !loadingPayment && currentPaymentMethod === 'wallet' && (
-              stripePromise ? (
-                <Elements 
-                  stripe={stripePromise} 
-                  options={{ 
-                    clientSecret,
-                    appearance: {
-                      theme: 'stripe',
-                      variables: {
-                        colorPrimary: 'hsl(var(--primary))',
-                      },
-                    },
-                  }}
-                >
-                  <WalletPaymentForm 
-                    clientSecret={clientSecret}
-                    onSuccess={handlePaymentSuccess}
-                    onError={handlePaymentError}
-                    amount={paymentAmount}
-                    onNotAvailable={handleWalletNotAvailable}
-                  />
-                </Elements>
-              ) : (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                </div>
-              )
+                    }}
+                  >
+                    <CardPaymentForm 
+                      clientSecret={clientSecret}
+                      onSuccess={handlePaymentSuccess}
+                      onError={handlePaymentError}
+                      amount={paymentAmount}
+                    />
+                  </Elements>
+                ) : !paymentError ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                ) : null}
+              </>
             )}
 
-            {/* Direct Payment Button */}
-            {selectedPayment === 'direct_payment' && !loadingPayment && (
+            {/* WALLET PAYMENT - Only show when wallet is selected */}
+            {selectedPayment === 'wallet' && !loadingPayment && (
+              <>
+                {clientSecret && stripePromise ? (
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{ 
+                      clientSecret,
+                      appearance: {
+                        theme: 'stripe',
+                        variables: {
+                          colorPrimary: 'hsl(var(--primary))',
+                        },
+                      },
+                    }}
+                  >
+                    <WalletPaymentForm 
+                      clientSecret={clientSecret}
+                      onSuccess={handlePaymentSuccess}
+                      onError={handlePaymentError}
+                      amount={paymentAmount}
+                      onNotAvailable={handleWalletNotAvailable}
+                    />
+                  </Elements>
+                ) : !paymentError ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                ) : null}
+              </>
+            )}
+
+            {/* DIRECT PAYMENT (PIX/CASH) - Only show when direct_payment is selected */}
+            {selectedPayment === 'direct_payment' && (
               <div className="space-y-3">
                 <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs text-amber-700">
+                  <div className="text-xs text-amber-700 dark:text-amber-300">
                     <p className="font-medium">Atenção: Taxa do App</p>
-                    <p className="mt-0.5">Ao pagar diretamente ao prestador, será gerada uma taxa de {commissionPercentage}% (R$ {((chamado.valor || 0) * commissionPercentage / 100).toFixed(2)}) que o prestador deverá pagar ao app.</p>
+                    <p className="mt-0.5">
+                      Ao pagar diretamente ao prestador, será gerada uma taxa de {' '}
+                      {!isNaN(commissionPercentage) ? commissionPercentage : 0}% {' '}
+                      (R$ {!isNaN(commissionPercentage) && chamado.valor ? ((chamado.valor * commissionPercentage) / 100).toFixed(2) : '0.00'}) {' '}
+                      que o prestador deverá pagar ao app.
+                    </p>
                   </div>
                 </div>
+                
+                {/* Single CTA button */}
                 <Button 
                   onClick={handleDirectPaymentClick}
-                  className="w-full h-11"
-                  variant="outline"
+                  className="w-full h-12"
+                  disabled={processingDirectPayment}
                 >
-                  <Banknote className="w-4 h-4" />
-                  Pagar PIX/Dinheiro ao Prestador
+                  {processingDirectPayment ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <Banknote className="w-4 h-4 mr-2" />
+                      Confirmar Pagamento ao Prestador
+                    </>
+                  )}
                 </Button>
               </div>
             )}
 
+            {/* Retry button for card/wallet errors */}
             {!clientSecret && !loadingPayment && paymentError && selectedPayment !== 'direct_payment' && (
               <Button 
                 onClick={() => createPaymentIntent(selectedPayment)}

@@ -120,16 +120,19 @@ const dayModeStyles: google.maps.MapTypeStyle[] = [
   },
 ];
 
-// Get map options based on time of day
-function getMapOptions(): google.maps.MapOptions {
+// Get map options based on time of day and mode
+function getMapOptions(followMode: boolean = false): google.maps.MapOptions {
   return {
     disableDefaultUI: true,
     zoomControl: false,
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: false,
-    gestureHandling: 'greedy',
+    // In follow mode, limit gestures to allow map to follow user
+    gestureHandling: followMode ? 'none' : 'greedy',
     styles: isNightTime() ? nightModeStyles : dayModeStyles,
+    // Enable tilt for navigation view
+    tilt: followMode ? 45 : 0,
   };
 }
 
@@ -216,6 +219,8 @@ export function OptimizedNavigationMap({
   providerHeading = null,
 }: OptimizedNavigationMapProps) {
   const { isLoaded, loadError } = useGoogleMaps();
+  const [isUserInteracting, setIsUserInteracting] = useState(false);
+  const userInteractionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   
   // Smooth rotation state
@@ -290,12 +295,26 @@ export function OptimizedNavigationMap({
     };
   }, [smoothRotation]);
 
-  // Follow provider on map with smooth animation
+  // Follow provider on map with smooth animation and heading rotation (Uber/Google Maps style)
   useEffect(() => {
-    if (map && providerLocation && followProvider) {
+    if (map && providerLocation && followProvider && !isUserInteracting) {
+      // Smooth pan to provider location
       map.panTo({ lat: providerLocation.lat, lng: providerLocation.lng });
+      
+      // Rotate map to match heading (navigation mode)
+      const currentHeading = smoothRotation;
+      if (currentHeading !== undefined && !isNaN(currentHeading)) {
+        // Invert heading so map rotates to show road ahead
+        map.setHeading(currentHeading);
+      }
+      
+      // Set navigation-style zoom
+      const currentZoom = map.getZoom();
+      if (currentZoom && currentZoom < 17) {
+        map.setZoom(17);
+      }
     }
-  }, [map, providerLocation, followProvider]);
+  }, [map, providerLocation, followProvider, smoothRotation, isUserInteracting]);
 
   // Auto-fit bounds when route is available
   useEffect(() => {
@@ -307,12 +326,32 @@ export function OptimizedNavigationMap({
     }
   }, [map, decodedPath.length > 0]);
 
-  const onLoad = useCallback((map: google.maps.Map) => {
-    setMap(map);
-    map.setZoom(16);
-  }, []);
+  const onLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+    mapInstance.setZoom(followProvider ? 17 : 16);
+    
+    // Add drag listeners to detect user interaction
+    if (followProvider) {
+      mapInstance.addListener('dragstart', () => {
+        setIsUserInteracting(true);
+        if (userInteractionTimeoutRef.current) {
+          clearTimeout(userInteractionTimeoutRef.current);
+        }
+      });
+      
+      mapInstance.addListener('dragend', () => {
+        // Re-enable follow after 5 seconds of no interaction
+        userInteractionTimeoutRef.current = setTimeout(() => {
+          setIsUserInteracting(false);
+        }, 5000);
+      });
+    }
+  }, [followProvider]);
 
   const onUnmount = useCallback(() => {
+    if (userInteractionTimeoutRef.current) {
+      clearTimeout(userInteractionTimeoutRef.current);
+    }
     setMap(null);
   }, []);
 
@@ -350,7 +389,7 @@ export function OptimizedNavigationMap({
         zoom={16}
         onLoad={onLoad}
         onUnmount={onUnmount}
-        options={getMapOptions()}
+        options={getMapOptions(followProvider)}
       >
         {/* Provider marker (navigation arrow with smooth rotation) */}
         {providerLocation && (
