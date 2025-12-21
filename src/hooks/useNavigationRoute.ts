@@ -87,11 +87,18 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
         throw new Error('Não foi possível calcular a rota');
       }
 
-      // Get encoded polyline
-      const polyline = result.routes[0].overview_polyline;
+      // Get encoded polyline string - overview_polyline is an object with 'points' property
+      const overviewPolyline = result.routes[0].overview_polyline;
+      const polylineString = typeof overviewPolyline === 'string' 
+        ? overviewPolyline 
+        : (overviewPolyline as any)?.points || '';
+      
+      if (!polylineString) {
+        console.warn('[Navigation] No polyline returned from directions API');
+      }
       
       const newRouteData: RouteData = {
-        polyline: polyline,
+        polyline: polylineString,
         distanceMeters: leg.distance?.value || 0,
         durationSeconds: leg.duration?.value || 0,
         distanceText: leg.distance?.text || '',
@@ -103,7 +110,7 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
         .from('chamados')
         .update({
           navigation_phase: phase,
-          route_polyline: polyline,
+          route_polyline: polylineString,
           route_distance_meters: newRouteData.distanceMeters,
           route_duration_seconds: newRouteData.durationSeconds,
         })
