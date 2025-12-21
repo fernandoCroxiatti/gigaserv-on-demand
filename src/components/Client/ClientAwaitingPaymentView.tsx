@@ -143,7 +143,7 @@ export function ClientAwaitingPaymentView() {
   // Direct payment dialog state
   const [showDirectPaymentDialog, setShowDirectPaymentDialog] = useState(false);
   const [processingDirectPayment, setProcessingDirectPayment] = useState(false);
-  const [commissionPercentage, setCommissionPercentage] = useState<number>(10);
+  const [commissionPercentage, setCommissionPercentage] = useState<number>(0); // Default to 0 to prevent NaN
 
   useEffect(() => {
     setStripePromise(getStripePromise());
@@ -181,10 +181,14 @@ export function ClientAwaitingPaymentView() {
           .eq('key', 'app_commission_percentage')
           .single();
         if (data?.value) {
-          setCommissionPercentage(Number(data.value));
+          const parsed = Number(data.value);
+          // Only set if it's a valid number, otherwise keep default 0
+          setCommissionPercentage(isNaN(parsed) ? 0 : parsed);
         }
       } catch (err) {
         console.error('Error fetching commission:', err);
+        // On error, default to 0
+        setCommissionPercentage(0);
       }
     };
     fetchCommissionPercentage();
@@ -718,17 +722,13 @@ export function ClientAwaitingPaymentView() {
             {/* DIRECT PAYMENT (PIX/CASH) - Only show when direct_payment is selected */}
             {selectedPayment === 'direct_payment' && (
               <div className="space-y-3">
-                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs text-amber-700 dark:text-amber-300">
-                    <p className="font-medium">Atenção: Taxa do App</p>
-                    <p className="mt-0.5">
-                      Ao pagar diretamente ao prestador, será gerada uma taxa de {' '}
-                      {!isNaN(commissionPercentage) ? commissionPercentage : 0}% {' '}
-                      (R$ {!isNaN(commissionPercentage) && chamado.valor ? ((chamado.valor * commissionPercentage) / 100).toFixed(2) : '0.00'}) {' '}
-                      que o prestador deverá pagar ao app.
-                    </p>
-                  </div>
+                <div className="p-4 bg-secondary/50 rounded-lg border border-border/50">
+                  <p className="text-sm text-foreground">
+                    Você escolheu pagar <strong>R$ {(chamado.valor || 0).toFixed(2)}</strong> diretamente ao prestador via PIX ou dinheiro.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Taxa do app: {commissionPercentage || 0}% (R$ {((chamado.valor || 0) * (commissionPercentage || 0) / 100).toFixed(2)})
+                  </p>
                 </div>
                 
                 {/* Single CTA button */}
@@ -779,21 +779,23 @@ export function ClientAwaitingPaymentView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <Banknote className="w-5 h-5 text-primary" />
               Confirmar Pagamento Direto
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
-              <p>
-                Você escolheu pagar <strong>R$ {chamado.valor?.toFixed(2)}</strong> diretamente ao prestador via PIX ou dinheiro.
-              </p>
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                <p className="text-amber-800 dark:text-amber-200 text-sm font-medium">
-                  ⚠️ Uma taxa de {commissionPercentage}% (R$ {((chamado.valor || 0) * commissionPercentage / 100).toFixed(2)}) será gerada para o prestador pagar ao app.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Você escolheu pagar <strong className="text-foreground">R$ {(chamado.valor || 0).toFixed(2)}</strong> diretamente ao prestador via PIX ou dinheiro.
+                </p>
+                <div className="bg-secondary/50 border border-border rounded-lg p-3">
+                  <p className="text-sm text-foreground font-medium">
+                    Taxa do app: {commissionPercentage || 0}% (R$ {((chamado.valor || 0) * (commissionPercentage || 0) / 100).toFixed(2)})
+                  </p>
+                </div>
+                <p className="text-sm">
+                  O serviço será iniciado após confirmar. Pague diretamente ao prestador quando ele chegar.
                 </p>
               </div>
-              <p className="text-sm">
-                O serviço será iniciado após confirmar. Pague diretamente ao prestador quando ele chegar.
-              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
