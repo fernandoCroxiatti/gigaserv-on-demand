@@ -4,12 +4,16 @@ import { ClientView } from '@/components/ClientView';
 import { ProviderView } from '@/components/ProviderView';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useWakeLock } from '@/hooks/useWakeLock';
 import { Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 const Index = () => {
   const { user: authUser, loading: authLoading } = useAuth();
   const { user, isLoading, canAccessProviderFeatures } = useApp();
+  
+  // Keep screen awake while app is open
+  useWakeLock();
 
   // Show loading while checking auth
   if (authLoading || isLoading) {
