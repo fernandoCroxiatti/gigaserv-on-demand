@@ -77,6 +77,7 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
           <div className="flex-1">
             <p className="font-semibold text-sm">Erro no cálculo da taxa</p>
             <p className="text-xs opacity-90">Não foi possível calcular a taxa do app. Verifique a configuração antes de continuar.</p>
+            <p className="text-xs opacity-90 mt-1">Valor da corrida: R$ {formatCurrency(amount)}</p>
           </div>
         </div>
       </div>

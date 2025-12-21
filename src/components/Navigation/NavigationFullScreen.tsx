@@ -83,7 +83,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const lastGpsUpdateRef = useRef<number>(0);
 
   // Check if this is a direct payment to provider (from backend flag)
-  const isDirectPaymentToProvider = chamado.directPaymentToProvider === true;
+  const isDirectPaymentToProvider = chamado?.directPaymentToProvider === true;
+
   // Get other party contact info
   const { phone: otherPartyPhone, name: otherPartyName, loading: contactLoading } = useOtherPartyContact(
     mode,
@@ -166,6 +167,14 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     : null;
 
   if (!chamado) return null;
+
+  // Valor correto da corrida (preferir valor confirmado; fallback para valor acordado)
+  const serviceValue =
+    typeof chamado.valor === 'number' && chamado.valor > 0
+      ? chamado.valor
+      : typeof chamado.valorProposto === 'number' && chamado.valorProposto > 0
+        ? chamado.valorProposto
+        : 0;
 
   const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
   const hasDestination = chamado.destino !== null;
@@ -390,7 +399,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       const commissionPercentage = commissionSetting?.value ? Number(commissionSetting.value) : 0;
       
       // Calculate fee with invariant checks
-      const feeCalc = calculateFee(chamado.valor, commissionPercentage);
+      const feeCalc = calculateFee(serviceValue, commissionPercentage);
       
       if (!canFinalizeWithFee(feeCalc)) {
         toast.error('Erro no cálculo da taxa. Contate o suporte.');
@@ -526,9 +535,9 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   return (
     <div className={`relative h-full ${themeClass}`} onClick={toggleControls}>
       {/* Direct payment banner - sticky at top for provider */}
-      {mode === 'provider' && isDirectPaymentToProvider && chamado.valor && (
+      {mode === 'provider' && isDirectPaymentToProvider && serviceValue > 0 && (
         <div className="absolute top-0 left-0 right-0 z-20">
-          <DirectPaymentBanner amount={chamado.valor} />
+          <DirectPaymentBanner amount={serviceValue} />
         </div>
       )}
 
@@ -768,7 +777,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       <DirectPaymentConfirmationDialog
         open={showDirectPaymentDialog}
         onOpenChange={setShowDirectPaymentDialog}
-        amount={chamado.valor || 0}
+        amount={serviceValue}
         chamadoId={chamado.id}
         onConfirmReceived={handleConfirmDirectPayment}
         onNotReceived={handleNotReceivedPayment}
