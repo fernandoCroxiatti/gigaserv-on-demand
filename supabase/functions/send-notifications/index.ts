@@ -6,6 +6,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Simple in-memory rate limiting for notification endpoints
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX_GLOBAL = 500; // 500 notifications per hour globally
+const RATE_LIMIT_MAX_PER_USER = 20; // 20 per user per hour
+
+let globalNotificationCount = 0;
+let globalResetTime = Date.now() + RATE_LIMIT_WINDOW_MS;
+
+function checkGlobalRateLimit(): boolean {
+  const now = Date.now();
+  if (now > globalResetTime) {
+    globalNotificationCount = 0;
+    globalResetTime = now + RATE_LIMIT_WINDOW_MS;
+  }
+  if (globalNotificationCount >= RATE_LIMIT_MAX_GLOBAL) {
+    return false;
+  }
+  globalNotificationCount++;
+  return true;
+}
+
+function checkUserRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const userLimit = rateLimitMap.get(userId);
+  
+  if (!userLimit || now > userLimit.resetTime) {
+    rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  
+  if (userLimit.count >= RATE_LIMIT_MAX_PER_USER) {
+    return false;
+  }
+  
+  userLimit.count++;
+  return true;
+}
+
 // VAPID keys for Web Push
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY') || '';
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY') || '';
@@ -258,6 +297,15 @@ serve(async (req) => {
   }
 
   try {
+    // Check global rate limit first
+    if (!checkGlobalRateLimit()) {
+      console.log('[send-notifications] Global rate limit exceeded');
+      return new Response(
+        JSON.stringify({ error: 'Sistema de notificações temporariamente sobrecarregado. Tente novamente em alguns minutos.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     // deno-lint-ignore no-explicit-any
@@ -427,6 +475,12 @@ async function sendEventNotification(
 ) {
   console.log('[send-notifications] Sending event notification to:', userId);
   
+  // Check per-user rate limit
+  if (!checkUserRateLimit(userId)) {
+    console.log('[send-notifications] User rate limit exceeded:', userId);
+    return;
+  }
+
   const { data: prefs } = await supabase
     .from('notification_preferences')
     .select('enabled, chamado_updates')
