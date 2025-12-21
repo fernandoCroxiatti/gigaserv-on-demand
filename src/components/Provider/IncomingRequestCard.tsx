@@ -1,15 +1,21 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { Navigation, Clock, DollarSign, X, Check, Route } from 'lucide-react';
+import { Navigation, Clock, DollarSign, X, Check, Route, Ban } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
 import { startRideAlertLoop, stopRideAlertLoop, cleanupRideAlert } from '@/lib/rideAlertSound';
 import { VEHICLE_TYPES, VehicleType } from '@/types/vehicleTypes';
+import { useProviderFinancialBlock } from '@/hooks/useProviderFinancialBlock';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
   const [timeLeft, setTimeLeft] = useState(30);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const { checkFinancialBlock } = useProviderFinancialBlock();
+  const navigate = useNavigate();
 
   // Calculate distance from provider to client
   const distanceToClient = useMemo(() => {
@@ -89,6 +95,33 @@ export function IncomingRequestCard() {
       cleanupRideAlert();
     };
   }, []);
+
+  // Handle accept with financial block check
+  const handleAccept = async () => {
+    if (isAccepting) return;
+    setIsAccepting(true);
+    
+    try {
+      // Check financial block before accepting
+      const blockStatus = await checkFinancialBlock();
+      if (blockStatus.isBlocked) {
+        stopRideAlertLoop();
+        toast.error(blockStatus.reason || 'Você possui pendências financeiras', {
+          action: {
+            label: 'Ver taxas',
+            onClick: () => navigate('/profile?tab=fees'),
+          },
+          duration: 5000,
+        });
+        declineIncomingRequest();
+        return;
+      }
+      
+      await acceptIncomingRequest();
+    } finally {
+      setIsAccepting(false);
+    }
+  };
 
   if (!incomingRequest) return null;
 
@@ -224,11 +257,12 @@ export function IncomingRequestCard() {
           </Button>
           <Button 
             variant="provider"
-            onClick={acceptIncomingRequest}
+            onClick={handleAccept}
+            disabled={isAccepting}
             className="flex-1 h-11"
           >
             <Check className="w-4 h-4" />
-            Aceitar
+            {isAccepting ? 'Verificando...' : 'Aceitar'}
           </Button>
         </div>
       </div>
