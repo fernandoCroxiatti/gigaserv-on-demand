@@ -503,6 +503,8 @@ export type Database = {
           stripe_status: string | null
           terms_accepted: boolean | null
           terms_accepted_at: string | null
+          terms_accepted_version: string | null
+          terms_version_required: string | null
           total_services: number | null
           updated_at: string
           user_id: string
@@ -556,6 +558,8 @@ export type Database = {
           stripe_status?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
+          terms_accepted_version?: string | null
+          terms_version_required?: string | null
           total_services?: number | null
           updated_at?: string
           user_id: string
@@ -609,6 +613,8 @@ export type Database = {
           stripe_status?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
+          terms_accepted_version?: string | null
+          terms_version_required?: string | null
           total_services?: number | null
           updated_at?: string
           user_id?: string
@@ -827,6 +833,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_terms: { Args: { _user_id: string }; Returns: undefined }
       block_provider_for_fraud: {
         Args: { _admin_id: string; _provider_user_id: string; _reason: string }
         Returns: undefined
@@ -846,6 +853,7 @@ export type Database = {
           max_limit: number
         }[]
       }
+      get_current_terms_version: { Args: never; Returns: string }
       get_providers_needing_warning: {
         Args: never
         Returns: {
@@ -870,6 +878,10 @@ export type Database = {
       is_device_blocked: { Args: { _device_id: string }; Returns: boolean }
       is_provider: { Args: { _user_id: string }; Returns: boolean }
       is_provider_active: { Args: { _user_id: string }; Returns: boolean }
+      provider_needs_terms_acceptance: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       unblock_provider: {
         Args: { _admin_id: string; _notes?: string; _provider_user_id: string }
         Returns: undefined
