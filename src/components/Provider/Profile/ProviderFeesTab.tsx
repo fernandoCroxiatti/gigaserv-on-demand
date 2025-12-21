@@ -122,11 +122,9 @@ export function ProviderFeesTab() {
 
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from('payment-proofs')
-        .getPublicUrl(fileName);
-
-      return urlData.publicUrl;
+      // Return the file path instead of public URL since bucket is private
+      // Admin will generate signed URL to view
+      return fileName;
     } catch (err) {
       console.error('Error uploading proof:', err);
       toast.error('Erro ao enviar comprovante');
