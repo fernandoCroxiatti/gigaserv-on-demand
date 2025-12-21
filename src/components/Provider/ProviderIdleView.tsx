@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin, Settings2, Check, AlertCircle, ChevronDown } from 'lucide-react';
+import { Power, Radar, Star, TrendingUp, Clock, DollarSign, MapPin, Settings2, Check, AlertCircle, ChevronDown, Ban } from 'lucide-react';
 import { Slider } from '../ui/slider';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '@/hooks/useNotifications';
 import { NotificationPermissionModal } from '../Notifications/NotificationPermissionModal';
+import { useProviderFinancialBlock } from '@/hooks/useProviderFinancialBlock';
 
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
@@ -21,6 +22,13 @@ export function ProviderIdleView() {
   const [stripeVerified, setStripeVerified] = useState(false);
   const [checkingStripe, setCheckingStripe] = useState(true);
   const navigate = useNavigate();
+  
+  const { checkFinancialBlock, checking: checkingFinancial } = useProviderFinancialBlock();
+  const [financialBlockInfo, setFinancialBlockInfo] = useState<{
+    isBlocked: boolean;
+    reason: string | null;
+    pendingBalance: number;
+  } | null>(null);
   
   const { 
     permission: notifPermission, 
@@ -54,6 +62,19 @@ export function ProviderIdleView() {
     checkStripeStatus();
   }, []);
 
+  // Check financial block status
+  useEffect(() => {
+    const checkBlock = async () => {
+      const blockStatus = await checkFinancialBlock();
+      setFinancialBlockInfo({
+        isBlocked: blockStatus.isBlocked,
+        reason: blockStatus.reason,
+        pendingBalance: blockStatus.pendingBalance,
+      });
+    };
+    checkBlock();
+  }, [checkFinancialBlock]);
+
   const toggleService = (service: ServiceType) => {
     const newServices = currentServices.includes(service)
       ? currentServices.filter(s => s !== service)
@@ -82,6 +103,24 @@ export function ProviderIdleView() {
             label: 'Configurar',
             onClick: () => navigate('/profile?tab=bank'),
           },
+        });
+        return;
+      }
+      
+      // Check financial block before going online
+      const blockStatus = await checkFinancialBlock();
+      if (blockStatus.isBlocked) {
+        toast.error(blockStatus.reason || 'Você possui pendências financeiras', {
+          action: {
+            label: 'Ver taxas',
+            onClick: () => navigate('/profile?tab=fees'),
+          },
+          duration: 5000,
+        });
+        setFinancialBlockInfo({
+          isBlocked: true,
+          reason: blockStatus.reason,
+          pendingBalance: blockStatus.pendingBalance,
         });
         return;
       }
@@ -191,6 +230,28 @@ export function ProviderIdleView() {
                   onClick={() => navigate(!isRegistrationComplete ? '/profile' : '/profile?tab=bank')}
                 >
                   {!isRegistrationComplete ? 'Completar cadastro' : 'Configurar recebimentos'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Financial block warning */}
+          {!isOnline && financialBlockInfo?.isBlocked && (
+            <div className="flex items-start gap-3 p-3 bg-destructive/10 rounded-xl">
+              <Ban className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-destructive">
+                  Conta bloqueada por pendência financeira
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {financialBlockInfo.reason || `Saldo pendente: R$ ${financialBlockInfo.pendingBalance.toFixed(2)}`}
+                </p>
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto text-xs text-provider-primary mt-1"
+                  onClick={() => navigate('/profile?tab=fees')}
+                >
+                  Ver taxas pendentes
                 </Button>
               </div>
             </div>

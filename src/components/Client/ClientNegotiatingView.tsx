@@ -2,15 +2,18 @@ import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Star, Send, ArrowRight, MessageCircle, Clock, Car, Phone, Truck } from 'lucide-react';
+import { Star, Send, ArrowRight, MessageCircle, Clock, Car, Phone, Truck, Wallet } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { useProviderInfo } from '@/hooks/useProviderInfo';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { Switch } from '../ui/switch';
+import { supabase } from '@/integrations/supabase/client';
 
 export function ClientNegotiatingView() {
   const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
+  const [directPayment, setDirectPayment] = useState(false);
 
   // Fetch complete provider info
   const providerInfo = useProviderInfo(chamado?.prestadorId);
@@ -33,8 +36,17 @@ export function ClientNegotiatingView() {
     setProposedValue('');
   };
 
-  const handleConfirmAndPay = () => {
+  const handleConfirmAndPay = async () => {
     if (!chamado.valorProposto) return;
+    
+    // Update chamado with direct payment flag before confirming
+    if (directPayment) {
+      await supabase
+        .from('chamados')
+        .update({ direct_payment_to_provider: true })
+        .eq('id', chamado.id);
+    }
+    
     confirmValue();
   };
 
@@ -203,6 +215,28 @@ export function ClientNegotiatingView() {
                 </span>
               </div>
             )}
+            
+            {/* Direct payment toggle */}
+            <div className="mt-3 p-3 bg-secondary/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium">Pagamento direto ao prestador</p>
+                    <p className="text-xs text-muted-foreground">Pix ou dinheiro (fora do app)</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={directPayment}
+                  onCheckedChange={setDirectPayment}
+                />
+              </div>
+              {directPayment && (
+                <p className="mt-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+                  ⚠️ O pagamento será realizado diretamente ao prestador.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Message input - compact */}
