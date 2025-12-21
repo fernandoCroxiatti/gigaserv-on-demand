@@ -43,7 +43,7 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
     }
   }, [permission, user?.id, registerServiceWorker, resubscribeToPush]);
 
-  // FORCE permission popup on first app open - no delay
+  // FORCE permission popup on first app open
   useEffect(() => {
     console.log('[NotificationProvider] Checking popup conditions:', {
       loading,
@@ -54,24 +54,31 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
       permission
     });
     
-    // Wait for loading to complete and user to be logged in
+    // Wait for loading to complete
     if (loading) {
       console.log('[NotificationProvider] Still loading preferences...');
       return;
     }
     
+    // Wait for user to be logged in
     if (!user?.id) {
       console.log('[NotificationProvider] No user logged in yet');
       return;
     }
     
+    // Prevent triggering multiple times
     if (hasTriggeredRef.current) {
       console.log('[NotificationProvider] Already triggered popup');
       return;
     }
     
-    // If never asked before, show popup immediately
-    if (shouldAskPermission && hasAskedPermission === false) {
+    // Show popup if: never asked (hasAskedPermission === false) OR hasAskedPermission is still null (new user)
+    // AND permission is still 'default' (not granted/denied)
+    const shouldShowPopup = (hasAskedPermission === false || hasAskedPermission === null) && permission === 'default';
+    
+    console.log('[NotificationProvider] Should show popup?', shouldShowPopup);
+    
+    if (shouldShowPopup) {
       console.log('[NotificationProvider] First time user - showing permission popup NOW');
       hasTriggeredRef.current = true;
       // Small delay to ensure UI is ready after navigation
@@ -79,10 +86,8 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
         console.log('[NotificationProvider] Triggering permission flow...');
         triggerPermissionFlow();
       }, 800);
-    } else {
-      console.log('[NotificationProvider] Not showing popup - shouldAsk:', shouldAskPermission, 'hasAsked:', hasAskedPermission);
     }
-  }, [loading, user?.id, shouldAskPermission, hasAskedPermission, triggerPermissionFlow, permission]);
+  }, [loading, user?.id, hasAskedPermission, triggerPermissionFlow, permission]);
 
   return (
     <>
