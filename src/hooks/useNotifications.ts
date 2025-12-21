@@ -44,9 +44,21 @@ export function useNotifications() {
   const [hasAskedPermission, setHasAskedPermission] = useState<boolean | null>(null);
   const permissionAskedRef = useRef(false);
   const nativeListenersCleanupRef = useRef<(() => void) | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
 
   // Check if running in native app
   const isNative = isNativeApp();
+
+  // Reset refs when user changes (important for login/logout)
+  useEffect(() => {
+    if (user?.id !== lastUserIdRef.current) {
+      console.log('[useNotifications] User changed from', lastUserIdRef.current, 'to', user?.id);
+      lastUserIdRef.current = user?.id || null;
+      permissionAskedRef.current = false;
+      setHasAskedPermission(null);
+      setLoading(true);
+    }
+  }, [user?.id]);
 
   // Check current permission status
   useEffect(() => {
@@ -135,11 +147,14 @@ export function useNotifications() {
 
     const loadPreferences = async () => {
       try {
+        console.log('[useNotifications] Loading preferences for user:', user.id);
         const { data, error } = await supabase
           .from('notification_preferences')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
+
+        console.log('[useNotifications] Preferences loaded:', data);
 
         if (data) {
           setPreferences({
@@ -148,9 +163,35 @@ export function useNotifications() {
             chamado_updates: data.chamado_updates,
             promotional: data.promotional
           });
-          setHasAskedPermission(data.permission_asked_at !== null);
+          
+          // Check if we should ask again (weekly retry for declined)
+          if (data.permission_asked_at) {
+            const askedAt = new Date(data.permission_asked_at);
+            const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            
+            // If permission was granted, don't ask again
+            if (data.permission_granted === true) {
+              console.log('[useNotifications] Permission already granted, not asking again');
+              setHasAskedPermission(true);
+            } 
+            // If declined more than a week ago, ask again
+            else if (askedAt < oneWeekAgo) {
+              console.log('[useNotifications] Permission declined more than 1 week ago, will ask again');
+              setHasAskedPermission(false);
+            } 
+            // If declined recently, don't ask
+            else {
+              console.log('[useNotifications] Permission declined recently, waiting for 1 week');
+              setHasAskedPermission(true);
+            }
+          } else {
+            // Never asked before
+            console.log('[useNotifications] Never asked permission before');
+            setHasAskedPermission(false);
+          }
         } else {
           // No preferences record means never asked
+          console.log('[useNotifications] No preferences record, first time user');
           setHasAskedPermission(false);
         }
       } catch (err) {
@@ -313,9 +354,22 @@ export function useNotifications() {
 
   // Show permission modal (triggered at right moment)
   const triggerPermissionFlow = useCallback(() => {
-    if (permissionAskedRef.current) return;
-    if (!isNative && permission !== 'default') return;
+    console.log('[useNotifications] triggerPermissionFlow called, permissionAskedRef:', permissionAskedRef.current);
     
+    // For native: always allow showing modal (system handles actual permission)
+    // For web: only show if browser permission is still 'default'
+    if (!isNative && permission !== 'default') {
+      console.log('[useNotifications] Web browser already has permission decision:', permission);
+      return;
+    }
+    
+    // Prevent showing modal multiple times in same render cycle
+    if (permissionAskedRef.current) {
+      console.log('[useNotifications] Modal already shown this session');
+      return;
+    }
+    
+    console.log('[useNotifications] Opening permission modal');
     permissionAskedRef.current = true;
     setShowPermissionModal(true);
   }, [isNative, permission]);
@@ -385,7 +439,10 @@ export function useNotifications() {
     }
   }, [isNative, permission]);
 
-  // Check if should ask for permission - TRUE if never asked before
+  // Check if should ask for permission
+  // TRUE if: never asked, OR declined but it's been more than a week
+  // For native: always can ask (system will handle)
+  // For web: only if permission is 'default' (not already denied at browser level)
   const shouldAskPermission = hasAskedPermission === false && (isNative || permission === 'default');
 
   // Re-subscribe to push (useful after re-opening app)
