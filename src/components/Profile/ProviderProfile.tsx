@@ -87,7 +87,7 @@ export function ProviderProfile() {
   // Handle tab from URL params (e.g., /profile?tab=bank)
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'bank' || tabParam === 'profile' || tabParam === 'rides') {
+    if (tabParam === 'bank' || tabParam === 'profile' || tabParam === 'rides' || tabParam === 'fees') {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
