@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Receipt, 
   CreditCard,
@@ -9,9 +9,11 @@ import {
   Copy,
   Loader2,
   RefreshCw,
-  ChevronRight,
   Wallet,
-  Info
+  Info,
+  Upload,
+  Image as ImageIcon,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +21,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { useProviderFees, FinancialStatus } from '@/hooks/useProviderFees';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +50,7 @@ function getStatusBadge(status: FinancialStatus) {
 }
 
 export function ProviderFeesTab() {
+  const { user } = useAuth();
   const { 
     fees, 
     stripeFees, 
@@ -60,6 +65,10 @@ export function ProviderFeesTab() {
   
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [declaringPayment, setDeclaringPayment] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCopyPixKey = () => {
     if (pixConfig?.key) {
@@ -68,14 +77,83 @@ export function ProviderFeesTab() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor, selecione uma imagem');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 5MB');
+      return;
+    }
+
+    setProofFile(file);
+    setProofPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveProof = () => {
+    setProofFile(null);
+    if (proofPreview) {
+      URL.revokeObjectURL(proofPreview);
+      setProofPreview(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const uploadProof = async (): Promise<string | null> => {
+    if (!proofFile || !user?.id) return null;
+
+    setUploading(true);
+    try {
+      const fileExt = proofFile.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('payment-proofs')
+        .upload(fileName, proofFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('payment-proofs')
+        .getPublicUrl(fileName);
+
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('Error uploading proof:', err);
+      toast.error('Erro ao enviar comprovante');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleDeclarePayment = async () => {
     setDeclaringPayment(true);
-    const result = await declarePayment();
+    
+    let proofUrl: string | undefined;
+    if (proofFile) {
+      const uploadedUrl = await uploadProof();
+      if (uploadedUrl) {
+        proofUrl = uploadedUrl;
+      }
+    }
+
+    const result = await declarePayment(proofUrl);
     setDeclaringPayment(false);
     
     if (result.success) {
       toast.success('Pagamento declarado! Aguarde aprovação do admin.');
       setShowPaymentModal(false);
+      handleRemoveProof();
     } else {
       toast.error(result.error || 'Erro ao declarar pagamento');
     }
@@ -347,25 +425,72 @@ export function ProviderFeesTab() {
                 </p>
               </div>
             )}
+
+            {/* Upload Proof Section */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Comprovante de pagamento (opcional)</p>
+              
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+
+              {proofPreview ? (
+                <div className="relative">
+                  <img 
+                    src={proofPreview} 
+                    alt="Comprovante" 
+                    className="w-full h-48 object-cover rounded-xl"
+                  />
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="absolute top-2 right-2"
+                    onClick={handleRemoveProof}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full h-24 border-dashed"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="w-6 h-6 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      Anexar comprovante
+                    </span>
+                  </div>
+                </Button>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button 
               onClick={handleDeclarePayment}
-              disabled={declaringPayment || !pixConfig?.key}
+              disabled={declaringPayment || uploading || !pixConfig?.key}
               className="w-full"
               variant="provider"
             >
-              {declaringPayment ? (
+              {(declaringPayment || uploading) ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
               ) : (
                 <CheckCircle className="w-4 h-4 mr-2" />
               )}
-              Já paguei
+              {uploading ? 'Enviando...' : 'Já paguei'}
             </Button>
             <Button 
               variant="outline" 
-              onClick={() => setShowPaymentModal(false)}
+              onClick={() => {
+                setShowPaymentModal(false);
+                handleRemoveProof();
+              }}
               className="w-full"
             >
               Cancelar
