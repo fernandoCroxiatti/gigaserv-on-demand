@@ -116,9 +116,22 @@ export function useAdminDashboard() {
   return { stats, dailyStats, loading };
 }
 
+export interface PixConfig {
+  key_type: 'random' | 'cpf_cnpj' | 'email' | 'phone';
+  key: string;
+  recipient_name: string;
+  bank_name: string;
+}
+
 export function useAppSettings() {
   const [commissionPercentage, setCommissionPercentage] = useState<number>(15);
   const [maxPendingFeeLimit, setMaxPendingFeeLimit] = useState<number>(400);
+  const [pixConfig, setPixConfig] = useState<PixConfig>({
+    key_type: 'random',
+    key: '',
+    recipient_name: '',
+    bank_name: '',
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -128,7 +141,7 @@ export function useAppSettings() {
         const { data, error } = await supabase
           .from('app_settings')
           .select('*')
-          .in('key', ['app_commission_percentage', 'max_pending_fee_limit']);
+          .in('key', ['app_commission_percentage', 'max_pending_fee_limit', 'pix_config']);
 
         if (error) throw error;
         
@@ -139,6 +152,9 @@ export function useAppSettings() {
           }
           if (setting.key === 'max_pending_fee_limit' && setting.value !== null) {
             setMaxPendingFeeLimit(Number(setting.value));
+          }
+          if (setting.key === 'pix_config' && setting.value) {
+            setPixConfig(setting.value as unknown as PixConfig);
           }
         });
       } catch (err) {
@@ -197,7 +213,39 @@ export function useAppSettings() {
     }
   };
 
-  return { commissionPercentage, maxPendingFeeLimit, loading, saving, updateCommission, updateMaxPendingFeeLimit };
+  const updatePixConfig = async (newConfig: PixConfig) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('app_settings')
+        .update({ 
+          value: JSON.parse(JSON.stringify(newConfig)),
+          updated_at: new Date().toISOString()
+        })
+        .eq('key', 'pix_config');
+
+      if (error) throw error;
+      
+      setPixConfig(newConfig);
+      return { success: true };
+    } catch (err) {
+      console.error('Error updating PIX config:', err);
+      return { success: false, error: err };
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return { 
+    commissionPercentage, 
+    maxPendingFeeLimit, 
+    pixConfig,
+    loading, 
+    saving, 
+    updateCommission, 
+    updateMaxPendingFeeLimit,
+    updatePixConfig 
+  };
 }
 
 export function useSettingsHistory() {

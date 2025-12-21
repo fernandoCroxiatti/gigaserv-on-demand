@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAppSettings, useSettingsHistory } from '@/hooks/useAdminData';
+import { useAppSettings, useSettingsHistory, PixConfig } from '@/hooks/useAdminData';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { 
@@ -12,7 +12,9 @@ import {
   History,
   Save,
   AlertCircle,
-  DollarSign
+  DollarSign,
+  Smartphone,
+  Building
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,13 +26,45 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function AdminSettings() {
   const { user } = useAuth();
-  const { commissionPercentage, maxPendingFeeLimit, loading, saving, updateCommission, updateMaxPendingFeeLimit } = useAppSettings();
+  const { 
+    commissionPercentage, 
+    maxPendingFeeLimit, 
+    pixConfig, 
+    loading, 
+    saving, 
+    updateCommission, 
+    updateMaxPendingFeeLimit,
+    updatePixConfig 
+  } = useAppSettings();
   const { history, loading: historyLoading } = useSettingsHistory();
   const [newPercentage, setNewPercentage] = useState<string>('');
   const [newLimit, setNewLimit] = useState<string>('');
+  
+  // PIX form state
+  const [pixKeyType, setPixKeyType] = useState<PixConfig['key_type']>('random');
+  const [pixKey, setPixKey] = useState('');
+  const [pixRecipientName, setPixRecipientName] = useState('');
+  const [pixBankName, setPixBankName] = useState('');
+
+  // Sync PIX form with fetched data
+  useEffect(() => {
+    if (pixConfig) {
+      setPixKeyType(pixConfig.key_type || 'random');
+      setPixKey(pixConfig.key || '');
+      setPixRecipientName(pixConfig.recipient_name || '');
+      setPixBankName(pixConfig.bank_name || '');
+    }
+  }, [pixConfig]);
 
   const handleSaveCommission = async () => {
     const value = parseFloat(newPercentage);
@@ -64,6 +98,26 @@ export default function AdminSettings() {
     }
   };
 
+  const handleSavePixConfig = async () => {
+    if (!pixKey.trim()) {
+      toast.error('Informe a chave PIX');
+      return;
+    }
+
+    const result = await updatePixConfig({
+      key_type: pixKeyType,
+      key: pixKey.trim(),
+      recipient_name: pixRecipientName.trim(),
+      bank_name: pixBankName.trim(),
+    });
+
+    if (result.success) {
+      toast.success('Configuração PIX atualizada com sucesso!');
+    } else {
+      toast.error('Erro ao atualizar configuração PIX');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -76,7 +130,7 @@ export default function AdminSettings() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Configurações Financeiras</h2>
-        <p className="text-muted-foreground">Gerencie a comissão e configurações do app</p>
+        <p className="text-muted-foreground">Gerencie a comissão, limites e configurações de pagamento</p>
       </div>
 
       {/* Commission Settings */}
@@ -189,6 +243,91 @@ export default function AdminSettings() {
               Prestadores com saldo devedor acima deste limite não poderão ficar online ou aceitar novos chamados.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* PIX Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="w-5 h-5" />
+            Configuração da Chave PIX
+          </CardTitle>
+          <CardDescription>
+            Configure a chave PIX para receber os pagamentos de taxas dos prestadores.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {!pixConfig?.key && (
+            <div className="flex items-start gap-2 p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <p>
+                <strong>Atenção:</strong> A chave PIX não está configurada. Os prestadores não conseguirão pagar as taxas.
+              </p>
+            </div>
+          )}
+
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="pixKeyType">Tipo de chave</Label>
+              <Select value={pixKeyType} onValueChange={(v) => setPixKeyType(v as PixConfig['key_type'])}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="random">Chave Aleatória</SelectItem>
+                  <SelectItem value="cpf_cnpj">CPF/CNPJ</SelectItem>
+                  <SelectItem value="email">E-mail</SelectItem>
+                  <SelectItem value="phone">Telefone</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pixKey">Chave PIX *</Label>
+              <Input
+                id="pixKey"
+                type="text"
+                placeholder="Informe a chave PIX"
+                value={pixKey}
+                onChange={(e) => setPixKey(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pixRecipientName">Nome do recebedor</Label>
+              <Input
+                id="pixRecipientName"
+                type="text"
+                placeholder="Ex: GIGA S.O.S LTDA"
+                value={pixRecipientName}
+                onChange={(e) => setPixRecipientName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pixBankName">Nome do banco</Label>
+              <div className="flex gap-2 items-center">
+                <Building className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="pixBankName"
+                  type="text"
+                  placeholder="Ex: Banco Inter"
+                  value={pixBankName}
+                  onChange={(e) => setPixBankName(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <Button onClick={handleSavePixConfig} disabled={saving} className="w-full">
+            {saving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            Salvar Configuração PIX
+          </Button>
         </CardContent>
       </Card>
 
