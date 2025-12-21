@@ -117,26 +117,72 @@ export default function TermsOfUse() {
             <li>Interrupções no serviço por motivos técnicos</li>
           </ul>
 
-          <h2 className="text-lg font-semibold mt-6">11. Propriedade Intelectual</h2>
+          <h2 className="text-lg font-semibold mt-6">11. Controle de Cadastro, Antifraude e Bloqueio de Prestadores</h2>
+          
+          <h3 className="text-base font-medium mt-4">11.1 CPF Único e Imutável</h3>
+          <p>
+            O CPF do prestador é informação única e imutável no sistema. Cada CPF pode estar 
+            vinculado a apenas uma conta de prestador. Após o cadastro, o CPF não pode ser 
+            alterado. A tentativa de cadastro com CPF já utilizado será automaticamente bloqueada.
+          </p>
+
+          <h3 className="text-base font-medium mt-4">11.2 Limite de Pendência Financeira</h3>
+          <p>
+            Fica estabelecido o limite máximo de pendência financeira de R$ 400,00 (quatrocentos reais). 
+            Ao atingir este limite, o prestador terá seu acesso bloqueado automaticamente, ficando 
+            impossibilitado de receber novos chamados até a regularização total dos débitos.
+          </p>
+
+          <h3 className="text-base font-medium mt-4">11.3 Bloqueio por Dispositivo</h3>
+          <p>
+            Cada dispositivo móvel pode estar associado a apenas um prestador ativo. A GIGA S.O.S 
+            reserva-se o direito de bloquear novos cadastros realizados em dispositivos associados 
+            a contas bloqueadas por inadimplência ou fraude.
+          </p>
+
+          <h3 className="text-base font-medium mt-4">11.4 Bloqueio por Dados Sensíveis</h3>
+          <p>
+            A plataforma poderá recusar novos cadastros quando forem identificadas coincidências 
+            de dados com contas bloqueadas, incluindo: telefone, e-mail, chave PIX e placa de veículo.
+          </p>
+
+          <h3 className="text-base font-medium mt-4">11.5 Histórico Imutável</h3>
+          <p>
+            Os registros de corridas, dívidas, pagamentos e bloqueios são mantidos permanentemente 
+            no sistema para fins de auditoria e segurança, não podendo ser excluídos ou alterados.
+          </p>
+
+          <h3 className="text-base font-medium mt-4">11.6 Bloqueio Permanente</h3>
+          <p>
+            A GIGA S.O.S poderá aplicar bloqueio permanente a prestadores que:
+          </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Acumulem débitos não quitados</li>
+            <li>Pratiquem fraude ou tentativa de fraude</li>
+            <li>Utilizem múltiplos cadastros para burlar bloqueios</li>
+            <li>Violem repetidamente os termos de uso</li>
+          </ul>
+
+          <h2 className="text-lg font-semibold mt-6">12. Propriedade Intelectual</h2>
           <p>
             Todo o conteúdo do aplicativo, incluindo marca, design e código, é propriedade 
             da GIGA S.O.S e está protegido por leis de propriedade intelectual.
           </p>
 
-          <h2 className="text-lg font-semibold mt-6">12. Alterações nos Termos</h2>
+          <h2 className="text-lg font-semibold mt-6">13. Alterações nos Termos</h2>
           <p>
             Podemos modificar estes termos a qualquer momento. Alterações significativas 
             serão comunicadas através do aplicativo. O uso continuado após alterações 
             constitui aceitação dos novos termos.
           </p>
 
-          <h2 className="text-lg font-semibold mt-6">13. Legislação Aplicável</h2>
+          <h2 className="text-lg font-semibold mt-6">14. Legislação Aplicável</h2>
           <p>
             Estes termos são regidos pelas leis do Brasil. Disputas serão resolvidas 
             no foro da comarca de São Paulo/SP.
           </p>
 
-          <h2 className="text-lg font-semibold mt-6">14. Contato</h2>
+          <h2 className="text-lg font-semibold mt-6">15. Contato</h2>
           <p>
             Para dúvidas sobre estes termos:
           </p>
