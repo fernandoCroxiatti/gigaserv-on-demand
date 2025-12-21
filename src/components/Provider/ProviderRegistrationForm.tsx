@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,10 +11,13 @@ import {
   Loader2,
   Truck,
   AlertCircle,
-  CreditCard
+  CreditCard,
+  ShieldAlert
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAntiFraud } from '@/hooks/useAntiFraud';
+import { getDeviceId } from '@/lib/deviceFingerprint';
 
 interface ProviderRegistrationFormProps {
   userId: string;
@@ -104,10 +107,19 @@ export function ProviderRegistrationForm({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(currentAvatar);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [fraudBlock, setFraudBlock] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { performPreRegistrationCheck, registerDeviceId, isChecking } = useAntiFraud();
   
   // If CPF is already set, it cannot be changed
   const cpfLocked = !!currentCpf;
+
+  // Load device ID on mount
+  useEffect(() => {
+    getDeviceId().then(setDeviceId);
+  }, []);
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -233,6 +245,25 @@ export function ProviderRegistrationForm({
       }
     }
 
+    // Anti-fraud check
+    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPlate = vehiclePlate.replace(/-/g, '').toUpperCase();
+    const cleanCpf = cpf.replace(/\D/g, '');
+    
+    const fraudResult = await performPreRegistrationCheck({
+      cpf: cleanCpf,
+      email: '', // Email would come from auth
+      phone: cleanPhone,
+      vehiclePlate: cleanPlate,
+    });
+    
+    if (fraudResult.blocked) {
+      setFraudBlock(fraudResult.reason || 'Cadastro bloqueado');
+      toast.error(fraudResult.reason || 'Cadastro bloqueado');
+      setLoading(false);
+      return;
+    }
+
     if (!avatarUrl) {
       toast.error('Foto de perfil é obrigatória');
       return;
@@ -282,7 +313,7 @@ export function ProviderRegistrationForm({
         throw profileError;
       }
 
-      // Update provider_data
+      // Update provider_data with device ID
       const { error: providerError } = await supabase
         .from('provider_data')
         .update({
@@ -291,6 +322,8 @@ export function ProviderRegistrationForm({
           terms_accepted: true,
           terms_accepted_at: new Date().toISOString(),
           registration_complete: true,
+          device_id: deviceId,
+          device_id_registered_at: new Date().toISOString(),
         })
         .eq('user_id', userId);
 

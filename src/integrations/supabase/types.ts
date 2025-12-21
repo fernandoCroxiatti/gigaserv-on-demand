@@ -74,6 +74,42 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_credentials: {
+        Row: {
+          block_reason: string
+          blocked_at: string | null
+          blocked_by: string | null
+          created_at: string | null
+          credential_type: string
+          credential_value: string
+          id: string
+          notes: string | null
+          original_user_id: string | null
+        }
+        Insert: {
+          block_reason: string
+          blocked_at?: string | null
+          blocked_by?: string | null
+          created_at?: string | null
+          credential_type: string
+          credential_value: string
+          id?: string
+          notes?: string | null
+          original_user_id?: string | null
+        }
+        Update: {
+          block_reason?: string
+          blocked_at?: string | null
+          blocked_by?: string | null
+          created_at?: string | null
+          credential_type?: string
+          credential_value?: string
+          id?: string
+          notes?: string | null
+          original_user_id?: string | null
+        }
+        Relationships: []
+      }
       chamados: {
         Row: {
           cliente_id: string | null
@@ -225,6 +261,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fraud_history: {
+        Row: {
+          action: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          performed_by: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          performed_by?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          performed_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       notification_history: {
         Row: {
@@ -403,16 +466,29 @@ export type Database = {
           current_address: string | null
           current_lat: number | null
           current_lng: number | null
+          device_id: string | null
+          device_id_registered_at: string | null
           financial_block_reason: string | null
           financial_blocked: boolean | null
           financial_status:
             | Database["public"]["Enums"]["financial_status"]
             | null
+          fraud_flagged: boolean | null
+          fraud_flagged_at: string | null
+          fraud_flagged_by: string | null
+          fraud_reason: string | null
           id: string
           is_blocked: boolean | null
           is_online: boolean | null
+          max_debt_limit: number | null
           payout_enabled: boolean | null
           pending_fee_balance: number | null
+          permanently_blocked: boolean | null
+          permanently_blocked_at: string | null
+          permanently_blocked_by: string | null
+          permanently_blocked_reason: string | null
+          pix_key: string | null
+          pix_key_type: string | null
           radar_range: number | null
           rating: number | null
           registration_complete: boolean | null
@@ -440,16 +516,29 @@ export type Database = {
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          device_id?: string | null
+          device_id_registered_at?: string | null
           financial_block_reason?: string | null
           financial_blocked?: boolean | null
           financial_status?:
             | Database["public"]["Enums"]["financial_status"]
             | null
+          fraud_flagged?: boolean | null
+          fraud_flagged_at?: string | null
+          fraud_flagged_by?: string | null
+          fraud_reason?: string | null
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
+          max_debt_limit?: number | null
           payout_enabled?: boolean | null
           pending_fee_balance?: number | null
+          permanently_blocked?: boolean | null
+          permanently_blocked_at?: string | null
+          permanently_blocked_by?: string | null
+          permanently_blocked_reason?: string | null
+          pix_key?: string | null
+          pix_key_type?: string | null
           radar_range?: number | null
           rating?: number | null
           registration_complete?: boolean | null
@@ -479,16 +568,29 @@ export type Database = {
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          device_id?: string | null
+          device_id_registered_at?: string | null
           financial_block_reason?: string | null
           financial_blocked?: boolean | null
           financial_status?:
             | Database["public"]["Enums"]["financial_status"]
             | null
+          fraud_flagged?: boolean | null
+          fraud_flagged_at?: string | null
+          fraud_flagged_by?: string | null
+          fraud_reason?: string | null
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
+          max_debt_limit?: number | null
           payout_enabled?: boolean | null
           pending_fee_balance?: number | null
+          permanently_blocked?: boolean | null
+          permanently_blocked_at?: string | null
+          permanently_blocked_by?: string | null
+          permanently_blocked_reason?: string | null
+          pix_key?: string | null
+          pix_key_type?: string | null
           radar_range?: number | null
           rating?: number | null
           registration_complete?: boolean | null
@@ -722,6 +824,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      block_provider_for_fraud: {
+        Args: { _admin_id: string; _provider_user_id: string; _reason: string }
+        Returns: undefined
+      }
+      can_provider_accept_chamados: {
+        Args: { _user_id: string }
+        Returns: {
+          block_reason: string
+          can_accept: boolean
+        }[]
+      }
+      check_provider_debt_limit: {
+        Args: { _user_id: string }
+        Returns: {
+          current_debt: number
+          is_over_limit: boolean
+          max_limit: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -730,12 +851,27 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_credential_blocked: {
+        Args: { _credential_type: string; _credential_value: string }
+        Returns: boolean
+      }
+      is_device_blocked: { Args: { _device_id: string }; Returns: boolean }
       is_provider: { Args: { _user_id: string }; Returns: boolean }
       is_provider_active: { Args: { _user_id: string }; Returns: boolean }
+      unblock_provider: {
+        Args: { _admin_id: string; _notes?: string; _provider_user_id: string }
+        Returns: undefined
+      }
       validate_cpf: { Args: { cpf_input: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      block_reason_type:
+        | "divida"
+        | "fraude"
+        | "duplicidade"
+        | "dispositivo_bloqueado"
+        | "manual"
       chamado_status:
         | "idle"
         | "searching"
@@ -897,6 +1033,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      block_reason_type: [
+        "divida",
+        "fraude",
+        "duplicidade",
+        "dispositivo_bloqueado",
+        "manual",
+      ],
       chamado_status: [
         "idle",
         "searching",
