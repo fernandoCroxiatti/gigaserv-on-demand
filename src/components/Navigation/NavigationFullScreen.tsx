@@ -8,6 +8,7 @@ import { useNavigationInstructions } from '@/hooks/useNavigationInstructions';
 import { useRealtimeGPS } from '@/hooks/useRealtimeGPS';
 import { useProviderTracking } from '@/hooks/useProviderTracking';
 import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
+import { useRouteDeviation } from '@/hooks/useRouteDeviation';
 import { Button } from '../ui/button';
 import { ChatModal } from '../Chat/ChatModal';
 import { DirectPaymentBanner } from '../Provider/DirectPaymentBanner';
@@ -99,6 +100,18 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     clearRoute 
   } = useNavigationRoute();
 
+  // Route deviation detection for auto-recalculation
+  const { checkDeviation, clearRouteCache } = useRouteDeviation({
+    maxDeviationMeters: 50,
+    minTimeOffRoute: 3000,
+    onRecalculateNeeded: useCallback(() => {
+      if (mode === 'provider' && providerGPSLocation && currentDestination) {
+        toast.info('Recalculando rota...');
+        forceRecalculateRoute(providerGPSLocation, currentDestination, chamado?.id || '', navigationPhase);
+      }
+    }, [mode, forceRecalculateRoute, navigationPhase]),
+  });
+
   // Provider mode: use realtime GPS with throttled updates
   const { 
     location: providerGPSLocation, 
@@ -108,12 +121,18 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   } = useRealtimeGPS({
     enableHighAccuracy: true,
     timeout: 15000,
-    maximumAge: GPS_UPDATE_INTERVAL, // Allow cached position to reduce battery usage
+    maximumAge: GPS_UPDATE_INTERVAL,
+    enableSmoothing: true,
     onLocationUpdate: async (location) => {
       // Throttle database updates to reduce load
       const now = Date.now();
       if (now - lastGpsUpdateRef.current < GPS_UPDATE_INTERVAL) return;
       lastGpsUpdateRef.current = now;
+
+      // Check route deviation
+      if (routePolyline) {
+        checkDeviation(location, routePolyline);
+      }
 
       if (mode === 'provider' && profile?.user_id) {
         try {
@@ -328,6 +347,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         .eq('id', chamado.id);
 
       clearRoute();
+      clearRouteCache();
       routeCalculatedRef.current = '';
       
       setNavigationPhase('to_destination');

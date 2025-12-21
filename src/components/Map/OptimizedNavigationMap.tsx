@@ -2,7 +2,9 @@ import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { Location } from '@/types/chamado';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Navigation2 } from 'lucide-react';
+import { Button } from '../ui/button';
+import { cn } from '@/lib/utils';
 
 interface OptimizedNavigationMapProps {
   providerLocation: Location | null;
@@ -11,6 +13,10 @@ interface OptimizedNavigationMapProps {
   className?: string;
   followProvider?: boolean;
   providerHeading?: number | null;
+  /** Enable 3D tilt view for navigation */
+  enable3DTilt?: boolean;
+  /** Show re-center button when user interacts */
+  showRecenterButton?: boolean;
 }
 
 const mapContainerStyle = {
@@ -24,15 +30,35 @@ function isNightTime(): boolean {
   return hour >= 18 || hour < 6;
 }
 
-// Night mode styles for Google Maps
+// Night mode styles for Google Maps (Uber-like dark theme)
 const nightModeStyles: google.maps.MapTypeStyle[] = [
-  { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] },
+  { elementType: 'geometry', stylers: [{ color: '#1d2c4d' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8ec3b9' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a3646' }] },
   {
-    featureType: 'administrative.locality',
+    featureType: 'administrative.country',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#4b6878' }],
+  },
+  {
+    featureType: 'administrative.land_parcel',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#d59563' }],
+    stylers: [{ color: '#64779e' }],
+  },
+  {
+    featureType: 'administrative.province',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#4b6878' }],
+  },
+  {
+    featureType: 'landscape.man_made',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#334e87' }],
+  },
+  {
+    featureType: 'landscape.natural',
+    elementType: 'geometry',
+    stylers: [{ color: '#023e58' }],
   },
   {
     featureType: 'poi',
@@ -40,39 +66,44 @@ const nightModeStyles: google.maps.MapTypeStyle[] = [
     stylers: [{ visibility: 'off' }],
   },
   {
-    featureType: 'poi.park',
+    featureType: 'poi',
     elementType: 'geometry',
-    stylers: [{ color: '#263c3f' }],
+    stylers: [{ color: '#283d6a' }],
   },
   {
     featureType: 'road',
     elementType: 'geometry',
-    stylers: [{ color: '#38414e' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry.stroke',
-    stylers: [{ color: '#212a37' }],
+    stylers: [{ color: '#304a7d' }],
   },
   {
     featureType: 'road',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#9ca5b3' }],
+    stylers: [{ color: '#98a5be' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'labels.text.stroke',
+    stylers: [{ color: '#1d2c4d' }],
   },
   {
     featureType: 'road.highway',
     elementType: 'geometry',
-    stylers: [{ color: '#746855' }],
+    stylers: [{ color: '#2c6675' }],
   },
   {
     featureType: 'road.highway',
     elementType: 'geometry.stroke',
-    stylers: [{ color: '#1f2835' }],
+    stylers: [{ color: '#255763' }],
   },
   {
     featureType: 'road.highway',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#f3d19c' }],
+    stylers: [{ color: '#b0d5ce' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'labels.text.stroke',
+    stylers: [{ color: '#023e58' }],
   },
   {
     featureType: 'transit',
@@ -80,33 +111,28 @@ const nightModeStyles: google.maps.MapTypeStyle[] = [
     stylers: [{ visibility: 'off' }],
   },
   {
-    featureType: 'transit',
-    elementType: 'geometry',
-    stylers: [{ color: '#2f3948' }],
+    featureType: 'transit.line',
+    elementType: 'geometry.fill',
+    stylers: [{ color: '#283d6a' }],
   },
   {
     featureType: 'transit.station',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#d59563' }],
+    elementType: 'geometry',
+    stylers: [{ color: '#3a4762' }],
   },
   {
     featureType: 'water',
     elementType: 'geometry',
-    stylers: [{ color: '#17263c' }],
+    stylers: [{ color: '#0e1626' }],
   },
   {
     featureType: 'water',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#515c6d' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'labels.text.stroke',
-    stylers: [{ color: '#17263c' }],
+    stylers: [{ color: '#4e6d70' }],
   },
 ];
 
-// Day mode styles (minimal, clean)
+// Day mode styles (clean, minimal)
 const dayModeStyles: google.maps.MapTypeStyle[] = [
   {
     featureType: 'poi',
@@ -118,23 +144,17 @@ const dayModeStyles: google.maps.MapTypeStyle[] = [
     elementType: 'labels',
     stylers: [{ visibility: 'off' }],
   },
+  {
+    featureType: 'road',
+    elementType: 'labels.icon',
+    stylers: [{ visibility: 'off' }],
+  },
 ];
 
-// Get map options based on time of day and mode
-function getMapOptions(followMode: boolean = false): google.maps.MapOptions {
-  return {
-    disableDefaultUI: true,
-    zoomControl: false,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
-    // In follow mode, limit gestures to allow map to follow user
-    gestureHandling: followMode ? 'none' : 'greedy',
-    styles: isNightTime() ? nightModeStyles : dayModeStyles,
-    // Enable tilt for navigation view
-    tilt: followMode ? 45 : 0,
-  };
-}
+// Animation constants
+const ROTATION_LERP_FACTOR = 0.12;
+const POSITION_LERP_FACTOR = 0.15;
+const MAP_ROTATION_LERP_FACTOR = 0.08;
 
 /**
  * Calculate bearing between two points in degrees
@@ -162,6 +182,13 @@ function lerpAngle(from: number, to: number, t: number): number {
   if (diff < -180) diff += 360;
   
   return (from + diff * t + 360) % 360;
+}
+
+/**
+ * Linear interpolation
+ */
+function lerp(start: number, end: number, factor: number): number {
+  return start + (end - start) * factor;
 }
 
 /**
@@ -206,10 +233,6 @@ function decodePolyline(encoded: string): Array<{ lat: number; lng: number }> {
   return poly;
 }
 
-// Animation constants
-const ROTATION_LERP_FACTOR = 0.15; // Smooth factor (0-1, lower = smoother)
-const ANIMATION_FRAME_RATE = 60; // fps
-
 export function OptimizedNavigationMap({
   providerLocation,
   destination,
@@ -217,17 +240,27 @@ export function OptimizedNavigationMap({
   className = '',
   followProvider = true,
   providerHeading = null,
+  enable3DTilt = true,
+  showRecenterButton = true,
 }: OptimizedNavigationMapProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [isUserInteracting, setIsUserInteracting] = useState(false);
   const userInteractionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   
-  // Smooth rotation state
+  // Smooth rotation and position state
   const [smoothRotation, setSmoothRotation] = useState(0);
+  const [smoothPosition, setSmoothPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapHeading, setMapHeading] = useState(0);
+  
+  // Refs for animation
   const lastLocationRef = useRef<Location | null>(null);
   const targetRotationRef = useRef(0);
   const currentRotationRef = useRef(0);
+  const targetPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const currentPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const targetMapHeadingRef = useRef(0);
+  const currentMapHeadingRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
 
   // Decode polyline only when it changes
@@ -241,46 +274,105 @@ export function OptimizedNavigationMap({
     }
   }, [routePolyline]);
 
-  // Calculate target rotation based on GPS heading or movement direction
+  // Get map options based on mode
+  const mapOptions = useMemo((): google.maps.MapOptions => ({
+    disableDefaultUI: true,
+    zoomControl: false,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    clickableIcons: false,
+    // Allow gestures but track interaction
+    gestureHandling: 'greedy',
+    styles: isNightTime() ? nightModeStyles : dayModeStyles,
+    // Enable 3D tilt for navigation view
+    tilt: enable3DTilt && followProvider ? 60 : 0,
+    // Start with north up, will rotate with heading
+    heading: 0,
+  }), [enable3DTilt, followProvider]);
+
+  // Update targets when provider location/heading changes
   useEffect(() => {
     if (!providerLocation) return;
     
+    // Set target position
+    targetPositionRef.current = { lat: providerLocation.lat, lng: providerLocation.lng };
+    
+    // Initialize current position if needed
+    if (!currentPositionRef.current) {
+      currentPositionRef.current = { lat: providerLocation.lat, lng: providerLocation.lng };
+      setSmoothPosition({ lat: providerLocation.lat, lng: providerLocation.lng });
+    }
+    
+    // Calculate target rotation
     let newTargetRotation = targetRotationRef.current;
     
-    // Priority 1: Use GPS heading if available and valid
+    // Priority 1: Use GPS heading if available
     if (providerHeading !== null && providerHeading !== undefined && !isNaN(providerHeading)) {
       newTargetRotation = providerHeading;
     }
-    // Priority 2: Calculate from movement if we have previous position
+    // Priority 2: Calculate from movement
     else if (lastLocationRef.current) {
       const distance = Math.sqrt(
         Math.pow(providerLocation.lat - lastLocationRef.current.lat, 2) +
         Math.pow(providerLocation.lng - lastLocationRef.current.lng, 2)
       );
       
-      // Only update if moved significantly (avoid jitter when stationary)
-      if (distance > 0.00005) { // ~5 meters
+      // Only update if moved significantly
+      if (distance > 0.00003) { // ~3 meters
         newTargetRotation = calculateBearing(lastLocationRef.current, providerLocation);
       }
     }
     
     targetRotationRef.current = newTargetRotation;
+    targetMapHeadingRef.current = newTargetRotation;
     lastLocationRef.current = providerLocation;
   }, [providerLocation, providerHeading]);
 
-  // Smooth animation loop for rotation
+  // Unified animation loop for all smooth transitions
   useEffect(() => {
     const animate = () => {
-      const current = currentRotationRef.current;
-      const target = targetRotationRef.current;
+      let needsUpdate = false;
       
-      // Smoothly interpolate towards target
-      const newRotation = lerpAngle(current, target, ROTATION_LERP_FACTOR);
+      // Smooth marker rotation
+      const currentRot = currentRotationRef.current;
+      const targetRot = targetRotationRef.current;
+      const newRotation = lerpAngle(currentRot, targetRot, ROTATION_LERP_FACTOR);
       currentRotationRef.current = newRotation;
       
-      // Only update state if rotation changed significantly (avoid unnecessary re-renders)
-      if (Math.abs(newRotation - smoothRotation) > 0.5) {
+      if (Math.abs(newRotation - smoothRotation) > 0.3) {
         setSmoothRotation(newRotation);
+        needsUpdate = true;
+      }
+      
+      // Smooth position interpolation
+      const currentPos = currentPositionRef.current;
+      const targetPos = targetPositionRef.current;
+      
+      if (currentPos && targetPos) {
+        const newLat = lerp(currentPos.lat, targetPos.lat, POSITION_LERP_FACTOR);
+        const newLng = lerp(currentPos.lng, targetPos.lng, POSITION_LERP_FACTOR);
+        
+        const latDiff = Math.abs(newLat - currentPos.lat);
+        const lngDiff = Math.abs(newLng - currentPos.lng);
+        
+        if (latDiff > 0.000001 || lngDiff > 0.000001) {
+          currentPositionRef.current = { lat: newLat, lng: newLng };
+          setSmoothPosition({ lat: newLat, lng: newLng });
+          needsUpdate = true;
+        }
+      }
+      
+      // Smooth map heading rotation (for navigation mode)
+      if (followProvider && !isUserInteracting) {
+        const currentMapHead = currentMapHeadingRef.current;
+        const targetMapHead = targetMapHeadingRef.current;
+        const newMapHeading = lerpAngle(currentMapHead, targetMapHead, MAP_ROTATION_LERP_FACTOR);
+        currentMapHeadingRef.current = newMapHeading;
+        
+        if (Math.abs(newMapHeading - mapHeading) > 0.5) {
+          setMapHeading(newMapHeading);
+        }
       }
       
       animationFrameRef.current = requestAnimationFrame(animate);
@@ -293,59 +385,59 @@ export function OptimizedNavigationMap({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [smoothRotation]);
+  }, [smoothRotation, followProvider, isUserInteracting, mapHeading]);
 
-  // Follow provider on map with smooth animation and heading rotation (Uber/Google Maps style)
+  // Update map camera smoothly
   useEffect(() => {
-    if (map && providerLocation && followProvider && !isUserInteracting) {
-      // Smooth pan to provider location
-      map.panTo({ lat: providerLocation.lat, lng: providerLocation.lng });
+    if (!map || !smoothPosition || isUserInteracting) return;
+    
+    if (followProvider) {
+      // Smooth pan to position
+      map.panTo(smoothPosition);
       
-      // Rotate map to match heading (navigation mode)
-      const currentHeading = smoothRotation;
-      if (currentHeading !== undefined && !isNaN(currentHeading)) {
-        // Invert heading so map rotates to show road ahead
-        map.setHeading(currentHeading);
-      }
+      // Rotate map to heading (road ahead always up)
+      map.setHeading(mapHeading);
       
-      // Set navigation-style zoom
+      // Set appropriate zoom for navigation
       const currentZoom = map.getZoom();
       if (currentZoom && currentZoom < 17) {
         map.setZoom(17);
       }
     }
-  }, [map, providerLocation, followProvider, smoothRotation, isUserInteracting]);
+  }, [map, smoothPosition, followProvider, mapHeading, isUserInteracting]);
 
-  // Auto-fit bounds when route is available
-  useEffect(() => {
-    if (map && decodedPath.length > 0 && providerLocation) {
-      const bounds = new google.maps.LatLngBounds();
-      bounds.extend({ lat: providerLocation.lat, lng: providerLocation.lng });
-      bounds.extend({ lat: destination.lat, lng: destination.lng });
-      map.fitBounds(bounds, { top: 150, bottom: 300, left: 50, right: 50 });
+  // Handle re-center button click
+  const handleRecenter = useCallback(() => {
+    setIsUserInteracting(false);
+    if (userInteractionTimeoutRef.current) {
+      clearTimeout(userInteractionTimeoutRef.current);
+      userInteractionTimeoutRef.current = null;
     }
-  }, [map, decodedPath.length > 0]);
+  }, []);
 
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
     mapInstance.setZoom(followProvider ? 17 : 16);
     
-    // Add drag listeners to detect user interaction
-    if (followProvider) {
-      mapInstance.addListener('dragstart', () => {
-        setIsUserInteracting(true);
-        if (userInteractionTimeoutRef.current) {
-          clearTimeout(userInteractionTimeoutRef.current);
-        }
-      });
-      
-      mapInstance.addListener('dragend', () => {
-        // Re-enable follow after 5 seconds of no interaction
-        userInteractionTimeoutRef.current = setTimeout(() => {
-          setIsUserInteracting(false);
-        }, 5000);
-      });
-    }
+    // Track user interaction
+    const startInteraction = () => {
+      setIsUserInteracting(true);
+      if (userInteractionTimeoutRef.current) {
+        clearTimeout(userInteractionTimeoutRef.current);
+      }
+    };
+    
+    const endInteraction = () => {
+      // Re-enable follow after 8 seconds of no interaction
+      userInteractionTimeoutRef.current = setTimeout(() => {
+        setIsUserInteracting(false);
+      }, 8000);
+    };
+    
+    mapInstance.addListener('dragstart', startInteraction);
+    mapInstance.addListener('dragend', endInteraction);
+    mapInstance.addListener('zoom_changed', startInteraction);
+    
   }, [followProvider]);
 
   const onUnmount = useCallback(() => {
@@ -357,7 +449,7 @@ export function OptimizedNavigationMap({
 
   if (loadError) {
     return (
-      <div className={`flex items-center justify-center bg-secondary ${className}`}>
+      <div className={cn("flex items-center justify-center bg-secondary", className)}>
         <div className="text-center p-6">
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
           <p className="font-medium text-destructive">Erro ao carregar Google Maps</p>
@@ -368,7 +460,7 @@ export function OptimizedNavigationMap({
 
   if (!isLoaded) {
     return (
-      <div className={`flex items-center justify-center bg-secondary ${className}`}>
+      <div className={cn("flex items-center justify-center bg-secondary", className)}>
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Carregando mapa...</p>
@@ -377,24 +469,24 @@ export function OptimizedNavigationMap({
     );
   }
 
-  const mapCenter = providerLocation 
+  const mapCenter = smoothPosition || (providerLocation 
     ? { lat: providerLocation.lat, lng: providerLocation.lng }
-    : { lat: destination.lat, lng: destination.lng };
+    : { lat: destination.lat, lng: destination.lng });
 
   return (
-    <div className={className}>
+    <div className={cn("relative", className)}>
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={mapCenter}
-        zoom={16}
+        zoom={17}
         onLoad={onLoad}
         onUnmount={onUnmount}
-        options={getMapOptions(followProvider)}
+        options={mapOptions}
       >
-        {/* Provider marker (navigation arrow with smooth rotation) */}
-        {providerLocation && (
+        {/* Provider marker with smooth rotation */}
+        {smoothPosition && (
           <Marker
-            position={{ lat: providerLocation.lat, lng: providerLocation.lng }}
+            position={smoothPosition}
             icon={{
               path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
               scale: 8,
@@ -422,7 +514,7 @@ export function OptimizedNavigationMap({
           />
         )}
 
-        {/* Destination marker (red pin) */}
+        {/* Destination marker */}
         <Marker
           position={{ lat: destination.lat, lng: destination.lng }}
           icon={{
@@ -437,6 +529,19 @@ export function OptimizedNavigationMap({
           zIndex={90}
         />
       </GoogleMap>
+
+      {/* Re-center button - shows when user has interacted */}
+      {showRecenterButton && isUserInteracting && followProvider && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleRecenter}
+          className="absolute bottom-24 right-3 rounded-full shadow-lg bg-card/95 backdrop-blur-md"
+        >
+          <Navigation2 className="w-4 h-4 mr-1.5" />
+          Centralizar
+        </Button>
+      )}
     </div>
   );
 }
