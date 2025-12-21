@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, DollarSign, AlertTriangle, AlertCircle, XCircle } from 'lucide-react';
+import { Loader2, DollarSign, AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFee, formatCurrency, formatPercentage, canFinalizeWithFee, createFeeAuditLog } from '@/lib/feeCalculator';
 import {
@@ -151,15 +151,19 @@ export function DirectPaymentConfirmationDialog({
                 <>
                   {/* REQUIRED CONFIRMATION TEXT (compliance) */}
                   <p className="text-sm text-foreground">
-                    O cliente informou que realizou o pagamento diretamente a você.
+                    Confirme que você recebeu o pagamento do cliente.
                   </p>
+                  
+                  {/* Valor total destacado */}
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Valor total da corrida</p>
+                    <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+                      R$ {formatCurrency(feeCalc.serviceValue)}
+                    </p>
+                  </div>
                   
                   {/* Fee breakdown card - MANDATORY DISPLAY */}
                   <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Valor recebido:</span>
-                      <span className="font-bold text-primary">R$ {formatCurrency(feeCalc.serviceValue)}</span>
-                    </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Taxa do app:</span>
                       <span className="font-medium">{formatPercentage(feeCalc.feePercentage)} (R$ {formatCurrency(feeCalc.feeAmount)})</span>
@@ -171,8 +175,8 @@ export function DirectPaymentConfirmationDialog({
                   </div>
                   
                   {/* REQUIRED instruction */}
-                  <p className="text-sm text-foreground font-medium">
-                    Confirme apenas se o pagamento foi recebido.
+                  <p className="text-sm text-foreground font-medium text-center">
+                    Clique em "Recebi o pagamento" apenas se o cliente já pagou.
                   </p>
                   
                   {/* Warning about fee registration */}
@@ -197,19 +201,11 @@ export function DirectPaymentConfirmationDialog({
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="mt-4 gap-2">
-          <AlertDialogCancel 
-            onClick={onNotReceived}
-            disabled={isLoading}
-            className="flex-1"
-          >
-            <XCircle className="w-4 h-4 mr-1" />
-            Ainda não recebi
-          </AlertDialogCancel>
+        <AlertDialogFooter className="mt-4 flex-col gap-2 sm:flex-col">
           <AlertDialogAction
             onClick={handleConfirm}
             disabled={isLoading || !canFinalize}
-            className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50"
+            className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-12 text-base font-semibold"
           >
             {isLoading ? (
               <>
@@ -217,9 +213,19 @@ export function DirectPaymentConfirmationDialog({
                 Finalizando...
               </>
             ) : (
-              '✅ Confirmar recebimento'
+              <>
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Recebi o pagamento
+              </>
             )}
           </AlertDialogAction>
+          <AlertDialogCancel 
+            onClick={onNotReceived}
+            disabled={isLoading}
+            className="w-full mt-0"
+          >
+            Cancelar
+          </AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -675,10 +675,12 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
             >
               {isConfirming ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isDirectPaymentToProvider ? (
+                <CheckCircle className="w-4 h-4 mr-1.5" />
               ) : (
                 <Flag className="w-4 h-4 mr-1.5" />
               )}
-              Finalizar corrida
+              {isDirectPaymentToProvider ? 'Recebi o pagamento' : 'Finalizar corrida'}
             </Button>
           )
         ) : (
@@ -739,6 +741,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Standard Finish Dialog (non-direct payment) */}
       <AlertDialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
