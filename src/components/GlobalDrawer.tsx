@@ -96,96 +96,147 @@ export function GlobalDrawer() {
           </div>
         </SheetHeader>
 
-        <nav className="p-4 space-y-2">
-          {/* Profile & Bank info only for providers */}
+        <nav className="flex-1 flex flex-col p-4">
+          {/* Provider menu */}
           {isProvider && (
-            <>
-              <button
-                onClick={() => handleNavigate('/profile')}
-                className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-              >
-                <User className="w-5 h-5" />
-                <span className="font-medium">Perfil</span>
-              </button>
-              <button
-                onClick={() => handleNavigate('/profile?tab=bank')}
-                className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-              >
-                <Landmark className="w-5 h-5" />
-                <span className="font-medium">Informações Bancárias</span>
-              </button>
-              <button
-                onClick={() => handleNavigate('/profile?tab=rides')}
-                className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-              >
-                <FileText className="w-5 h-5" />
-                <span className="font-medium">Histórico de Corridas</span>
-              </button>
-              <button
-                onClick={() => handleNavigate('/profile?tab=fees')}
-                className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-              >
-                <Receipt className="w-5 h-5" />
-                <span className="font-medium">Taxas do App</span>
-              </button>
-            </>
+            <div className="flex-1 space-y-1">
+              {/* BLOCO 1 - Conta */}
+              <div className="pb-3">
+                <p className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Conta</p>
+                <button
+                  onClick={() => handleNavigate('/profile')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <User className="w-5 h-5" />
+                  <span className="font-medium">Perfil</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/profile?tab=bank')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <Landmark className="w-5 h-5" />
+                  <span className="font-medium">Informações Bancárias</span>
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-border/50 my-2" />
+
+              {/* BLOCO 2 - Atividade */}
+              <div className="pb-3">
+                <p className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Atividade</p>
+                <button
+                  onClick={() => handleNavigate('/profile?tab=rides')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <FileText className="w-5 h-5" />
+                  <span className="font-medium">Histórico de Corridas</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/profile?tab=fees')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <Receipt className="w-5 h-5" />
+                  <span className="font-medium">Taxas do App</span>
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-border/50 my-2" />
+
+              {/* BLOCO 3 - Institucional */}
+              <div className="pb-3">
+                <p className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Institucional</p>
+                <button
+                  onClick={() => handleNavigate('/support')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                  <span className="font-medium">Suporte</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/privacy')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <Shield className="w-5 h-5" />
+                  <span>Política de Privacidade</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/terms')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <Scale className="w-5 h-5" />
+                  <span>Termos de Uso</span>
+                </button>
+              </div>
+            </div>
           )}
 
-        {/* Client menu items */}
-        {!isProvider && (
-          <>
-            <button
-              onClick={() => handleNavigate('/profile')}
-              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-            >
-              <User className="w-5 h-5" />
-              <span className="font-medium">Perfil</span>
-            </button>
-            <button
-              onClick={() => handleNavigate('/profile?tab=rides')}
-              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-            >
-              <FileText className="w-5 h-5" />
-              <span className="font-medium">Corridas</span>
-            </button>
-            <button
-              onClick={() => handleNavigate('/profile?tab=payments')}
-              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-            >
-              <CreditCard className="w-5 h-5" />
-              <span className="font-medium">Pagamentos</span>
-            </button>
-          </>
-        )}
+          {/* Client menu */}
+          {!isProvider && (
+            <div className="flex-1 space-y-1">
+              {/* BLOCO 1 - Conta */}
+              <div className="pb-3">
+                <p className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Conta</p>
+                <button
+                  onClick={() => handleNavigate('/profile')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <User className="w-5 h-5" />
+                  <span className="font-medium">Perfil</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/profile?tab=rides')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <FileText className="w-5 h-5" />
+                  <span className="font-medium">Corridas</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/profile?tab=payments')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <CreditCard className="w-5 h-5" />
+                  <span className="font-medium">Pagamentos</span>
+                </button>
+              </div>
 
-          <div className="border-t border-border my-4 pt-4">
-            <button
-              onClick={() => handleNavigate('/support')}
-              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-            >
-              <HelpCircle className="w-5 h-5" />
-              <span className="font-medium">Suporte</span>
-            </button>
-            <button
-              onClick={() => handleNavigate('/privacy')}
-              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-            >
-              <Shield className="w-5 h-5" />
-              <span>Política de Privacidade</span>
-            </button>
-            <button
-              onClick={() => handleNavigate('/terms')}
-              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
-            >
-              <Scale className="w-5 h-5" />
-              <span>Termos de Uso</span>
-            </button>
-          </div>
+              {/* Divider */}
+              <div className="border-t border-border/50 my-2" />
 
-          <div className="border-t border-border pt-4">
+              {/* BLOCO 2 - Institucional */}
+              <div className="pb-3">
+                <p className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Institucional</p>
+                <button
+                  onClick={() => handleNavigate('/support')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                  <span className="font-medium">Suporte</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/privacy')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <Shield className="w-5 h-5" />
+                  <span>Política de Privacidade</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/terms')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <Scale className="w-5 h-5" />
+                  <span>Termos de Uso</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* BLOCO AÇÕES - Fixo no rodapé */}
+          <div className="border-t border-border pt-3 mt-auto">
             <button
               onClick={handleSignOut}
-              className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors text-muted-foreground"
+              className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors text-muted-foreground"
             >
               <LogOut className="w-5 h-5" />
               <span>Sair da conta</span>
@@ -193,7 +244,7 @@ export function GlobalDrawer() {
             
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <button className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-destructive/10 transition-colors text-destructive">
+                <button className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-destructive/10 transition-colors text-destructive mt-1">
                   <Trash2 className="w-5 h-5" />
                   <span>Excluir conta</span>
                 </button>
