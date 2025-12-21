@@ -74,12 +74,18 @@ serve(async (req) => {
     const { data: commissionSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "commission_percentage")
+      .eq("key", "app_commission_percentage")
       .single();
 
-    const commissionPercentage = commissionSetting?.value 
-      ? Number(commissionSetting.value) 
-      : 15; // Default 15%
+    // Handle both formats: { value: 15 } or just 15
+    let commissionPercentage = 15;
+    if (commissionSetting?.value) {
+      if (typeof commissionSetting.value === 'object' && 'value' in (commissionSetting.value as object)) {
+        commissionPercentage = Number((commissionSetting.value as { value: number }).value);
+      } else {
+        commissionPercentage = Number(commissionSetting.value);
+      }
+    }
 
     const feeAmount = (serviceValue * commissionPercentage) / 100;
 

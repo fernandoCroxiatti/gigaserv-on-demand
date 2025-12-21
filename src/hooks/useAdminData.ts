@@ -118,6 +118,7 @@ export function useAdminDashboard() {
 
 export function useAppSettings() {
   const [commissionPercentage, setCommissionPercentage] = useState<number>(15);
+  const [maxPendingFeeLimit, setMaxPendingFeeLimit] = useState<number>(400);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -127,14 +128,19 @@ export function useAppSettings() {
         const { data, error } = await supabase
           .from('app_settings')
           .select('*')
-          .eq('key', 'app_commission_percentage')
-          .single();
+          .in('key', ['app_commission_percentage', 'max_pending_fee_limit']);
 
-        if (error && error.code !== 'PGRST116') throw error;
+        if (error) throw error;
         
-        if (data?.value) {
-          setCommissionPercentage((data.value as { value: number }).value);
-        }
+        data?.forEach((setting) => {
+          if (setting.key === 'app_commission_percentage' && setting.value) {
+            const val = setting.value as { value?: number } | number;
+            setCommissionPercentage(typeof val === 'object' && val.value !== undefined ? val.value : Number(val));
+          }
+          if (setting.key === 'max_pending_fee_limit' && setting.value !== null) {
+            setMaxPendingFeeLimit(Number(setting.value));
+          }
+        });
       } catch (err) {
         console.error('Error fetching settings:', err);
       } finally {
@@ -168,7 +174,30 @@ export function useAppSettings() {
     }
   };
 
-  return { commissionPercentage, loading, saving, updateCommission };
+  const updateMaxPendingFeeLimit = async (newLimit: number) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('app_settings')
+        .update({ 
+          value: newLimit,
+          updated_at: new Date().toISOString()
+        })
+        .eq('key', 'max_pending_fee_limit');
+
+      if (error) throw error;
+      
+      setMaxPendingFeeLimit(newLimit);
+      return { success: true };
+    } catch (err) {
+      console.error('Error updating max pending fee limit:', err);
+      return { success: false, error: err };
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return { commissionPercentage, maxPendingFeeLimit, loading, saving, updateCommission, updateMaxPendingFeeLimit };
 }
 
 export function useSettingsHistory() {
