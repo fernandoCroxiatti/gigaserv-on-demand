@@ -25,6 +25,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getStripePromise } from '@/lib/stripe';
 import { WalletPaymentForm } from './WalletPaymentForm';
+import { calculateFee, formatCurrency, formatPercentage } from '@/lib/feeCalculator';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -720,37 +721,44 @@ export function ClientAwaitingPaymentView() {
             )}
 
             {/* DIRECT PAYMENT (PIX/CASH) - Only show when direct_payment is selected */}
-            {selectedPayment === 'direct_payment' && (
-              <div className="space-y-3">
-                <div className="p-4 bg-secondary/50 rounded-lg border border-border/50">
-                  <p className="text-sm text-foreground">
-                    Você escolheu pagar <strong>R$ {(chamado.valor || 0).toFixed(2)}</strong> diretamente ao prestador via PIX ou dinheiro.
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Taxa do app: {commissionPercentage || 0}% (R$ {((chamado.valor || 0) * (commissionPercentage || 0) / 100).toFixed(2)})
-                  </p>
+            {selectedPayment === 'direct_payment' && (() => {
+              // Use safe fee calculation
+              const fee = calculateFee(chamado.valor, commissionPercentage);
+              return (
+                <div className="space-y-3">
+                  <div className="p-4 bg-secondary/50 rounded-lg border border-border/50">
+                    <p className="text-sm text-foreground">
+                      Você escolheu pagar <strong>R$ {formatCurrency(fee.serviceValue)}</strong> diretamente ao prestador via PIX ou dinheiro.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Taxa do app: {formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)})
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      O valor da taxa será cobrado posteriormente do prestador conforme os Termos de Uso.
+                    </p>
+                  </div>
+                  
+                  {/* Single CTA button */}
+                  <Button 
+                    onClick={handleDirectPaymentClick}
+                    className="w-full h-12"
+                    disabled={processingDirectPayment}
+                  >
+                    {processingDirectPayment ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Processando...
+                      </>
+                    ) : (
+                      <>
+                        <Banknote className="w-4 h-4 mr-2" />
+                        Confirmar Pagamento ao Prestador
+                      </>
+                    )}
+                  </Button>
                 </div>
-                
-                {/* Single CTA button */}
-                <Button 
-                  onClick={handleDirectPaymentClick}
-                  className="w-full h-12"
-                  disabled={processingDirectPayment}
-                >
-                  {processingDirectPayment ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Processando...
-                    </>
-                  ) : (
-                    <>
-                      <Banknote className="w-4 h-4 mr-2" />
-                      Confirmar Pagamento ao Prestador
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Retry button for card/wallet errors */}
             {!clientSecret && !loadingPayment && paymentError && selectedPayment !== 'direct_payment' && (
@@ -783,19 +791,27 @@ export function ClientAwaitingPaymentView() {
               Confirmar Pagamento Direto
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>
-                  Você escolheu pagar <strong className="text-foreground">R$ {(chamado.valor || 0).toFixed(2)}</strong> diretamente ao prestador via PIX ou dinheiro.
-                </p>
-                <div className="bg-secondary/50 border border-border rounded-lg p-3">
-                  <p className="text-sm text-foreground font-medium">
-                    Taxa do app: {commissionPercentage || 0}% (R$ {((chamado.valor || 0) * (commissionPercentage || 0) / 100).toFixed(2)})
-                  </p>
-                </div>
-                <p className="text-sm">
-                  O serviço será iniciado após confirmar. Pague diretamente ao prestador quando ele chegar.
-                </p>
-              </div>
+              {(() => {
+                const fee = calculateFee(chamado.valor, commissionPercentage);
+                return (
+                  <div className="space-y-3">
+                    <p>
+                      Você escolheu pagar <strong className="text-foreground">R$ {formatCurrency(fee.serviceValue)}</strong> diretamente ao prestador via PIX ou dinheiro.
+                    </p>
+                    <div className="bg-secondary/50 border border-border rounded-lg p-3">
+                      <p className="text-sm text-foreground font-medium">
+                        Taxa do app: {formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)})
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      O valor da taxa será cobrado posteriormente do prestador conforme os Termos de Uso.
+                    </p>
+                    <p className="text-sm">
+                      O serviço será iniciado após confirmar. Pague diretamente ao prestador quando ele chegar.
+                    </p>
+                  </div>
+                );
+              })()}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

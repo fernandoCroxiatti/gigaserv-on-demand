@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Loader2, DollarSign, AlertTriangle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { calculateFee, formatCurrency, formatPercentage } from '@/lib/feeCalculator';
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from '@/components/ui/button';
-import { DollarSign, CheckCircle, Loader2 } from 'lucide-react';
+} from '@/components/ui/alert-dialog';
 
 interface DirectPaymentConfirmationDialogProps {
   open: boolean;
@@ -21,11 +23,8 @@ interface DirectPaymentConfirmationDialogProps {
 }
 
 /**
- * Blocking dialog that requires provider to confirm they received
- * direct payment from client before finishing the service.
- * 
- * IMPORTANT: This dialog cannot be dismissed by clicking outside or pressing ESC.
- * Provider MUST explicitly choose an action.
+ * Blocking modal that requires provider to confirm they received payment
+ * before the ride can be finalized. Cannot be dismissed without action.
  */
 export function DirectPaymentConfirmationDialog({
   open,
@@ -35,73 +34,107 @@ export function DirectPaymentConfirmationDialog({
   onNotReceived,
   isLoading = false,
 }: DirectPaymentConfirmationDialogProps) {
-  // Safely format amount with fallback
-  const safeAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 0;
-  
-  return (
-    <AlertDialog 
-      open={open} 
-      onOpenChange={(newOpen) => {
-        // Only allow closing via explicit button actions, not outside clicks
-        if (!newOpen && !isLoading) {
-          // Don't allow close - user must choose an action
-          return;
+  const [feePercentage, setFeePercentage] = useState<number>(0);
+
+  // Fetch commission percentage
+  useEffect(() => {
+    const fetchCommission = async () => {
+      try {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'app_commission_percentage')
+          .single();
+        
+        if (data?.value) {
+          const parsed = Number(data.value);
+          setFeePercentage(isNaN(parsed) ? 0 : parsed);
         }
-        onOpenChange(newOpen);
-      }}
-    >
-      <AlertDialogContent 
-        className="max-w-sm"
-        onEscapeKeyDown={(e) => e.preventDefault()}
-      >
+      } catch (err) {
+        console.error('Error fetching commission:', err);
+        setFeePercentage(0);
+      }
+    };
+    
+    if (open) {
+      fetchCommission();
+    }
+  }, [open]);
+
+  // Calculate fee using safe utility
+  const { serviceValue, feeAmount, providerNetAmount, feePercentage: safeFeePercent } = calculateFee(amount, feePercentage);
+
+  // Prevent closing via outside click or ESC - force explicit action
+  const handleOpenChange = (newOpen: boolean) => {
+    // Only allow closing via explicit button click, not by clicking outside or ESC
+    if (!newOpen && !isLoading) {
+      // Do nothing - user must click a button
+      return;
+    }
+    onOpenChange(newOpen);
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <div className="flex justify-center mb-3">
-            <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center">
-              <DollarSign className="w-8 h-8 text-amber-500" />
+          <AlertDialogTitle className="flex items-center gap-2 text-lg">
+            <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-amber-500" />
             </div>
-          </div>
-          <AlertDialogTitle className="text-center text-xl">
-            Confirmar recebimento
+            Confirmar Recebimento
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
-            <div className="text-center text-base space-y-3">
-              <p>
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-foreground">
                 Confirme que você recebeu do cliente o valor de{' '}
-                <span className="font-bold text-foreground">R$ {safeAmount.toFixed(2)}</span>{' '}
+                <strong className="text-primary">R$ {formatCurrency(serviceValue)}</strong>{' '}
                 referente ao serviço.
               </p>
-              <p className="text-sm text-muted-foreground">
-                A corrida só pode ser finalizada após confirmar o recebimento.
-              </p>
+              
+              {/* Fee breakdown card */}
+              <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Taxa do app:</span>
+                  <span className="font-medium">{formatPercentage(safeFeePercent)} (R$ {formatCurrency(feeAmount)})</span>
+                </div>
+                <div className="flex justify-between text-sm border-t border-border/50 pt-2">
+                  <span className="text-muted-foreground">Valor líquido para você:</span>
+                  <span className="font-bold text-primary">R$ {formatCurrency(providerNetAmount)}</span>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  A taxa será cobrada posteriormente conforme os Termos de Uso. Só confirme se você já recebeu o valor do cliente.
+                </p>
+              </div>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col gap-2 sm:flex-col mt-4">
-          <Button
+        <AlertDialogFooter className="mt-4 gap-2">
+          <AlertDialogCancel 
+            onClick={onNotReceived}
+            disabled={isLoading}
+            className="flex-1"
+          >
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction
             onClick={onConfirmReceived}
             disabled={isLoading}
-            className="w-full bg-green-600 hover:bg-green-700 h-12 text-base"
+            className="flex-1 bg-green-600 hover:bg-green-700"
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Processando...
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Finalizando...
               </>
             ) : (
-              <>
-                <CheckCircle className="w-5 h-5 mr-2" />
-                Recebido
-              </>
+              '✅ Recebido'
             )}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={onNotReceived}
-            disabled={isLoading}
-            className="w-full h-12 text-base"
-          >
-            Cancelar
-          </Button>
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
