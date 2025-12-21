@@ -1,33 +1,66 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+// Singleton to cache auth state across hook instances
+let cachedUser: User | null = null;
+let cachedSession: Session | null = null;
+let isInitialized = false;
+let initPromise: Promise<void> | null = null;
+
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(cachedUser);
+  const [session, setSession] = useState<Session | null>(cachedSession);
+  const [loading, setLoading] = useState(!isInitialized);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    mountedRef.current = true;
+
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+      (event, newSession) => {
+        cachedSession = newSession;
+        cachedUser = newSession?.user ?? null;
+        isInitialized = true;
+        
+        if (mountedRef.current) {
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+          setLoading(false);
+        }
       }
     );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    // Only fetch session once globally
+    if (!initPromise) {
+      initPromise = supabase.auth.getSession().then(({ data: { session } }) => {
+        cachedSession = session;
+        cachedUser = session?.user ?? null;
+        isInitialized = true;
+        
+        if (mountedRef.current) {
+          setSession(session);
+          setUser(session?.user ?? null);
+          setLoading(false);
+        }
+      });
+    } else if (isInitialized) {
+      // Already initialized, just use cached values
+      setSession(cachedSession);
+      setUser(cachedUser);
       setLoading(false);
-    });
+    }
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mountedRef.current = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
+    cachedUser = null;
+    cachedSession = null;
     await supabase.auth.signOut();
   };
 

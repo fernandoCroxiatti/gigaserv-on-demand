@@ -146,7 +146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } : undefined,
   } : null;
 
-  // Load profile when auth user changes
+  // Load profile when auth user changes - OPTIMIZED: parallel queries
   useEffect(() => {
     if (!authUser) {
       setProfile(null);
@@ -155,26 +155,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const loadProfile = async () => {
+    const loadProfileData = async () => {
       try {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .maybeSingle();
-
-        if (profileError) throw profileError;
-        setProfile(profileData);
-
-        // Only load provider data if user is a registered provider
-        if (profileData?.perfil_principal === 'provider') {
-          const { data: provData } = await supabase
+        // Load profile and provider data in parallel for faster startup
+        const [profileResult, providerResult] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', authUser.id)
+            .maybeSingle(),
+          supabase
             .from('provider_data')
             .select('*')
             .eq('user_id', authUser.id)
-            .maybeSingle();
+            .maybeSingle()
+        ]);
 
-          setProviderData(provData);
+        if (profileResult.error) throw profileResult.error;
+        
+        setProfile(profileResult.data);
+        
+        // Only set provider data if user is a registered provider
+        if (profileResult.data?.perfil_principal === 'provider') {
+          setProviderData(providerResult.data);
         } else {
           setProviderData(null);
         }
@@ -186,7 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    loadProfile();
+    loadProfileData();
   }, [authUser]);
 
   // Load active chamado
