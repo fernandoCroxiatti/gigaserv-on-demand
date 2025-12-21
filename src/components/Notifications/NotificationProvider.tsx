@@ -45,19 +45,44 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
 
   // FORCE permission popup on first app open - no delay
   useEffect(() => {
+    console.log('[NotificationProvider] Checking popup conditions:', {
+      loading,
+      userId: user?.id,
+      hasTriggered: hasTriggeredRef.current,
+      shouldAskPermission,
+      hasAskedPermission,
+      permission
+    });
+    
     // Wait for loading to complete and user to be logged in
-    if (loading || !user?.id || hasTriggeredRef.current) return;
+    if (loading) {
+      console.log('[NotificationProvider] Still loading preferences...');
+      return;
+    }
+    
+    if (!user?.id) {
+      console.log('[NotificationProvider] No user logged in yet');
+      return;
+    }
+    
+    if (hasTriggeredRef.current) {
+      console.log('[NotificationProvider] Already triggered popup');
+      return;
+    }
     
     // If never asked before, show popup immediately
     if (shouldAskPermission && hasAskedPermission === false) {
-      console.log('[NotificationProvider] First time user - showing permission popup immediately');
+      console.log('[NotificationProvider] First time user - showing permission popup NOW');
       hasTriggeredRef.current = true;
-      // Small delay to ensure UI is ready
+      // Small delay to ensure UI is ready after navigation
       setTimeout(() => {
+        console.log('[NotificationProvider] Triggering permission flow...');
         triggerPermissionFlow();
-      }, 500);
+      }, 800);
+    } else {
+      console.log('[NotificationProvider] Not showing popup - shouldAsk:', shouldAskPermission, 'hasAsked:', hasAskedPermission);
     }
-  }, [loading, user?.id, shouldAskPermission, hasAskedPermission, triggerPermissionFlow]);
+  }, [loading, user?.id, shouldAskPermission, hasAskedPermission, triggerPermissionFlow, permission]);
 
   return (
     <>
