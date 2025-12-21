@@ -1,8 +1,24 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const WAKE_LOCK_ENABLED_KEY = 'giga-sos-wake-lock-enabled';
+
+// Get saved preference from localStorage
+function getWakeLockPreference(): boolean {
+  const saved = localStorage.getItem(WAKE_LOCK_ENABLED_KEY);
+  return saved === null ? true : saved === 'true'; // Default: enabled
+}
+
+// Save preference to localStorage
+export function setWakeLockPreference(enabled: boolean): void {
+  localStorage.setItem(WAKE_LOCK_ENABLED_KEY, String(enabled));
+  // Dispatch event to notify other components
+  window.dispatchEvent(new CustomEvent('wakeLockPreferenceChange', { detail: enabled }));
+}
+
 export function useWakeLock() {
   const [isSupported, setIsSupported] = useState(false);
   const [isActive, setIsActive] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(getWakeLockPreference);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   useEffect(() => {
@@ -10,7 +26,7 @@ export function useWakeLock() {
   }, []);
 
   const requestWakeLock = useCallback(async () => {
-    if (!isSupported) return false;
+    if (!isSupported || !isEnabled) return false;
 
     try {
       wakeLockRef.current = await navigator.wakeLock.request('screen');
@@ -26,7 +42,7 @@ export function useWakeLock() {
       console.warn('[WakeLock] Failed to acquire wake lock:', err);
       return false;
     }
-  }, [isSupported]);
+  }, [isSupported, isEnabled]);
 
   const releaseWakeLock = useCallback(async () => {
     if (wakeLockRef.current) {
@@ -37,16 +53,41 @@ export function useWakeLock() {
     }
   }, []);
 
+  // Toggle wake lock enabled state
+  const setEnabled = useCallback((enabled: boolean) => {
+    setIsEnabled(enabled);
+    setWakeLockPreference(enabled);
+    
+    if (!enabled) {
+      releaseWakeLock();
+    }
+  }, [releaseWakeLock]);
+
+  // Listen for preference changes from other components
+  useEffect(() => {
+    const handlePreferenceChange = (e: CustomEvent<boolean>) => {
+      setIsEnabled(e.detail);
+      if (!e.detail) {
+        releaseWakeLock();
+      }
+    };
+
+    window.addEventListener('wakeLockPreferenceChange', handlePreferenceChange as EventListener);
+    return () => {
+      window.removeEventListener('wakeLockPreferenceChange', handlePreferenceChange as EventListener);
+    };
+  }, [releaseWakeLock]);
+
   // Auto-request wake lock on mount and handle visibility changes
   useEffect(() => {
-    if (!isSupported) return;
+    if (!isSupported || !isEnabled) return;
 
     // Request wake lock immediately
     requestWakeLock();
 
     // Re-acquire wake lock when page becomes visible again
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
+      if (document.visibilityState === 'visible' && !wakeLockRef.current && isEnabled) {
         requestWakeLock();
       }
     };
@@ -57,7 +98,7 @@ export function useWakeLock() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       releaseWakeLock();
     };
-  }, [isSupported, requestWakeLock, releaseWakeLock]);
+  }, [isSupported, isEnabled, requestWakeLock, releaseWakeLock]);
 
-  return { isSupported, isActive, requestWakeLock, releaseWakeLock };
+  return { isSupported, isActive, isEnabled, setEnabled, requestWakeLock, releaseWakeLock };
 }

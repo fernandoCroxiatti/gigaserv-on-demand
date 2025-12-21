@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useWakeLock } from '@/hooks/useWakeLock';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,7 +22,9 @@ import {
   Smartphone,
   MapPin,
   MessageSquare,
-  BellOff
+  BellOff,
+  Sun,
+  Monitor
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -45,6 +48,7 @@ export default function Settings() {
     updatePreferences,
     requestPermission
   } = useNotifications();
+  const { isSupported: wakeLockSupported, isEnabled: wakeLockEnabled, setEnabled: setWakeLockEnabled } = useWakeLock();
   const [deletingAccount, setDeletingAccount] = useState(false);
   
   // Notification preferences from hook
@@ -232,6 +236,37 @@ export default function Settings() {
                 checked={notifPromocoes} 
                 onCheckedChange={handleNotifPromocoesChange}
                 disabled={!notifEnabled || notificationsBlocked}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Display Section */}
+        <div className="bg-card rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-border">
+            <h2 className="font-semibold text-lg flex items-center gap-2">
+              <Monitor className="w-5 h-5 text-primary" />
+              Tela
+            </h2>
+          </div>
+          <div className="divide-y divide-border">
+            <div className="flex items-center gap-4 p-4">
+              <Sun className="w-5 h-5 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="font-medium">Manter tela ligada</p>
+                <p className="text-sm text-muted-foreground">
+                  Impede que a tela desligue enquanto usa o app
+                </p>
+                {!wakeLockSupported && (
+                  <p className="text-xs text-amber-500 mt-1">
+                    Não suportado neste navegador
+                  </p>
+                )}
+              </div>
+              <Switch 
+                checked={wakeLockEnabled} 
+                onCheckedChange={setWakeLockEnabled}
+                disabled={!wakeLockSupported}
               />
             </div>
           </div>
