@@ -10,6 +10,8 @@ import { useProviderTracking } from '@/hooks/useProviderTracking';
 import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
 import { Button } from '../ui/button';
 import { ChatModal } from '../Chat/ChatModal';
+import { DirectPaymentBanner } from '../Provider/DirectPaymentBanner';
+import { DirectPaymentConfirmationDialog } from '../Provider/DirectPaymentConfirmationDialog';
 import { 
   Phone, 
   MessageCircle, 
@@ -70,12 +72,16 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [showArrivalDialog, setShowArrivalDialog] = useState(false);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
+  const [showDirectPaymentDialog, setShowDirectPaymentDialog] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [lastReadMessageCount, setLastReadMessageCount] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const routeCalculatedRef = useRef<string>('');
   const lastGpsUpdateRef = useRef<number>(0);
+
+  // Check if this is a direct payment to provider (from database field)
+  const isDirectPaymentToProvider = (chamado as any)?.direct_payment_to_provider === true;
 
   // Get other party contact info
   const { phone: otherPartyPhone, name: otherPartyName, loading: contactLoading } = useOtherPartyContact(
@@ -337,6 +343,49 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     }
   };
 
+  // Handle finish button click - check if direct payment confirmation is needed
+  const handleFinishClick = () => {
+    if (isDirectPaymentToProvider) {
+      // Show direct payment confirmation dialog first
+      setShowDirectPaymentDialog(true);
+    } else {
+      // Standard finish flow
+      setShowFinishDialog(true);
+    }
+  };
+
+  // When provider confirms they received direct payment
+  const handleConfirmDirectPayment = async () => {
+    setShowDirectPaymentDialog(false);
+    setIsConfirming(true);
+
+    try {
+      // Record payment receipt confirmation
+      await supabase
+        .from('chamados')
+        .update({
+          direct_payment_receipt_confirmed: true,
+          direct_payment_confirmed_at: new Date().toISOString(),
+          provider_arrived_at_destination: true,
+        })
+        .eq('id', chamado.id);
+
+      await finishService();
+      toast.success('Pagamento confirmado! Serviço finalizado.');
+    } catch (error) {
+      console.error('[Navigation] Error confirming direct payment:', error);
+      toast.error('Erro ao confirmar pagamento');
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  // When provider says they haven't received payment yet
+  const handleNotReceivedPayment = () => {
+    setShowDirectPaymentDialog(false);
+    toast.info('Colete o pagamento antes de finalizar.');
+  };
+
   const handleFinishService = async () => {
     setShowFinishDialog(false);
     setIsConfirming(true);
@@ -430,6 +479,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
   return (
     <div className={`relative h-full ${themeClass}`} onClick={toggleControls}>
+      {/* Direct payment banner - sticky at top for provider */}
+      {mode === 'provider' && isDirectPaymentToProvider && chamado.valor && (
+        <div className="absolute top-0 left-0 right-0 z-20">
+          <DirectPaymentBanner amount={chamado.valor} />
+        </div>
+      )}
+
       {/* Full screen map - takes 100% */}
       <OptimizedNavigationMap 
         providerLocation={providerLocation}
@@ -441,8 +497,10 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       />
 
       {/* Top info display - different for provider vs client */}
+      {/* Adjust top position when direct payment banner is shown */}
       <div className={cn(
-        "absolute top-20 left-3 right-3 z-10 transition-all duration-300",
+        "absolute left-3 right-3 z-10 transition-all duration-300",
+        mode === 'provider' && isDirectPaymentToProvider ? "top-32" : "top-20",
         showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
       )}>
         {mode === 'provider' ? (
@@ -539,11 +597,11 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
               onClick={(e) => {
                 e.stopPropagation();
                 // If has destination (guincho), confirm arrival to vehicle
-                // Otherwise, show finish dialog directly
+                // Otherwise, use finish click handler (handles direct payment)
                 if (hasDestination) {
                   setShowArrivalDialog(true);
                 } else {
-                  setShowFinishDialog(true);
+                  handleFinishClick();
                 }
               }}
               className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg bg-provider-primary hover:bg-provider-primary/90"
@@ -563,7 +621,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
               variant="default"
               onClick={(e) => {
                 e.stopPropagation();
-                setShowFinishDialog(true);
+                handleFinishClick();
               }}
               className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg bg-green-600 hover:bg-green-700"
               disabled={isConfirming}
@@ -656,6 +714,16 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Direct Payment Confirmation Dialog */}
+      <DirectPaymentConfirmationDialog
+        open={showDirectPaymentDialog}
+        onOpenChange={setShowDirectPaymentDialog}
+        amount={chamado.valor || 0}
+        onConfirmReceived={handleConfirmDirectPayment}
+        onNotReceived={handleNotReceivedPayment}
+        isLoading={isConfirming}
+      />
 
       <ChatModal
         isOpen={showChat}
