@@ -6,6 +6,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Simple in-memory rate limiting - strict for account deletion
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX_REQUESTS = 3; // 3 attempts per hour per user
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const userLimit = rateLimitMap.get(userId);
+  
+  if (!userLimit || now > userLimit.resetTime) {
+    rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  
+  if (userLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+  
+  userLimit.count++;
+  return true;
+}
+
 serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -52,6 +74,15 @@ serve(async (req: Request) => {
 
     const userId = user.id;
     console.log(`[delete-account] Starting deletion for user: ${userId}`);
+
+    // Check rate limit
+    if (!checkRateLimit(userId)) {
+      console.log(`[delete-account] Rate limit exceeded for user: ${userId}`);
+      return new Response(
+        JSON.stringify({ error: "Muitas tentativas. Aguarde uma hora e tente novamente." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Delete user data in order (respecting foreign key constraints)
     
