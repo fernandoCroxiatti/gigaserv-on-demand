@@ -92,6 +92,12 @@ function mapDbChamadoToChamado(db: DbChamado): Chamado {
       stripePaymentIntentId: db.stripe_payment_intent_id || undefined,
       createdAt: new Date(db.created_at),
     } : null,
+
+    // Direct payment (PIX/Dinheiro ao prestador)
+    directPaymentToProvider: db.direct_payment_to_provider === true,
+    directPaymentReceiptConfirmed: db.direct_payment_receipt_confirmed === true,
+    directPaymentConfirmedAt: db.direct_payment_confirmed_at ? new Date(db.direct_payment_confirmed_at) : null,
+
     createdAt: new Date(db.created_at),
     updatedAt: new Date(db.updated_at),
   };

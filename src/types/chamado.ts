@@ -112,6 +112,12 @@ export interface Chamado {
   valorProposto: number | null;
   payment: Payment | null;
   vehicleType: string | null; // Vehicle type selected by client
+
+  // Direct payment (PIX/Dinheiro ao prestador) flags (from backend)
+  directPaymentToProvider?: boolean;
+  directPaymentReceiptConfirmed?: boolean;
+  directPaymentConfirmedAt?: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }

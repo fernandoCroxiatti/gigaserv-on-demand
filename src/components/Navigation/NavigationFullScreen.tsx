@@ -82,9 +82,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const routeCalculatedRef = useRef<string>('');
   const lastGpsUpdateRef = useRef<number>(0);
 
-  // Check if this is a direct payment to provider (from database field)
-  const isDirectPaymentToProvider = (chamado as any)?.direct_payment_to_provider === true;
-
+  // Check if this is a direct payment to provider (from backend flag)
+  const isDirectPaymentToProvider = chamado.directPaymentToProvider === true;
   // Get other party contact info
   const { phone: otherPartyPhone, name: otherPartyName, loading: contactLoading } = useOtherPartyContact(
     mode,
