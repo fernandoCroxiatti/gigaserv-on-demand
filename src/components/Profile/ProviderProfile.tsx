@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   FileText,
-  Settings
+  Settings,
+  Receipt
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderRegistrationForm } from '../Provider/ProviderRegistrationForm';
@@ -208,6 +209,7 @@ export function ProviderProfile() {
   const tabLabels: Record<TabType, { icon: React.ReactNode; label: string }> = {
     profile: { icon: <User className="w-5 h-5" />, label: 'Perfil' },
     bank: { icon: <Landmark className="w-5 h-5" />, label: 'Informações Bancárias' },
+    fees: { icon: <Receipt className="w-5 h-5" />, label: 'Taxas do App' },
     rides: { icon: <FileText className="w-5 h-5" />, label: 'Histórico de Corridas' },
   };
 
@@ -389,6 +391,8 @@ export function ProviderProfile() {
             )}
           </>
         )}
+        
+        {activeTab === 'fees' && <ProviderFeesTab />}
         
         {activeTab === 'rides' && <ProviderRidesHistoryTab />}
       </div>
