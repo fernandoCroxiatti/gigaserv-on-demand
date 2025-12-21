@@ -154,13 +154,9 @@ export function DirectPaymentConfirmationDialog({
                     Confirme que você recebeu o pagamento do cliente.
                   </p>
                   
-                  {/* Valor total destacado */}
-                  <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
-                    <p className="text-xs text-muted-foreground mb-1">Valor total da corrida</p>
-                    <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                      R$ {formatCurrency(feeCalc.serviceValue)}
-                    </p>
-                  </div>
+                  <p className="text-sm text-foreground">
+                    Valor total da corrida: <strong className="text-primary">R$ {formatCurrency(feeCalc.serviceValue)}</strong>
+                  </p>
                   
                   {/* Fee breakdown card - MANDATORY DISPLAY */}
                   <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
