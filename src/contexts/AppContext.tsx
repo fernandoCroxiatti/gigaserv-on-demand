@@ -1166,6 +1166,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 }
 
+export function useOptionalApp() {
+  return useContext(AppContext);
+}
+
 export function useApp() {
   const context = useContext(AppContext);
   if (context === undefined) {
