@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, DollarSign, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Loader2, DollarSign, AlertTriangle, AlertCircle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFee, formatCurrency, formatPercentage, canFinalizeWithFee, createFeeAuditLog } from '@/lib/feeCalculator';
 import {
@@ -24,11 +24,19 @@ interface DirectPaymentConfirmationDialogProps {
 }
 
 /**
- * Blocking modal that requires provider to confirm they received payment
+ * MANDATORY blocking modal that requires provider to confirm they received payment
  * before the ride can be finalized.
  * 
- * REQUIRED TEXT (compliance):
- * "Confirme que você recebeu o pagamento de R$ {valorCorrida} diretamente do cliente."
+ * REQUIRED TEXT (compliance - Play Store Safe):
+ * "O cliente informou que realizou o pagamento diretamente a você.
+ *  Valor recebido: R$ {valorCorrida}
+ *  Taxa do app: {taxaAppPercentual}% (R$ {taxaAppValor})
+ *  Valor líquido para você: R$ {valorLiquidoPrestador}
+ *  Confirme apenas se o pagamento foi recebido."
+ * 
+ * BUTTONS:
+ * - ✅ Confirmar recebimento → authorize finalization
+ * - ❌ Ainda não recebi → return to ride
  * 
  * Cannot be dismissed without explicit action.
  */
@@ -41,25 +49,39 @@ export function DirectPaymentConfirmationDialog({
   onNotReceived,
   isLoading = false,
 }: DirectPaymentConfirmationDialogProps) {
-  const [feePercentage, setFeePercentage] = useState<number>(0);
+  const [feePercentage, setFeePercentage] = useState<number | null>(null);
+  const [loadingFee, setLoadingFee] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
-  // Fetch commission percentage
+  // Fetch commission percentage when dialog opens
   useEffect(() => {
     const fetchCommission = async () => {
+      setLoadingFee(true);
+      setFetchError(false);
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('app_settings')
           .select('value')
           .eq('key', 'app_commission_percentage')
           .single();
         
-        if (data?.value) {
+        if (error) throw error;
+        
+        if (data?.value !== undefined && data?.value !== null) {
           const parsed = Number(data.value);
-          setFeePercentage(isNaN(parsed) ? 0 : parsed);
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+            setFeePercentage(parsed);
+          } else {
+            setFetchError(true);
+          }
+        } else {
+          setFetchError(true);
         }
       } catch (err) {
         console.error('Error fetching commission:', err);
-        setFeePercentage(0);
+        setFetchError(true);
+      } finally {
+        setLoadingFee(false);
       }
     };
     
@@ -70,7 +92,7 @@ export function DirectPaymentConfirmationDialog({
 
   // Calculate fee using safe utility with invariant checks
   const feeCalc = calculateFee(amount, feePercentage);
-  const canFinalize = canFinalizeWithFee(feeCalc);
+  const canFinalize = canFinalizeWithFee(feeCalc) && !fetchError && !loadingFee;
 
   // Prevent closing via outside click or ESC - force explicit action
   const handleOpenChange = (newOpen: boolean) => {
@@ -103,49 +125,74 @@ export function DirectPaymentConfirmationDialog({
             <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
               <DollarSign className="w-5 h-5 text-amber-500" />
             </div>
-            Confirmar Recebimento
+            Confirmação de Recebimento
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-4 pt-2">
-              {/* REQUIRED CONFIRMATION TEXT */}
-              <p className="text-sm text-foreground font-medium">
-                Confirme que você recebeu o pagamento de{' '}
-                <strong className="text-primary">R$ {formatCurrency(feeCalc.serviceValue)}</strong>{' '}
-                diretamente do cliente.
-              </p>
-              
-              {/* Fee breakdown card */}
-              <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Valor da corrida:</span>
-                  <span className="font-medium">R$ {formatCurrency(feeCalc.serviceValue)}</span>
+              {/* Loading state */}
+              {loadingFee && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Taxa do app:</span>
-                  <span className="font-medium">{formatPercentage(feeCalc.feePercentage)} (R$ {formatCurrency(feeCalc.feeAmount)})</span>
-                </div>
-                <div className="flex justify-between text-sm border-t border-border/50 pt-2">
-                  <span className="text-muted-foreground">Valor líquido para você:</span>
-                  <span className="font-bold text-primary">R$ {formatCurrency(feeCalc.providerNetAmount)}</span>
-                </div>
-              </div>
+              )}
               
-              {/* Warning about fee */}
-              <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
-                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-700 dark:text-amber-400">
-                  A taxa de R$ {formatCurrency(feeCalc.feeAmount)} será registrada como devida ao GIGA S.O.S conforme os Termos de Uso.
-                </p>
-              </div>
-              
-              {/* Validation error if any */}
-              {!canFinalize && (
+              {/* Error state - BLOCK */}
+              {!loadingFee && (fetchError || feePercentage === null) && (
                 <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3">
                   <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-destructive">
-                    {feeCalc.validationError || 'Erro no cálculo. Contate o suporte.'}
+                    Não foi possível calcular a taxa do app. Verifique a configuração antes de continuar.
                   </p>
                 </div>
+              )}
+              
+              {/* Valid calculation state */}
+              {!loadingFee && !fetchError && feePercentage !== null && (
+                <>
+                  {/* REQUIRED CONFIRMATION TEXT (compliance) */}
+                  <p className="text-sm text-foreground">
+                    O cliente informou que realizou o pagamento diretamente a você.
+                  </p>
+                  
+                  {/* Fee breakdown card - MANDATORY DISPLAY */}
+                  <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Valor recebido:</span>
+                      <span className="font-bold text-primary">R$ {formatCurrency(feeCalc.serviceValue)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Taxa do app:</span>
+                      <span className="font-medium">{formatPercentage(feeCalc.feePercentage)} (R$ {formatCurrency(feeCalc.feeAmount)})</span>
+                    </div>
+                    <div className="flex justify-between text-sm border-t border-border/50 pt-2">
+                      <span className="text-muted-foreground">Valor líquido para você:</span>
+                      <span className="font-bold text-primary">R$ {formatCurrency(feeCalc.providerNetAmount)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* REQUIRED instruction */}
+                  <p className="text-sm text-foreground font-medium">
+                    Confirme apenas se o pagamento foi recebido.
+                  </p>
+                  
+                  {/* Warning about fee registration */}
+                  <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      A taxa de R$ {formatCurrency(feeCalc.feeAmount)} será registrada como devida ao GIGA S.O.S conforme os Termos de Uso.
+                    </p>
+                  </div>
+                  
+                  {/* Validation error if any */}
+                  {!feeCalc.isValid && (
+                    <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                      <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-destructive">
+                        {feeCalc.validationError || 'Erro no cálculo. Contate o suporte.'}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </AlertDialogDescription>
@@ -156,7 +203,8 @@ export function DirectPaymentConfirmationDialog({
             disabled={isLoading}
             className="flex-1"
           >
-            ❌ Cancelar
+            <XCircle className="w-4 h-4 mr-1" />
+            Ainda não recebi
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleConfirm}
@@ -169,7 +217,7 @@ export function DirectPaymentConfirmationDialog({
                 Finalizando...
               </>
             ) : (
-              '✅ Recebido'
+              '✅ Confirmar recebimento'
             )}
           </AlertDialogAction>
         </AlertDialogFooter>
