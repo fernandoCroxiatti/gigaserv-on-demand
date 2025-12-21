@@ -132,14 +132,24 @@ async function generateVapidJwt(audience: string): Promise<string> {
 
 // Send Web Push notification
 async function sendWebPush(subscription: { endpoint: string; p256dh: string; auth: string }, payload: object): Promise<boolean> {
+  console.log('[send-notifications] Attempting web push to:', subscription.endpoint.substring(0, 50) + '...');
+  
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    console.log('[send-notifications] VAPID keys not configured, skipping web push');
+    console.error('[send-notifications] VAPID keys not configured!');
+    console.log('[send-notifications] VAPID_PUBLIC_KEY present:', !!VAPID_PUBLIC_KEY);
+    console.log('[send-notifications] VAPID_PRIVATE_KEY present:', !!VAPID_PRIVATE_KEY);
+    return false;
+  }
+
+  if (!subscription.p256dh || !subscription.auth || subscription.p256dh === 'fcm' || subscription.auth === 'fcm') {
+    console.log('[send-notifications] Skipping FCM subscription (not web push):', subscription.endpoint.substring(0, 30));
     return false;
   }
 
   try {
     const endpoint = subscription.endpoint;
     const audience = new URL(endpoint).origin;
+    console.log('[send-notifications] Push audience:', audience);
     
     // Generate VAPID authorization header
     const jwt = await generateVapidJwt(audience);
