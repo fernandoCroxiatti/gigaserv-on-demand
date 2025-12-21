@@ -121,6 +121,22 @@ export default function Auth() {
     }
   };
 
+  const checkCpfExists = async (cpfValue: string): Promise<boolean> => {
+    const cleanCpf = cpfValue.replace(/\D/g, '');
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('cpf', cleanCpf)
+      .eq('perfil_principal', 'provider')
+      .limit(1);
+    
+    if (error) {
+      console.error('Error checking CPF:', error);
+      return false;
+    }
+    return data && data.length > 0;
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -151,6 +167,16 @@ export default function Auth() {
 
     setLoading(true);
     try {
+      // Check for duplicate CPF for providers
+      if (profileType === 'provider') {
+        const cpfExists = await checkCpfExists(cpf);
+        if (cpfExists) {
+          toast({ title: 'Erro', description: 'Já existe um cadastro de prestador com este CPF.', variant: 'destructive' });
+          setLoading(false);
+          return;
+        }
+      }
+
       const email = getEmailFromPhone(phone);
       
       const { data, error } = await supabase.auth.signUp({
@@ -172,6 +198,8 @@ export default function Auth() {
       if (error) {
         if (error.message.includes('already registered')) {
           toast({ title: 'Erro', description: 'Este telefone já está cadastrado', variant: 'destructive' });
+        } else if (error.message.includes('duplicate key') && error.message.includes('cpf')) {
+          toast({ title: 'Erro', description: 'Já existe um cadastro de prestador com este CPF.', variant: 'destructive' });
         } else {
           toast({ title: 'Erro', description: error.message, variant: 'destructive' });
         }
