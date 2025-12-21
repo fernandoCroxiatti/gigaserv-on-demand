@@ -67,6 +67,8 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
   const gpsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Track if we got a real fix
   const hasRealFixRef = useRef<boolean>(false);
+  // Device compass heading
+  const deviceHeadingRef = useRef<number | null>(null);
 
   /**
    * Save location to localStorage as fallback
@@ -154,7 +156,7 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
   }, []);
 
   const handleSuccess = useCallback(async (position: GeolocationPosition) => {
-    const { latitude, longitude, accuracy, heading } = position.coords;
+    const { latitude, longitude, accuracy, heading: gpsHeading } = position.coords;
     
     // Mark that we got a real GPS fix
     hasRealFixRef.current = true;
@@ -177,12 +179,17 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
     // Save as last known location for future fallback
     saveLastKnownLocation(newLocation);
 
+    // Use device compass heading if GPS heading is not available
+    const finalHeading = gpsHeading !== null && !isNaN(gpsHeading) 
+      ? gpsHeading 
+      : deviceHeadingRef.current;
+
     setState({
       location: newLocation,
       loading: false,
       error: null,
       accuracy,
-      heading: heading || null,
+      heading: finalHeading,
       isApproximate: false,
     });
 
@@ -311,10 +318,46 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
     }
   }, []);
 
-  // Auto-start tracking on mount
+  // Auto-start tracking on mount + device orientation for compass
   useEffect(() => {
     startTracking();
-    return () => stopTracking();
+    
+    // Device orientation for compass heading (iOS and Android)
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      // webkitCompassHeading for iOS, alpha for Android (needs adjustment)
+      const compassHeading = (event as any).webkitCompassHeading ?? 
+        (event.alpha !== null ? (360 - event.alpha) : null);
+      
+      if (compassHeading !== null && !isNaN(compassHeading)) {
+        deviceHeadingRef.current = compassHeading;
+        // Update state with new heading if we have location
+        setState(prev => {
+          if (prev.location && prev.heading !== compassHeading) {
+            return { ...prev, heading: compassHeading };
+          }
+          return prev;
+        });
+      }
+    };
+    
+    // Request permission for iOS 13+
+    if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+      (DeviceOrientationEvent as any).requestPermission()
+        .then((permission: string) => {
+          if (permission === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+          }
+        })
+        .catch(console.error);
+    } else {
+      // Android and non-iOS 13+
+      window.addEventListener('deviceorientation', handleOrientation);
+    }
+
+    return () => {
+      stopTracking();
+      window.removeEventListener('deviceorientation', handleOrientation);
+    };
   }, [startTracking, stopTracking]);
 
   return {
