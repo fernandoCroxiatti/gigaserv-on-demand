@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, DollarSign, Ban } from 'lucide-react';
+import { AlertTriangle, DollarSign, Ban, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,13 +8,15 @@ interface FinancialAlertBannerProps {
   maxLimit: number;
   isBlocked: boolean;
   reason?: string | null;
+  showNotificationHint?: boolean;
 }
 
 export function FinancialAlertBanner({ 
   pendingBalance, 
   maxLimit, 
   isBlocked, 
-  reason 
+  reason,
+  showNotificationHint = false
 }: FinancialAlertBannerProps) {
   const navigate = useNavigate();
   

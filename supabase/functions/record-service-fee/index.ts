@@ -122,16 +122,18 @@ serve(async (req) => {
       );
     }
 
-    // If MANUAL_PIX, update provider's pending balance
+    // If MANUAL_PIX, update provider's pending balance and check warning threshold
     if (feeType === "MANUAL_PIX") {
       const { data: providerData } = await supabaseAdmin
         .from("provider_data")
-        .select("pending_fee_balance, financial_status")
+        .select("pending_fee_balance, financial_status, max_debt_limit, pending_fee_warning_sent_at")
         .eq("user_id", providerId)
         .single();
 
       const currentBalance = Number(providerData?.pending_fee_balance) || 0;
       const newBalance = currentBalance + feeAmount;
+      const maxLimit = Number(providerData?.max_debt_limit) || 400;
+      const percentUsed = (newBalance / maxLimit) * 100;
 
       await supabaseAdmin
         .from("provider_data")
@@ -141,7 +143,47 @@ serve(async (req) => {
         })
         .eq("user_id", providerId);
 
-      console.log(`Updated provider ${providerId} pending balance: ${newBalance}`);
+      console.log(`Updated provider ${providerId} pending balance: ${newBalance} (${percentUsed.toFixed(1)}% of limit)`);
+
+      // Check if should send 70% warning notification
+      if (percentUsed >= 70 && percentUsed < 100) {
+        const lastWarning = providerData?.pending_fee_warning_sent_at;
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        
+        // Only send if not warned in last 24 hours
+        if (!lastWarning || lastWarning < oneDayAgo) {
+          console.log(`Sending 70% warning to provider ${providerId}`);
+          
+          try {
+            // Send push notification
+            await supabaseAdmin.functions.invoke('send-notifications', {
+              body: {
+                action: 'event',
+                userId: providerId,
+                notificationType: 'pending_fee_warning',
+                title: '⚠️ Atenção: Limite de Pendência',
+                messageBody: `Você atingiu ${percentUsed.toFixed(0)}% do seu limite. Saldo pendente: R$ ${newBalance.toFixed(2)}. Regularize para continuar atendendo.`,
+                data: {
+                  type: 'pending_fee_warning',
+                  pendingBalance: newBalance,
+                  maxLimit: maxLimit,
+                  percentUsed: percentUsed
+                }
+              }
+            });
+            
+            // Update warning sent timestamp
+            await supabaseAdmin
+              .from("provider_data")
+              .update({ pending_fee_warning_sent_at: new Date().toISOString() })
+              .eq("user_id", providerId);
+              
+            console.log(`70% warning notification sent to provider ${providerId}`);
+          } catch (notifError) {
+            console.error(`Failed to send warning notification:`, notifError);
+          }
+        }
+      }
     }
 
     // Update chamado with commission info
