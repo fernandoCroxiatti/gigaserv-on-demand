@@ -26,6 +26,7 @@ import AdminClients from "./pages/admin/Clients";
 import AdminChamados from "./pages/admin/Chamados";
 import AdminNotifications from "./pages/admin/Notifications";
 import StripeAuditReport from "./pages/StripeAuditReport";
+import ProviderFinances from "./pages/admin/ProviderFinances";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -190,6 +191,7 @@ const App = () => (
                 <Route path="providers" element={<AdminProviders />} />
                 <Route path="clients" element={<AdminClients />} />
                 <Route path="chamados" element={<AdminChamados />} />
+                <Route path="finances" element={<ProviderFinances />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

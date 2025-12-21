@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   FileCode,
-  Bell
+  Bell,
+  Receipt
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,6 +23,7 @@ import { useState } from 'react';
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/settings', icon: Settings, label: 'Configurações' },
+  { to: '/admin/finances', icon: Receipt, label: 'Financeiro' },
   { to: '/admin/notifications', icon: Bell, label: 'Notificações' },
   { to: '/admin/reports', icon: FileText, label: 'Relatórios' },
   { to: '/admin/providers', icon: UserCheck, label: 'Prestadores' },
