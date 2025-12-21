@@ -69,6 +69,24 @@ export function useAdminDashboard() {
         const monthTotals = calculateTotals(monthChamados);
         const allTotals = calculateTotals(finishedChamados);
 
+        // Only count truly active rides (in_service) - not abandoned searches
+        // A search is considered abandoned if it's older than 30 minutes
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        const activeRides = chamados?.filter(c => {
+          // in_service is always considered active
+          if (c.status === 'in_service') return true;
+          // negotiating and awaiting_payment are active if recent (within 30 min)
+          if (['negotiating', 'awaiting_payment'].includes(c.status)) {
+            return c.updated_at >= thirtyMinutesAgo;
+          }
+          // searching is only active if very recent (within 10 minutes)
+          if (c.status === 'searching') {
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+            return c.updated_at >= tenMinutesAgo;
+          }
+          return false;
+        }).length || 0;
+
         setStats({
           todayRevenue: todayTotals.revenue,
           weekRevenue: weekTotals.revenue,
@@ -77,7 +95,7 @@ export function useAdminDashboard() {
           totalPayout: allTotals.payout,
           todayRides: todayChamados.length,
           monthRides: monthChamados.length,
-          activeRides: chamados?.filter(c => ['searching', 'negotiating', 'awaiting_payment', 'in_service'].includes(c.status)).length || 0,
+          activeRides,
           completedRides: finishedChamados.length,
           canceledRides: chamados?.filter(c => c.status === 'canceled').length || 0,
         });
