@@ -891,6 +891,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .eq('user_id', authUser?.id);
       }
 
+      // Record service fee automatically
+      try {
+        const { error: feeError } = await supabase.functions.invoke('record-service-fee', {
+          body: { chamado_id: chamado.id }
+        });
+        
+        if (feeError) {
+          console.error('Error recording service fee:', feeError);
+          // Don't block the finish flow, just log the error
+        } else {
+          console.log('Service fee recorded successfully for chamado:', chamado.id);
+        }
+      } catch (feeErr) {
+        console.error('Error invoking record-service-fee:', feeErr);
+      }
+
       toast.success('Serviço finalizado com sucesso!');
 
       setTimeout(() => {
