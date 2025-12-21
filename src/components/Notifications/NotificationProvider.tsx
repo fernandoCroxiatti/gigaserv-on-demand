@@ -18,18 +18,29 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
     triggerPermissionFlow,
     handlePermissionConfirm,
     handlePermissionDecline,
-    registerServiceWorker
+    registerServiceWorker,
+    resubscribeToPush
   } = useNotifications();
   
   const hasTriggeredRef = useRef(false);
   const isFirstLoginRef = useRef(true);
+  const hasResubscribedRef = useRef(false);
 
-  // Register service worker on mount if permission granted
+  // Register service worker and resubscribe on mount if permission granted
   useEffect(() => {
-    if (permission === 'granted') {
-      registerServiceWorker();
+    if (permission === 'granted' && user?.id && !hasResubscribedRef.current) {
+      hasResubscribedRef.current = true;
+      console.log('[NotificationProvider] Permission granted, registering service worker and resubscribing...');
+      
+      // Register SW first, then resubscribe
+      registerServiceWorker().then(() => {
+        // Small delay to ensure SW is ready
+        setTimeout(() => {
+          resubscribeToPush();
+        }, 1000);
+      });
     }
-  }, [permission, registerServiceWorker]);
+  }, [permission, user?.id, registerServiceWorker, resubscribeToPush]);
 
   // Listen for login events (client) or online status (provider)
   useEffect(() => {

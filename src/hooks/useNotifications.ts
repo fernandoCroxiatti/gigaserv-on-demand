@@ -180,20 +180,25 @@ export function useNotifications() {
   // Subscribe to Web Push
   const subscribeToPush = useCallback(async (registration: ServiceWorkerRegistration) => {
     if (!VAPID_PUBLIC_KEY) {
-      console.log('[useNotifications] VAPID public key not configured');
+      console.error('[useNotifications] VAPID public key not configured - check VITE_VAPID_PUBLIC_KEY');
       return null;
     }
 
     try {
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+      
       let subscription = await registration.pushManager.getSubscription();
+      console.log('[useNotifications] Existing subscription:', subscription ? 'found' : 'none');
       
       if (!subscription) {
+        console.log('[useNotifications] Creating new subscription with VAPID key...');
         const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: applicationServerKey.buffer as ArrayBuffer
         });
-        console.log('[useNotifications] Web Push subscription created:', subscription);
+        console.log('[useNotifications] Web Push subscription created successfully');
       }
 
       return subscription;
@@ -205,12 +210,26 @@ export function useNotifications() {
 
   // Save Web Push subscription to database
   const savePushSubscription = useCallback(async (subscription: PushSubscription) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.error('[useNotifications] Cannot save subscription - no user ID');
+      return;
+    }
 
     try {
       const subscriptionJson = subscription.toJSON();
       const p256dh = subscriptionJson.keys?.p256dh || '';
       const auth = subscriptionJson.keys?.auth || '';
+
+      if (!p256dh || !auth) {
+        console.error('[useNotifications] Invalid subscription keys - missing p256dh or auth');
+        return;
+      }
+
+      console.log('[useNotifications] Saving subscription to database...', {
+        endpoint: subscription.endpoint.substring(0, 50) + '...',
+        hasP256dh: !!p256dh,
+        hasAuth: !!auth
+      });
 
       const { error } = await supabase
         .from('notification_subscriptions')
@@ -228,7 +247,7 @@ export function useNotifications() {
       if (error) {
         console.error('[useNotifications] Error saving push subscription:', error);
       } else {
-        console.log('[useNotifications] Web Push subscription saved to database');
+        console.log('[useNotifications] ✅ Web Push subscription saved successfully!');
       }
     } catch (error) {
       console.error('[useNotifications] Error saving push subscription:', error);
@@ -365,6 +384,8 @@ export function useNotifications() {
 
   // Re-subscribe to push (useful after re-opening app)
   const resubscribeToPush = useCallback(async () => {
+    console.log('[useNotifications] Resubscribe called, isNative:', isNative, 'permission:', permission, 'userId:', user?.id);
+    
     if (isNative) {
       // For native, just request permission again which will re-register
       if (isPushAvailable()) {
@@ -373,12 +394,30 @@ export function useNotifications() {
       return;
     }
 
-    if (permission !== 'granted' || !user?.id) return;
+    if (permission !== 'granted') {
+      console.log('[useNotifications] Cannot resubscribe - permission not granted');
+      return;
+    }
     
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await subscribeToPush(registration);
-    if (subscription) {
-      await savePushSubscription(subscription);
+    if (!user?.id) {
+      console.log('[useNotifications] Cannot resubscribe - no user');
+      return;
+    }
+    
+    try {
+      console.log('[useNotifications] Waiting for service worker to be ready...');
+      const registration = await navigator.serviceWorker.ready;
+      console.log('[useNotifications] Service worker ready, subscribing to push...');
+      
+      const subscription = await subscribeToPush(registration);
+      if (subscription) {
+        await savePushSubscription(subscription);
+        console.log('[useNotifications] ✅ Resubscribe completed successfully');
+      } else {
+        console.error('[useNotifications] Failed to get subscription');
+      }
+    } catch (error) {
+      console.error('[useNotifications] Error in resubscribeToPush:', error);
     }
   }, [isNative, permission, user?.id, subscribeToPush, savePushSubscription]);
 
