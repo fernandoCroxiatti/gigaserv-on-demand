@@ -118,49 +118,127 @@ export default function TermsOfUse() {
           </ul>
 
           <h2 className="text-lg font-semibold mt-6">11. Controle de Cadastro, Antifraude e Bloqueio de Prestadores</h2>
+          <p>
+            A GIGA S.O.S implementa medidas rigorosas de controle de cadastro e prevenção a fraudes, 
+            visando garantir a sustentabilidade da plataforma, a proteção de todos os usuários e a 
+            integridade das operações financeiras. Ao utilizar a plataforma, o prestador declara 
+            ciência e concordância com todas as regras abaixo descritas.
+          </p>
           
           <h3 className="text-base font-medium mt-4">11.1 CPF Único e Imutável</h3>
           <p>
-            O CPF do prestador é informação única e imutável no sistema. Cada CPF pode estar 
-            vinculado a apenas uma conta de prestador. Após o cadastro, o CPF não pode ser 
-            alterado. A tentativa de cadastro com CPF já utilizado será automaticamente bloqueada.
+            O Cadastro de Pessoa Física (CPF) constitui dado único, obrigatório e imutável para o 
+            cadastro de prestadores de serviço na plataforma GIGA S.O.S. Fica estabelecido que:
           </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Cada CPF poderá estar vinculado a apenas uma conta de prestador no sistema;</li>
+            <li>O CPF informado no momento do cadastro não poderá ser alterado posteriormente, 
+            sob nenhuma circunstância;</li>
+            <li>A tentativa de cadastro utilizando CPF já vinculado a outra conta será 
+            automaticamente bloqueada pelo sistema;</li>
+            <li>O CPF será validado quanto à sua regularidade junto aos órgãos competentes;</li>
+            <li>O prestador é integralmente responsável pela veracidade do CPF informado.</li>
+          </ul>
 
           <h3 className="text-base font-medium mt-4">11.2 Limite de Pendência Financeira</h3>
           <p>
-            Fica estabelecido o limite máximo de pendência financeira de R$ 400,00 (quatrocentos reais). 
-            Ao atingir este limite, o prestador terá seu acesso bloqueado automaticamente, ficando 
-            impossibilitado de receber novos chamados até a regularização total dos débitos.
+            Fica estabelecido o limite máximo de pendência financeira no valor de R$ 400,00 
+            (quatrocentos reais), correspondente às taxas de intermediação devidas à plataforma. 
+            Quanto ao limite de pendência:
           </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Ao atingir o limite estabelecido, o prestador terá seu acesso automaticamente 
+            bloqueado para recebimento de novos chamados;</li>
+            <li>O bloqueio permanecerá vigente até a regularização total dos débitos pendentes;</li>
+            <li>A GIGA S.O.S reserva-se o direito de alterar o valor do limite mediante 
+            comunicação prévia aos prestadores;</li>
+            <li>Alertas preventivos serão enviados ao prestador quando a pendência atingir 
+            70% (setenta por cento) do limite estabelecido;</li>
+            <li>O não pagamento das pendências poderá resultar em bloqueio permanente e 
+            inclusão em cadastros de proteção ao crédito, conforme legislação vigente.</li>
+          </ul>
 
-          <h3 className="text-base font-medium mt-4">11.3 Bloqueio por Dispositivo</h3>
+          <h3 className="text-base font-medium mt-4">11.3 Bloqueio por Dispositivo (Device ID)</h3>
           <p>
-            Cada dispositivo móvel pode estar associado a apenas um prestador ativo. A GIGA S.O.S 
-            reserva-se o direito de bloquear novos cadastros realizados em dispositivos associados 
-            a contas bloqueadas por inadimplência ou fraude.
+            A plataforma utiliza tecnologia de identificação de dispositivos para prevenir 
+            fraudes e recadastros indevidos. Fica estabelecido que:
           </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Cada dispositivo móvel (smartphone ou tablet) poderá estar associado a apenas 
+            um prestador ativo na plataforma;</li>
+            <li>O identificador único do dispositivo (Device ID) será registrado no momento 
+            do cadastro e vinculado permanentemente à conta do prestador;</li>
+            <li>A tentativa de novo cadastro em dispositivo associado a conta bloqueada por 
+            inadimplência ou fraude será automaticamente recusada;</li>
+            <li>A troca de dispositivo deverá ser comunicada e autorizada pela equipe de 
+            suporte da GIGA S.O.S.</li>
+          </ul>
 
           <h3 className="text-base font-medium mt-4">11.4 Bloqueio por Dados Sensíveis</h3>
           <p>
-            A plataforma poderá recusar novos cadastros quando forem identificadas coincidências 
-            de dados com contas bloqueadas, incluindo: telefone, e-mail, chave PIX e placa de veículo.
+            Para garantir a eficácia do sistema antifraude, a plataforma monitora e compara 
+            dados cadastrais sensíveis. A GIGA S.O.S poderá recusar novos cadastros ou 
+            bloquear contas existentes quando forem identificadas coincidências com contas 
+            bloqueadas nos seguintes dados:
           </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Número de telefone celular;</li>
+            <li>Endereço de e-mail;</li>
+            <li>Chave PIX (CPF, telefone, e-mail ou chave aleatória);</li>
+            <li>Placa do veículo utilizado para prestação de serviços;</li>
+            <li>Quaisquer outros dados que indiquem tentativa de burlar bloqueios anteriores.</li>
+          </ul>
 
-          <h3 className="text-base font-medium mt-4">11.5 Histórico Imutável</h3>
+          <h3 className="text-base font-medium mt-4">11.5 Histórico Imutável e Auditoria</h3>
           <p>
-            Os registros de corridas, dívidas, pagamentos e bloqueios são mantidos permanentemente 
-            no sistema para fins de auditoria e segurança, não podendo ser excluídos ou alterados.
+            Para fins de segurança, auditoria e cumprimento de obrigações legais, a GIGA S.O.S 
+            mantém registros históricos permanentes e imutáveis, incluindo:
+          </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Todas as corridas e serviços realizados ou cancelados;</li>
+            <li>Histórico completo de débitos, pagamentos e pendências;</li>
+            <li>Registros de bloqueios, desbloqueios e suas justificativas;</li>
+            <li>Tentativas de cadastro recusadas e seus motivos;</li>
+            <li>Alterações cadastrais realizadas;</li>
+            <li>Comunicações entre prestador e plataforma.</li>
+          </ul>
+          <p>
+            Estes registros não poderão ser excluídos ou alterados, mesmo após o encerramento 
+            da conta, e poderão ser utilizados como prova em processos administrativos ou judiciais.
           </p>
 
           <h3 className="text-base font-medium mt-4">11.6 Bloqueio Permanente</h3>
           <p>
-            A GIGA S.O.S poderá aplicar bloqueio permanente a prestadores que:
+            A GIGA S.O.S reserva-se o direito de aplicar bloqueio permanente, sem possibilidade 
+            de reversão, a prestadores que incorrerem nas seguintes situações:
           </p>
           <ul className="list-disc pl-6 space-y-1">
-            <li>Acumulem débitos não quitados</li>
-            <li>Pratiquem fraude ou tentativa de fraude</li>
-            <li>Utilizem múltiplos cadastros para burlar bloqueios</li>
-            <li>Violem repetidamente os termos de uso</li>
+            <li>Acúmulo de débitos não quitados por período superior a 90 (noventa) dias;</li>
+            <li>Prática comprovada de fraude ou tentativa de fraude contra a plataforma, 
+            clientes ou outros prestadores;</li>
+            <li>Utilização de múltiplos cadastros para burlar bloqueios anteriores;</li>
+            <li>Violação grave ou reiterada dos Termos de Uso;</li>
+            <li>Fornecimento de informações cadastrais falsas ou adulteradas;</li>
+            <li>Condenação criminal por crimes relacionados à atividade profissional.</li>
+          </ul>
+          <p>
+            O bloqueio permanente implica na impossibilidade de novo cadastro na plataforma 
+            utilizando quaisquer dados associados ao prestador bloqueado.
+          </p>
+
+          <h3 className="text-base font-medium mt-4">11.7 Aceite Automático</h3>
+          <p>
+            Ao realizar o cadastro e utilizar a plataforma GIGA S.O.S, o prestador declara 
+            expressamente que:
+          </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Leu, compreendeu e aceita integralmente todas as regras de controle de cadastro, 
+            antifraude e bloqueio aqui descritas;</li>
+            <li>Autoriza a coleta e o tratamento dos dados necessários para identificação 
+            de dispositivo e prevenção a fraudes;</li>
+            <li>Reconhece a legitimidade das medidas de bloqueio previstas nestes termos;</li>
+            <li>Compromete-se a manter seus dados cadastrais atualizados e verdadeiros;</li>
+            <li>Renuncia a qualquer alegação de desconhecimento das regras aqui estabelecidas.</li>
           </ul>
 
           <h2 className="text-lg font-semibold mt-6">12. Propriedade Intelectual</h2>
