@@ -11,7 +11,8 @@ import {
   Percent, 
   History,
   Save,
-  AlertCircle
+  AlertCircle,
+  DollarSign
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,11 +27,12 @@ import {
 
 export default function AdminSettings() {
   const { user } = useAuth();
-  const { commissionPercentage, loading, saving, updateCommission } = useAppSettings();
+  const { commissionPercentage, maxPendingFeeLimit, loading, saving, updateCommission, updateMaxPendingFeeLimit } = useAppSettings();
   const { history, loading: historyLoading } = useSettingsHistory();
   const [newPercentage, setNewPercentage] = useState<string>('');
+  const [newLimit, setNewLimit] = useState<string>('');
 
-  const handleSave = async () => {
+  const handleSaveCommission = async () => {
     const value = parseFloat(newPercentage);
     if (isNaN(value) || value < 0 || value > 100) {
       toast.error('Porcentagem deve estar entre 0 e 100');
@@ -43,6 +45,22 @@ export default function AdminSettings() {
       setNewPercentage('');
     } else {
       toast.error('Erro ao atualizar comissão');
+    }
+  };
+
+  const handleSaveLimit = async () => {
+    const value = parseFloat(newLimit);
+    if (isNaN(value) || value < 0) {
+      toast.error('Limite deve ser um valor positivo');
+      return;
+    }
+
+    const result = await updateMaxPendingFeeLimit(value);
+    if (result.success) {
+      toast.success('Limite de pendência atualizado com sucesso!');
+      setNewLimit('');
+    } else {
+      toast.error('Erro ao atualizar limite');
     }
   };
 
@@ -99,7 +117,7 @@ export default function AdminSettings() {
                 onChange={(e) => setNewPercentage(e.target.value)}
               />
             </div>
-            <Button onClick={handleSave} disabled={saving || !newPercentage}>
+            <Button onClick={handleSaveCommission} disabled={saving || !newPercentage}>
               {saving ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
@@ -113,6 +131,62 @@ export default function AdminSettings() {
             <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <p>
               A alteração será aplicada apenas para novas corridas. Corridas já iniciadas manterão a porcentagem original.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Max Pending Fee Limit */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="w-5 h-5" />
+            Limite Máximo de Pendência
+          </CardTitle>
+          <CardDescription>
+            Defina o limite máximo de taxa pendente (MANUAL_PIX) antes de bloquear o prestador.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
+            <div className="flex-1">
+              <p className="text-sm text-muted-foreground">Limite atual</p>
+              <p className="text-3xl font-bold text-destructive">R$ {maxPendingFeeLimit.toFixed(0)}</p>
+            </div>
+            <div className="h-12 w-px bg-border" />
+            <div className="flex-1">
+              <p className="text-sm text-muted-foreground">Comportamento</p>
+              <p className="text-sm">Bloqueia prestador quando exceder</p>
+            </div>
+          </div>
+
+          <div className="flex items-end gap-4">
+            <div className="flex-1 space-y-2">
+              <Label htmlFor="newLimit">Novo limite (R$)</Label>
+              <Input
+                id="newLimit"
+                type="number"
+                min="0"
+                step="50"
+                placeholder={`${maxPendingFeeLimit}`}
+                value={newLimit}
+                onChange={(e) => setNewLimit(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleSaveLimit} disabled={saving || !newLimit}>
+              {saving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              Salvar
+            </Button>
+          </div>
+
+          <div className="flex items-start gap-2 p-3 bg-amber-500/10 text-amber-600 rounded-lg text-sm">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <p>
+              Prestadores com saldo devedor acima deste limite não poderão ficar online ou aceitar novos chamados.
             </p>
           </div>
         </CardContent>
