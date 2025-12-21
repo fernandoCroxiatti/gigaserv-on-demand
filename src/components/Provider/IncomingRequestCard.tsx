@@ -6,15 +6,17 @@ import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
 import { startRideAlertLoop, stopRideAlertLoop, cleanupRideAlert } from '@/lib/rideAlertSound';
 import { VEHICLE_TYPES, VehicleType } from '@/types/vehicleTypes';
-import { useProviderFinancialBlock } from '@/hooks/useProviderFinancialBlock';
+import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
+  const { user } = useAuth();
   const [timeLeft, setTimeLeft] = useState(30);
   const [isAccepting, setIsAccepting] = useState(false);
-  const { checkFinancialBlock } = useProviderFinancialBlock();
+  const { checkProviderCanAccept } = useAntiFraud();
   const navigate = useNavigate();
 
   // Calculate distance from provider to client
@@ -96,20 +98,45 @@ export function IncomingRequestCard() {
     };
   }, []);
 
-  // Handle accept with financial block check
+  // Handle accept with anti-fraud check
   const handleAccept = async () => {
-    if (isAccepting) return;
+    if (isAccepting || !user?.id) return;
     setIsAccepting(true);
     
     try {
-      // Check financial block before accepting
-      const blockStatus = await checkFinancialBlock();
-      if (blockStatus.isBlocked) {
+      // Check if provider can accept using the anti-fraud system
+      const { canAccept, blockReason } = await checkProviderCanAccept(user.id);
+      
+      if (!canAccept) {
         stopRideAlertLoop();
-        toast.error(blockStatus.reason || 'Você possui pendências financeiras', {
+        
+        // Determine appropriate message based on block reason
+        let message = 'Você não pode aceitar chamados no momento.';
+        let actionLabel = 'Ver detalhes';
+        let actionPath = '/profile';
+        
+        if (blockReason === 'financial_blocked' || blockReason === 'over_debt_limit') {
+          message = 'Você possui pendências financeiras que precisam ser regularizadas.';
+          actionLabel = 'Ver taxas';
+          actionPath = '/profile?tab=fees';
+        } else if (blockReason === 'fraud_flagged') {
+          message = 'Sua conta foi bloqueada. Entre em contato com o suporte.';
+          actionLabel = 'Suporte';
+          actionPath = '/support';
+        } else if (blockReason === 'permanently_blocked') {
+          message = 'Sua conta foi bloqueada permanentemente.';
+          actionLabel = 'Suporte';
+          actionPath = '/support';
+        } else if (blockReason === 'admin_blocked') {
+          message = 'Sua conta foi bloqueada pelo administrador.';
+          actionLabel = 'Suporte';
+          actionPath = '/support';
+        }
+        
+        toast.error(message, {
           action: {
-            label: 'Ver taxas',
-            onClick: () => navigate('/profile?tab=fees'),
+            label: actionLabel,
+            onClick: () => navigate(actionPath),
           },
           duration: 5000,
         });
