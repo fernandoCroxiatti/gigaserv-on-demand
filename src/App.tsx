@@ -101,9 +101,11 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 // Wrapper to access app context for notification provider
+// This component MUST be rendered inside AppProvider
 function AppWithNotifications({ children }: { children: React.ReactNode }) {
-  const { user } = useApp();
-  const activeProfile = user?.activeProfile || 'client';
+  // Safe access to context - handles hot-reload edge cases
+  const context = useApp();
+  const activeProfile = context?.user?.activeProfile || 'client';
   
   return (
     <NotificationProvider activeProfile={activeProfile}>
