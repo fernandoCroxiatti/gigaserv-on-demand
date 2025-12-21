@@ -314,6 +314,30 @@ export default function Auth() {
                 <p className="text-center text-[10px] text-muted-foreground/70 pt-2 leading-relaxed">
                   Ao continuar, você concorda com nossos Termos de Uso e Política de Privacidade
                 </p>
+
+                {/* Legal links - Play Store compliance */}
+                <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground/60">
+                  <button 
+                    onClick={() => navigate('/terms')}
+                    className="hover:text-muted-foreground transition-colors hover:underline"
+                  >
+                    Termos de Uso
+                  </button>
+                  <span>•</span>
+                  <button 
+                    onClick={() => navigate('/privacy')}
+                    className="hover:text-muted-foreground transition-colors hover:underline"
+                  >
+                    Política de Privacidade
+                  </button>
+                  <span>•</span>
+                  <button 
+                    onClick={() => navigate('/support')}
+                    className="hover:text-muted-foreground transition-colors hover:underline"
+                  >
+                    Suporte
+                  </button>
+                </div>
               </div>
             )}
 
