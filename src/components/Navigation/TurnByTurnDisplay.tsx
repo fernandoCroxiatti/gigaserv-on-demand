@@ -47,9 +47,9 @@ export function TurnByTurnDisplay({
   distance,
   className,
 }: TurnByTurnDisplayProps) {
-  if (!currentInstruction) return null;
-
-  const CurrentIcon = iconComponents[currentInstruction.icon] || ArrowUp;
+  // Always show ETA and distance even if no instructions yet
+  const hasInstruction = !!currentInstruction;
+  const CurrentIcon = hasInstruction ? iconComponents[currentInstruction.icon] || ArrowUp : Navigation;
   const NextIcon = nextInstruction ? iconComponents[nextInstruction.icon] || ArrowUp : null;
 
   return (
@@ -60,12 +60,25 @@ export function TurnByTurnDisplay({
           <CurrentIcon className="w-10 h-10" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold">{currentInstruction.distance || 'Agora'}</span>
-          </div>
-          <p className="text-sm font-medium truncate opacity-90">
-            {currentInstruction.streetName || currentInstruction.text}
-          </p>
+          {hasInstruction ? (
+            <>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold">{currentInstruction.distance || 'Agora'}</span>
+              </div>
+              <p className="text-sm font-medium truncate opacity-90">
+                {currentInstruction.streetName || currentInstruction.text}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold">Navegando</span>
+              </div>
+              <p className="text-sm font-medium truncate opacity-90">
+                Siga em frente
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -78,16 +91,16 @@ export function TurnByTurnDisplay({
         </div>
       )}
 
-      {/* ETA bar */}
+      {/* ETA bar - Always visible with fallback values */}
       <div className="px-3 py-2 flex items-center justify-between bg-secondary/50 border-t border-border/30">
         <div className="flex items-center gap-4">
           <div className="text-center">
-            <span className="text-lg font-bold text-primary">{eta || '--'}</span>
-            <p className="text-[10px] text-muted-foreground">Chegada</p>
+            <span className="text-lg font-bold text-primary">{eta || 'Calculando...'}</span>
+            <p className="text-[10px] text-muted-foreground">Tempo restante</p>
           </div>
           <div className="w-px h-6 bg-border" />
           <div className="text-center">
-            <span className="text-lg font-bold">{distance || '--'}</span>
+            <span className="text-lg font-bold">{distance || 'Calculando...'}</span>
             <p className="text-[10px] text-muted-foreground">Distância</p>
           </div>
         </div>

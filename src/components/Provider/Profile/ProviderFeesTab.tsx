@@ -428,7 +428,12 @@ export function ProviderFeesTab() {
 
             {/* Upload Proof Section */}
             <div className="space-y-2">
-              <p className="text-sm font-medium">Comprovante de pagamento (opcional)</p>
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <p className="text-sm text-primary font-medium">
+                  📎 Anexe o comprovante para aprovação de pagamento mais rápido
+                </p>
+              </div>
+              <p className="text-sm font-medium">Comprovante de pagamento</p>
               
               <input
                 type="file"

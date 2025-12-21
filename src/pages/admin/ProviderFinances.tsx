@@ -341,6 +341,7 @@ export default function ProviderFinances() {
                   <TableHead className="text-right">Taxa Stripe</TableHead>
                   <TableHead className="text-right">Taxa Manual</TableHead>
                   <TableHead>Último Pagamento</TableHead>
+                  <TableHead>Comprovante</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -377,6 +378,20 @@ export default function ProviderFinances() {
                         ? format(new Date(provider.lastPaymentAt), "dd/MM/yyyy", { locale: ptBR })
                         : '-'
                       }
+                    </TableCell>
+                    <TableCell>
+                      {provider.proofUrl ? (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => window.open(provider.proofUrl, '_blank')}
+                        >
+                          <Receipt className="w-4 h-4 mr-1" />
+                          Ver comprovante
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Sem comprovante</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {provider.financialStatus === 'AGUARDANDO_APROVACAO' && (
