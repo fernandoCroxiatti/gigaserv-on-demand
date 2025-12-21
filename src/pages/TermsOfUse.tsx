@@ -3,6 +3,10 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+// Version constant - update this when terms change
+export const TERMS_VERSION = '2024-12-21';
+export const TERMS_LAST_UPDATE = '21 de dezembro de 2024';
+
 export default function TermsOfUse() {
   const navigate = useNavigate();
 
@@ -22,7 +26,10 @@ export default function TermsOfUse() {
       <div className="max-w-3xl mx-auto p-6 space-y-6">
         <div className="prose prose-sm dark:prose-invert">
           <p className="text-muted-foreground">
-            Última atualização: {new Date().toLocaleDateString('pt-BR')}
+            Última atualização: {TERMS_LAST_UPDATE}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Versão: {TERMS_VERSION}
           </p>
 
           <h2 className="text-lg font-semibold mt-6">1. Aceitação dos Termos</h2>
