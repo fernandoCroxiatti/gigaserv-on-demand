@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AppProvider, useApp } from "./contexts/AppContext";
+import { AppProvider, useOptionalApp } from "./contexts/AppContext";
 import { GoogleMapsProvider } from "./components/Map/GoogleMapsProvider";
 import { useAuth } from "./hooks/useAuth";
 import { useAdmin } from "./hooks/useAdmin";
@@ -101,12 +101,11 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 // Wrapper to access app context for notification provider
-// This component MUST be rendered inside AppProvider
+// NOTE: During hot-reload or transitional states, the context may be temporarily unavailable.
 function AppWithNotifications({ children }: { children: React.ReactNode }) {
-  // Safe access to context - handles hot-reload edge cases
-  const context = useApp();
+  const context = useOptionalApp();
   const activeProfile = context?.user?.activeProfile || 'client';
-  
+
   return (
     <NotificationProvider activeProfile={activeProfile}>
       {children}
