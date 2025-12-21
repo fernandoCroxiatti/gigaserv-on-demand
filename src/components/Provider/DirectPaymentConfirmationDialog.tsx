@@ -129,9 +129,15 @@ export function DirectPaymentConfirmationDialog({
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-4 pt-2">
+              {/* Valor sempre visível */}
+              <div className="bg-secondary/40 border border-border rounded-lg p-3">
+                <p className="text-xs text-muted-foreground">Valor total da corrida</p>
+                <p className="text-lg font-bold text-primary">R$ {formatCurrency(amount)}</p>
+              </div>
+
               {/* Loading state */}
               {loadingFee && (
-                <div className="flex items-center justify-center py-4">
+                <div className="flex items-center justify-center py-2">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
               )}
@@ -152,10 +158,6 @@ export function DirectPaymentConfirmationDialog({
                   {/* REQUIRED CONFIRMATION TEXT (compliance) */}
                   <p className="text-sm text-foreground">
                     Confirme que você recebeu o pagamento do cliente.
-                  </p>
-                  
-                  <p className="text-sm text-foreground">
-                    Valor total da corrida: <strong className="text-primary">R$ {formatCurrency(feeCalc.serviceValue)}</strong>
                   </p>
                   
                   {/* Fee breakdown card - MANDATORY DISPLAY */}
