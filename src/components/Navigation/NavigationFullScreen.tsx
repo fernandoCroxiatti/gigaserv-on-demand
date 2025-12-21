@@ -36,7 +36,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type NavigationPhase = 'going_to_vehicle' | 'going_to_destination';
+/**
+ * Navigation phases following Uber/99 style:
+ * - to_client: Provider is going to the client's location (vehicle)
+ * - at_client: Provider arrived at client location, ready to start service
+ * - to_destination: Provider is going to the final destination (guincho only)
+ * - finished: Service completed
+ */
+type NavigationPhase = 'to_client' | 'at_client' | 'to_destination' | 'finished';
 type ViewMode = 'provider' | 'client';
 
 interface NavigationFullScreenProps {
@@ -46,9 +53,17 @@ interface NavigationFullScreenProps {
 // GPS update interval in milliseconds (5 seconds for smooth updates with low API usage)
 const GPS_UPDATE_INTERVAL = 5000;
 
+// Map old phase names to new for backwards compatibility
+function normalizePhase(phase: string | null): NavigationPhase {
+  if (!phase) return 'to_client';
+  if (phase === 'going_to_vehicle') return 'to_client';
+  if (phase === 'going_to_destination') return 'to_destination';
+  return phase as NavigationPhase;
+}
+
 export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const { chamado, finishService, profile, availableProviders, cancelChamado, chatMessages } = useApp();
-  const [navigationPhase, setNavigationPhase] = useState<NavigationPhase>('going_to_vehicle');
+  const [navigationPhase, setNavigationPhase] = useState<NavigationPhase>('to_client');
   const [routePolyline, setRoutePolyline] = useState<string>('');
   const [eta, setEta] = useState<string>('');
   const [distance, setDistance] = useState<string>('');
@@ -129,10 +144,10 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
   const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
   const hasDestination = chamado.destino !== null;
-  const isGoingToVehicle = navigationPhase === 'going_to_vehicle';
+  const isGoingToClient = navigationPhase === 'to_client';
 
   // Current destination based on phase
-  const currentDestination = isGoingToVehicle ? chamado.origem : chamado.destino;
+  const currentDestination = isGoingToClient ? chamado.origem : chamado.destino;
 
   // Use navigation instructions hook for turn-by-turn and status
   const navigationState = useNavigationInstructions({
@@ -158,7 +173,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
       if (data) {
         if (data.navigation_phase) {
-          setNavigationPhase(data.navigation_phase as NavigationPhase);
+          // Normalize old phase names to new
+          setNavigationPhase(normalizePhase(data.navigation_phase));
         }
         if (data.route_polyline) {
           setRoutePolyline(data.route_polyline);
@@ -191,12 +207,15 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         (payload: any) => {
           const { navigation_phase, route_polyline, route_distance_meters, route_duration_seconds } = payload.new;
           
-          if (navigation_phase && navigation_phase !== navigationPhase) {
-            setNavigationPhase(navigation_phase);
-            if (mode === 'client') {
-              toast.info(navigation_phase === 'going_to_destination' 
-                ? 'Prestador chegou ao veículo!' 
-                : 'Navegação iniciada');
+          if (navigation_phase) {
+            const normalizedPhase = normalizePhase(navigation_phase);
+            if (normalizedPhase !== navigationPhase) {
+              setNavigationPhase(normalizedPhase);
+              if (mode === 'client') {
+                toast.info(normalizedPhase === 'to_destination' 
+                  ? 'Prestador chegou ao veículo!' 
+                  : 'Navegação iniciada');
+              }
             }
           }
           
@@ -293,18 +312,19 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     setIsConfirming(true);
 
     try {
+      // Update database with new phase (using old format for backwards compatibility)
       await supabase
         .from('chamados')
         .update({
           provider_arrived_at_vehicle: true,
-          navigation_phase: 'going_to_destination',
+          navigation_phase: 'to_destination',
         })
         .eq('id', chamado.id);
 
       clearRoute();
       routeCalculatedRef.current = '';
       
-      setNavigationPhase('going_to_destination');
+      setNavigationPhase('to_destination');
       setEta('');
       setDistance('');
       
@@ -511,7 +531,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       {/* Bottom action button - always visible - compact */}
       <div className="absolute bottom-4 left-3 right-3 z-10">
         {mode === 'provider' ? (
-          isGoingToVehicle && hasDestination ? (
+          isGoingToClient && hasDestination ? (
             <Button 
               variant="default"
               onClick={(e) => {

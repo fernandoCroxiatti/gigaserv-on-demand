@@ -16,7 +16,7 @@ interface ClientStatusDisplayProps {
   eta: string;
   distance: string;
   progress: number;
-  phase: 'going_to_vehicle' | 'going_to_destination';
+  phase: string; // Supports both old and new phase naming
   serviceType: string;
   providerName?: string;
   className?: string;
@@ -122,22 +122,22 @@ export function ClientStatusDisplay({
           <div className="flex items-center justify-between text-xs">
             <div className={cn(
               "flex items-center gap-1.5",
-              phase === 'going_to_vehicle' ? 'text-primary font-medium' : 'text-muted-foreground'
+              (phase === 'going_to_vehicle' || phase === 'to_client') ? 'text-primary font-medium' : 'text-muted-foreground'
             )}>
               <div className={cn(
                 "w-2 h-2 rounded-full",
-                phase === 'going_to_vehicle' ? 'bg-primary' : 'bg-muted'
+                (phase === 'going_to_vehicle' || phase === 'to_client') ? 'bg-primary' : 'bg-muted'
               )} />
               <span>Busca</span>
             </div>
             <div className="flex-1 border-t border-dashed border-muted mx-2" />
             <div className={cn(
               "flex items-center gap-1.5",
-              phase === 'going_to_destination' ? 'text-primary font-medium' : 'text-muted-foreground'
+              (phase === 'going_to_destination' || phase === 'to_destination') ? 'text-primary font-medium' : 'text-muted-foreground'
             )}>
               <div className={cn(
                 "w-2 h-2 rounded-full",
-                phase === 'going_to_destination' ? 'bg-primary' : 'bg-muted'
+                (phase === 'going_to_destination' || phase === 'to_destination') ? 'bg-primary' : 'bg-muted'
               )} />
               <span>Destino</span>
             </div>

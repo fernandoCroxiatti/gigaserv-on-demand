@@ -22,11 +22,22 @@ export interface NavigationState {
   clientStatus: 'a_caminho' | 'chegando' | 'no_local' | 'em_transito' | 'destino_final';
 }
 
+// Navigation phase types (supports both old and new naming)
+type NavigationPhase = 'to_client' | 'at_client' | 'to_destination' | 'finished' | 'going_to_vehicle' | 'going_to_destination';
+
 interface UseNavigationInstructionsOptions {
   providerLocation: Location | null;
   destination: Location | null;
-  phase: 'going_to_vehicle' | 'going_to_destination';
+  phase: NavigationPhase;
   isProvider: boolean;
+}
+
+// Normalize phase to handle both old and new naming
+function normalizePhaseForStatus(phase: NavigationPhase): 'going_to_vehicle' | 'going_to_destination' {
+  if (phase === 'to_client' || phase === 'going_to_vehicle' || phase === 'at_client') {
+    return 'going_to_vehicle';
+  }
+  return 'going_to_destination';
 }
 
 /**
@@ -108,8 +119,9 @@ export function useNavigationInstructions({
   }, []);
 
   // Get client status based on distance and phase
-  const getClientStatus = useCallback((distanceMeters: number, currentPhase: 'going_to_vehicle' | 'going_to_destination'): NavigationState['clientStatus'] => {
-    if (currentPhase === 'going_to_vehicle') {
+  const getClientStatus = useCallback((distanceMeters: number, currentPhase: NavigationPhase): NavigationState['clientStatus'] => {
+    const normalizedPhase = normalizePhaseForStatus(currentPhase);
+    if (normalizedPhase === 'going_to_vehicle') {
       if (distanceMeters <= 50) return 'no_local';
       if (distanceMeters <= 200) return 'chegando';
       return 'a_caminho';
@@ -133,7 +145,7 @@ export function useNavigationInstructions({
     // Calculate direct distance for status
     const directDistance = calculateDistance(providerLocation, destination);
     
-    // Update status based on direct distance
+    // Update status based on direct distance (normalize phase for status calculation)
     const clientStatus = getClientStatus(directDistance, phase);
     
     setState(prev => ({
@@ -180,9 +192,10 @@ export function useNavigationInstructions({
       }));
 
       // Add arrival instruction
+      const isGoingToClient = phase === 'going_to_vehicle' || phase === 'to_client';
       instructions.push({
         icon: 'arrive',
-        text: phase === 'going_to_vehicle' ? 'Chegou ao veículo' : 'Chegou ao destino',
+        text: isGoingToClient ? 'Chegou ao veículo' : 'Chegou ao destino',
         streetName: destination.address || 'Destino',
         distance: '',
         distanceMeters: 0,
@@ -211,7 +224,7 @@ export function useNavigationInstructions({
 /**
  * Get human-readable status text for client
  */
-export function getClientStatusText(status: NavigationState['clientStatus'], phase: 'going_to_vehicle' | 'going_to_destination', serviceType: string): string {
+export function getClientStatusText(status: NavigationState['clientStatus'], phase: string, serviceType: string): string {
   const statusMap: Record<NavigationState['clientStatus'], string> = {
     'a_caminho': 'Prestador a caminho',
     'chegando': 'Prestador chegando',
