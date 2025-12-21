@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
-import { Menu, User, Landmark, FileText, Shield, Scale, LogOut, Trash2, Star, AlertTriangle, Loader2, CreditCard, HelpCircle } from 'lucide-react';
+import { Menu, User, Landmark, FileText, Shield, Scale, LogOut, Trash2, Star, AlertTriangle, Loader2, CreditCard, HelpCircle, Receipt } from 'lucide-react';
 import { Button } from './ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -120,6 +120,13 @@ export function GlobalDrawer() {
               >
                 <FileText className="w-5 h-5" />
                 <span className="font-medium">Histórico de Corridas</span>
+              </button>
+              <button
+                onClick={() => handleNavigate('/profile?tab=fees')}
+                className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-secondary transition-colors"
+              >
+                <Receipt className="w-5 h-5" />
+                <span className="font-medium">Taxas do App</span>
               </button>
             </>
           )}
