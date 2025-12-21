@@ -1,10 +1,13 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
+import { useWakeLock } from '@/hooks/useWakeLock';
 import { ProfileSwitch } from './ProfileSwitch';
 import { GlobalDrawer } from './GlobalDrawer';
+import { Sun } from 'lucide-react';
 
 export function Header() {
   const { user } = useApp();
+  const { isActive: wakeLockActive } = useWakeLock();
   const isProvider = user?.activeProfile === 'provider';
   const isOnline = user?.providerData?.online || false;
 
@@ -27,6 +30,11 @@ export function Header() {
             <span className={`font-bold text-sm ${
               isProvider ? 'text-provider-primary' : 'text-primary'
             }`}>S.O.S</span>
+            
+            {/* Wake Lock indicator */}
+            {wakeLockActive && (
+              <Sun className="w-3 h-3 text-amber-500 ml-0.5" />
+            )}
           </div>
         </div>
 
