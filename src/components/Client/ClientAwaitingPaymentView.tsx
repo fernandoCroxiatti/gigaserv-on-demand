@@ -722,27 +722,49 @@ export function ClientAwaitingPaymentView() {
 
             {/* DIRECT PAYMENT (PIX/CASH) - Only show when direct_payment is selected */}
             {selectedPayment === 'direct_payment' && (() => {
-              // Use safe fee calculation
+              // Use safe fee calculation with invariant checks
               const fee = calculateFee(chamado.valor, commissionPercentage);
+              const isValidFee = fee.isValid && fee.serviceValue >= 0;
+              
               return (
                 <div className="space-y-3">
-                  <div className="p-4 bg-secondary/50 rounded-lg border border-border/50">
+                  <div className="p-4 bg-secondary/50 rounded-lg border border-border/50 space-y-3">
+                    {/* REQUIRED TEXT (compliance) */}
                     <p className="text-sm text-foreground">
-                      Você escolheu pagar <strong>R$ {formatCurrency(fee.serviceValue)}</strong> diretamente ao prestador via PIX ou dinheiro.
+                      Você pagará <strong className="text-primary">R$ {formatCurrency(fee.serviceValue)}</strong> diretamente ao prestador.
                     </p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Taxa do app: {formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)})
+                    
+                    {/* Fee breakdown */}
+                    <div className="bg-background/50 rounded-lg p-3 space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Valor da corrida:</span>
+                        <span className="font-medium">R$ {formatCurrency(fee.serviceValue)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Taxa do app:</span>
+                        <span className="font-medium">{formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)})</span>
+                      </div>
+                    </div>
+                    
+                    {/* REQUIRED EXPLANATION (compliance) */}
+                    <p className="text-xs text-muted-foreground">
+                      O app registrará uma taxa de {formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)}) que será devida pelo prestador ao GIGA S.O.S.
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      O valor da taxa será cobrado posteriormente do prestador conforme os Termos de Uso.
-                    </p>
+                    
+                    {/* Validation error if any */}
+                    {!isValidFee && fee.validationError && (
+                      <div className="flex items-center gap-2 text-xs text-destructive">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {fee.validationError}
+                      </div>
+                    )}
                   </div>
                   
                   {/* Single CTA button */}
                   <Button 
                     onClick={handleDirectPaymentClick}
                     className="w-full h-12"
-                    disabled={processingDirectPayment}
+                    disabled={processingDirectPayment || !isValidFee}
                   >
                     {processingDirectPayment ? (
                       <>
@@ -782,7 +804,7 @@ export function ClientAwaitingPaymentView() {
         </div>
       </div>
 
-      {/* Direct Payment Confirmation Dialog */}
+      {/* Direct Payment Confirmation Dialog - REQUIRED TEXT (compliance) */}
       <AlertDialog open={showDirectPaymentDialog} onOpenChange={setShowDirectPaymentDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -793,22 +815,40 @@ export function ClientAwaitingPaymentView() {
             <AlertDialogDescription asChild>
               {(() => {
                 const fee = calculateFee(chamado.valor, commissionPercentage);
+                const canConfirm = fee.isValid && fee.serviceValue >= 0;
                 return (
                   <div className="space-y-3">
-                    <p>
-                      Você escolheu pagar <strong className="text-foreground">R$ {formatCurrency(fee.serviceValue)}</strong> diretamente ao prestador via PIX ou dinheiro.
+                    {/* REQUIRED POPUP TEXT (compliance) */}
+                    <p className="text-sm text-foreground">
+                      Você pagará <strong className="text-primary">R$ {formatCurrency(fee.serviceValue)}</strong> diretamente ao prestador.
                     </p>
-                    <div className="bg-secondary/50 border border-border rounded-lg p-3">
-                      <p className="text-sm text-foreground font-medium">
-                        Taxa do app: {formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)})
-                      </p>
+                    <p className="text-sm text-foreground">
+                      O app registrará uma taxa de <strong>{formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)})</strong> que será devida pelo prestador ao GIGA S.O.S.
+                    </p>
+                    
+                    {/* Fee summary */}
+                    <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Valor da corrida:</span>
+                        <span className="font-medium">R$ {formatCurrency(fee.serviceValue)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Taxa do app:</span>
+                        <span className="font-medium">{formatPercentage(fee.feePercentage)} (R$ {formatCurrency(fee.feeAmount)})</span>
+                      </div>
                     </div>
+                    
                     <p className="text-xs text-muted-foreground">
-                      O valor da taxa será cobrado posteriormente do prestador conforme os Termos de Uso.
-                    </p>
-                    <p className="text-sm">
                       O serviço será iniciado após confirmar. Pague diretamente ao prestador quando ele chegar.
                     </p>
+                    
+                    {/* Validation error if any */}
+                    {!canConfirm && fee.validationError && (
+                      <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 rounded-lg p-2">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {fee.validationError}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -818,7 +858,7 @@ export function ClientAwaitingPaymentView() {
             <AlertDialogCancel disabled={processingDirectPayment}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDirectPayment}
-              disabled={processingDirectPayment}
+              disabled={processingDirectPayment || !calculateFee(chamado.valor, commissionPercentage).isValid}
               className="bg-primary hover:bg-primary/90"
             >
               {processingDirectPayment ? (

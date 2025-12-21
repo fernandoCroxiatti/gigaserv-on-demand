@@ -87,7 +87,32 @@ serve(async (req) => {
       }
     }
 
-    const feeAmount = (serviceValue * commissionPercentage) / 100;
+    // OFFICIAL FEE CALCULATION (audit-ready)
+    // Formula: valorTaxa = valorCorrida × (taxaAppPercentual / 100)
+    const rawFeeAmount = serviceValue * (commissionPercentage / 100);
+    // Round to 2 decimal places (financial standard)
+    const feeAmount = Math.round(rawFeeAmount * 100) / 100;
+    // valorLiquidoPrestador = valorCorrida - valorTaxa
+    const providerNetAmount = Math.round((serviceValue - feeAmount) * 100) / 100;
+
+    // INVARIANT CHECKS (required for compliance)
+    if (feeAmount < 0 || providerNetAmount < 0) {
+      console.error("Invariant violation: negative values", { feeAmount, providerNetAmount });
+      return new Response(
+        JSON.stringify({ error: "Cálculo inválido: valores negativos" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check sum invariant with tolerance
+    const sum = Math.round((feeAmount + providerNetAmount) * 100) / 100;
+    if (Math.abs(sum - serviceValue) > 0.01) {
+      console.error("Invariant violation: sum mismatch", { sum, serviceValue });
+      return new Response(
+        JSON.stringify({ error: "Erro de arredondamento no cálculo" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Determine fee type based on payment method
     const isStripePayment = chamado.payment_provider === "stripe" && 
@@ -97,7 +122,7 @@ serve(async (req) => {
 
     const feeType = isStripePayment && !isDirectPayment ? "STRIPE" : "MANUAL_PIX";
 
-    // Create fee record
+    // Create fee record with complete audit data
     const feeData = {
       chamado_id: chamado_id,
       provider_id: providerId,
@@ -105,7 +130,7 @@ serve(async (req) => {
       fee_percentage: commissionPercentage,
       fee_amount: feeAmount,
       fee_type: feeType,
-      status: feeType === "STRIPE" ? "PAGO" : "DEVENDO", // Stripe fees are automatically paid
+      status: feeType === "STRIPE" ? "PAGO" : "DEVENDO",
     };
 
     const { data: newFee, error: feeError } = await supabaseAdmin

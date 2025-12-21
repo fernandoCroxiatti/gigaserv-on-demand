@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DollarSign, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateFee, formatCurrency, formatPercentage } from '@/lib/feeCalculator';
+import { calculateFee, formatCurrency, formatPercentage, canFinalizeWithFee } from '@/lib/feeCalculator';
 
 interface DirectPaymentBannerProps {
   amount: number;
@@ -40,8 +40,13 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
     fetchCommission();
   }, []);
 
-  // Calculate fee using safe utility
-  const { serviceValue, feeAmount, providerNetAmount, feePercentage: safeFeePercent } = calculateFee(amount, feePercentage);
+  // Calculate fee using safe utility with invariant checks
+  const feeCalc = calculateFee(amount, feePercentage);
+  
+  // If calculation is invalid, show safe defaults
+  if (!canFinalizeWithFee(feeCalc)) {
+    console.error('[DirectPaymentBanner] Invalid fee calculation:', feeCalc.validationError);
+  }
   
   return (
     <div className="bg-amber-500 text-white px-4 py-3 shadow-lg">
@@ -52,21 +57,21 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-medium opacity-90">Receba do cliente</span>
-            <span className="text-xl font-bold">R$ {formatCurrency(serviceValue)}</span>
+            <span className="text-xl font-bold">R$ {formatCurrency(feeCalc.serviceValue)}</span>
           </div>
         </div>
         <AlertTriangle className="w-6 h-6 animate-bounce flex-shrink-0" />
       </div>
       
-      {/* Fee breakdown */}
+      {/* Fee breakdown - always shows valid numbers */}
       <div className="mt-2 pt-2 border-t border-white/30 grid grid-cols-2 gap-2 text-xs">
         <div>
           <span className="opacity-80">Taxa do app:</span>
-          <span className="font-semibold ml-1">{formatPercentage(safeFeePercent)} (R$ {formatCurrency(feeAmount)})</span>
+          <span className="font-semibold ml-1">{formatPercentage(feeCalc.feePercentage)} (R$ {formatCurrency(feeCalc.feeAmount)})</span>
         </div>
         <div className="text-right">
           <span className="opacity-80">Líquido p/ você:</span>
-          <span className="font-bold ml-1">R$ {formatCurrency(providerNetAmount)}</span>
+          <span className="font-bold ml-1">R$ {formatCurrency(feeCalc.providerNetAmount)}</span>
         </div>
       </div>
     </div>

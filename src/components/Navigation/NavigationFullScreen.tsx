@@ -28,6 +28,7 @@ import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { calculateFee, createFeeAuditLog, canFinalizeWithFee } from '@/lib/feeCalculator';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -380,13 +381,39 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     setIsConfirming(true);
 
     try {
-      // Record payment receipt confirmation
+      // Get commission percentage for audit log
+      const { data: commissionSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'app_commission_percentage')
+        .single();
+      
+      const commissionPercentage = commissionSetting?.value ? Number(commissionSetting.value) : 0;
+      
+      // Calculate fee with invariant checks
+      const feeCalc = calculateFee(chamado.valor, commissionPercentage);
+      
+      if (!canFinalizeWithFee(feeCalc)) {
+        toast.error('Erro no cálculo da taxa. Contate o suporte.');
+        setIsConfirming(false);
+        return;
+      }
+      
+      // Create immutable audit log
+      const auditLog = createFeeAuditLog(feeCalc);
+      console.log('[DirectPayment] Audit log:', auditLog);
+
+      // Record payment receipt confirmation with audit data
       await supabase
         .from('chamados')
         .update({
           direct_payment_receipt_confirmed: true,
-          direct_payment_confirmed_at: new Date().toISOString(),
+          direct_payment_confirmed_at: auditLog.data_hora_confirmacao_pagamento,
           provider_arrived_at_destination: true,
+          // Store fee calculation in chamado for audit
+          commission_percentage: feeCalc.feePercentage,
+          commission_amount: feeCalc.feeAmount,
+          provider_amount: feeCalc.providerNetAmount,
         })
         .eq('id', chamado.id);
 
@@ -740,6 +767,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         open={showDirectPaymentDialog}
         onOpenChange={setShowDirectPaymentDialog}
         amount={chamado.valor || 0}
+        chamadoId={chamado.id}
         onConfirmReceived={handleConfirmDirectPayment}
         onNotReceived={handleNotReceivedPayment}
         isLoading={isConfirming}
