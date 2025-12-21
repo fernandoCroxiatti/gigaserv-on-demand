@@ -201,6 +201,7 @@ export function ProviderProfile() {
         currentPhone={user?.phone || ''}
         currentAvatar={profile?.avatar_url || null}
         currentVehiclePlate={providerData?.vehicle_plate || null}
+        currentCpf={profile?.cpf || null}
         onComplete={handleRegistrationComplete}
       />
     );
