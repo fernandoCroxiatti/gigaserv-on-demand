@@ -221,6 +221,22 @@ export function useAdminFees(filter: FilterType = 'all') {
         target_id: providerId,
       });
 
+      // Send notification to provider
+      try {
+        await supabase.functions.invoke('send-notifications', {
+          body: {
+            action: 'event',
+            userId: providerId,
+            notificationType: 'payment_approved',
+            title: '✅ Pagamento Confirmado',
+            messageBody: 'Seu pagamento de taxa foi aprovado. Seu acesso foi liberado!',
+            data: { type: 'payment_approved' },
+          },
+        });
+      } catch (notifErr) {
+        console.error('Error sending provider notification:', notifErr);
+      }
+
       await fetchData();
       return { success: true };
     } catch (err) {
@@ -273,6 +289,22 @@ export function useAdminFees(filter: FilterType = 'all') {
         target_type: 'provider',
         target_id: providerId,
       });
+
+      // Send notification to provider
+      try {
+        await supabase.functions.invoke('send-notifications', {
+          body: {
+            action: 'event',
+            userId: providerId,
+            notificationType: 'payment_rejected',
+            title: '❌ Pagamento Recusado',
+            messageBody: `Seu pagamento foi recusado. Saldo pendente: R$ ${pendingBalance.toFixed(2)}`,
+            data: { type: 'payment_rejected', pendingBalance },
+          },
+        });
+      } catch (notifErr) {
+        console.error('Error sending provider notification:', notifErr);
+      }
 
       await fetchData();
       return { success: true };
