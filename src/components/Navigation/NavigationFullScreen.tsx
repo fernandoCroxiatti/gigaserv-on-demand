@@ -531,22 +531,32 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       {/* Bottom action button - always visible - compact */}
       <div className="absolute bottom-4 left-3 right-3 z-10">
         {mode === 'provider' ? (
-          isGoingToClient && hasDestination ? (
+          // For services WITH destination (guincho), show "Cheguei ao veículo" then "Finalizar"
+          // For services WITHOUT destination (borracharia, chaveiro, mecanica), show only "Cheguei ao local" then "Finalizar"
+          isGoingToClient ? (
             <Button 
               variant="default"
               onClick={(e) => {
                 e.stopPropagation();
-                setShowArrivalDialog(true);
+                // If has destination (guincho), confirm arrival to vehicle
+                // Otherwise, show finish dialog directly
+                if (hasDestination) {
+                  setShowArrivalDialog(true);
+                } else {
+                  setShowFinishDialog(true);
+                }
               }}
               className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg bg-provider-primary hover:bg-provider-primary/90"
               disabled={isConfirming}
             >
               {isConfirming ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
+              ) : hasDestination ? (
                 <CheckCircle className="w-4 h-4 mr-1.5" />
+              ) : (
+                <Flag className="w-4 h-4 mr-1.5" />
               )}
-              Cheguei ao veículo
+              {hasDestination ? 'Cheguei ao veículo' : 'Cheguei ao local - Finalizar'}
             </Button>
           ) : (
             <Button 
