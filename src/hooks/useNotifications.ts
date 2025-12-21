@@ -41,6 +41,7 @@ export function useNotifications() {
   const [loading, setLoading] = useState(true);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [hasAskedPermission, setHasAskedPermission] = useState<boolean | null>(null);
   const permissionAskedRef = useRef(false);
   const nativeListenersCleanupRef = useRef<(() => void) | null>(null);
 
@@ -147,9 +148,14 @@ export function useNotifications() {
             chamado_updates: data.chamado_updates,
             promotional: data.promotional
           });
+          setHasAskedPermission(data.permission_asked_at !== null);
+        } else {
+          // No preferences record means never asked
+          setHasAskedPermission(false);
         }
       } catch (err) {
         console.error('Error loading notification preferences:', err);
+        setHasAskedPermission(false);
       } finally {
         setLoading(false);
       }
@@ -379,8 +385,8 @@ export function useNotifications() {
     }
   }, [isNative, permission]);
 
-  // Check if should ask for permission
-  const shouldAskPermission = (isNative || permission === 'default') && !preferences?.permission_granted;
+  // Check if should ask for permission - TRUE if never asked before
+  const shouldAskPermission = hasAskedPermission === false && (isNative || permission === 'default');
 
   // Re-subscribe to push (useful after re-opening app)
   const resubscribeToPush = useCallback(async () => {
@@ -427,6 +433,7 @@ export function useNotifications() {
     loading,
     showPermissionModal,
     shouldAskPermission,
+    hasAskedPermission,
     isNative,
     fcmToken,
     triggerPermissionFlow,

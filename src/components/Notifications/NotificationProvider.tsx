@@ -15,6 +15,8 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
     permission,
     showPermissionModal,
     shouldAskPermission,
+    hasAskedPermission,
+    loading,
     triggerPermissionFlow,
     handlePermissionConfirm,
     handlePermissionDecline,
@@ -23,7 +25,6 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
   } = useNotifications();
   
   const hasTriggeredRef = useRef(false);
-  const isFirstLoginRef = useRef(true);
   const hasResubscribedRef = useRef(false);
 
   // Register service worker and resubscribe on mount if permission granted
@@ -42,24 +43,21 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
     }
   }, [permission, user?.id, registerServiceWorker, resubscribeToPush]);
 
-  // Listen for login events (client) or online status (provider)
+  // FORCE permission popup on first app open - no delay
   useEffect(() => {
-    if (!user || !shouldAskPermission || hasTriggeredRef.current) return;
-
-    // For clients: trigger on first login
-    if (activeProfile === 'client' && isFirstLoginRef.current) {
-      // Delay slightly so user sees the app first
-      const timer = setTimeout(() => {
+    // Wait for loading to complete and user to be logged in
+    if (loading || !user?.id || hasTriggeredRef.current) return;
+    
+    // If never asked before, show popup immediately
+    if (shouldAskPermission && hasAskedPermission === false) {
+      console.log('[NotificationProvider] First time user - showing permission popup immediately');
+      hasTriggeredRef.current = true;
+      // Small delay to ensure UI is ready
+      setTimeout(() => {
         triggerPermissionFlow();
-        hasTriggeredRef.current = true;
-      }, 2000);
-      
-      isFirstLoginRef.current = false;
-      return () => clearTimeout(timer);
+      }, 500);
     }
-  }, [user, shouldAskPermission, activeProfile, triggerPermissionFlow]);
-
-  // For providers: trigger when going online is handled separately in ProviderIdleView
+  }, [loading, user?.id, shouldAskPermission, hasAskedPermission, triggerPermissionFlow]);
 
   return (
     <>
