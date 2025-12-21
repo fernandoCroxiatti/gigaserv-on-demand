@@ -134,7 +134,13 @@ export function useNavigationInstructions({
 
   // Calculate and update navigation
   useEffect(() => {
-    if (!providerLocation || !destination || typeof google === 'undefined') return;
+    if (!providerLocation || !destination) return;
+    
+    // Check if Google Maps is available
+    if (typeof google === 'undefined' || !google.maps) {
+      console.log('[NavigationInstructions] Google Maps not loaded yet');
+      return;
+    }
 
     const calculateKey = `${providerLocation.lat.toFixed(4)},${providerLocation.lng.toFixed(4)}`;
     
@@ -148,6 +154,21 @@ export function useNavigationInstructions({
     // Update status based on direct distance (normalize phase for status calculation)
     const clientStatus = getClientStatus(directDistance, phase);
     
+    // Set initial distance if not set
+    if (initialDistanceRef.current === 0) {
+      initialDistanceRef.current = directDistance;
+    }
+    
+    // Calculate progress
+    const progress = initialDistanceRef.current > 0 
+      ? Math.max(0, Math.min(100, 100 - (directDistance / initialDistanceRef.current * 100)))
+      : 0;
+    
+    // Format distance and ETA for immediate update (estimates)
+    const estimatedSpeedKmH = 40; // Average city speed
+    const etaSeconds = Math.ceil((directDistance / 1000) / estimatedSpeedKmH * 3600);
+    const etaMinutes = Math.ceil(etaSeconds / 60);
+    
     setState(prev => ({
       ...prev,
       clientStatus,
@@ -155,9 +176,10 @@ export function useNavigationInstructions({
       distance: directDistance < 1000 
         ? `${Math.round(directDistance)} m` 
         : `${(directDistance / 1000).toFixed(1)} km`,
-      progress: initialDistanceRef.current > 0 
-        ? Math.max(0, Math.min(100, 100 - (directDistance / initialDistanceRef.current * 100)))
-        : 0,
+      progress,
+      // Provide estimated ETA if not calculated yet
+      eta: prev.eta || (etaMinutes < 60 ? `${etaMinutes} min` : `${Math.floor(etaMinutes / 60)}h ${etaMinutes % 60}min`),
+      etaSeconds: prev.etaSeconds || etaSeconds,
     }));
 
     // Only calculate detailed instructions for provider

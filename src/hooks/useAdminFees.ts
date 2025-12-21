@@ -32,6 +32,7 @@ export interface AdminProviderFinancial {
   totalFees: number;
   stripeFees: number;
   manualFees: number;
+  proofUrl: string | null;
 }
 
 export interface PixConfig {
@@ -135,6 +136,10 @@ export function useAdminFees(filter: FilterType = 'all') {
           if (fee.paymentApprovedAt && (!existing.lastPaymentAt || fee.paymentApprovedAt > existing.lastPaymentAt)) {
             existing.lastPaymentAt = fee.paymentApprovedAt;
           }
+          // Update proof URL if newer
+          if (fee.paymentProofUrl && fee.status === 'AGUARDANDO_APROVACAO') {
+            existing.proofUrl = fee.paymentProofUrl;
+          }
         } else {
           providerAggregates.set(fee.providerId, {
             providerId: fee.providerId,
@@ -147,6 +152,7 @@ export function useAdminFees(filter: FilterType = 'all') {
             totalFees: fee.feeAmount,
             stripeFees: fee.feeType === 'STRIPE' ? fee.feeAmount : 0,
             manualFees: fee.feeType === 'MANUAL_PIX' ? fee.feeAmount : 0,
+            proofUrl: fee.paymentProofUrl,
           });
         }
       }

@@ -103,14 +103,14 @@ export function ClientStatusDisplay({
           <Progress value={progress} className="h-1.5" />
         </div>
 
-        {/* ETA and distance info */}
+        {/* ETA and distance info - Always show with fallback */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 text-sm">
-            <span className="font-semibold text-primary">{eta || '--'}</span>
+            <span className="font-semibold text-primary">{eta || 'Calculando...'}</span>
             <span className="text-muted-foreground">restantes</span>
           </div>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <span>{distance || '--'}</span>
+            <span>{distance || 'Calculando...'}</span>
             <ArrowRight className="w-3 h-3" />
           </div>
         </div>
