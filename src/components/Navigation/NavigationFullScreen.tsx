@@ -542,13 +542,6 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
   return (
     <div className={`relative h-full ${themeClass}`} onClick={toggleControls}>
-      {/* Direct payment banner - sticky at top for provider */}
-      {mode === 'provider' && isDirectPaymentToProvider && serviceValue > 0 && (
-        <div className="absolute top-0 left-0 right-0 z-20">
-          <DirectPaymentBanner amount={serviceValue} />
-        </div>
-      )}
-
       {/* Full screen map - takes 100% */}
       <OptimizedNavigationMap 
         providerLocation={providerLocation}
@@ -560,10 +553,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       />
 
       {/* Top info display - different for provider vs client */}
-      {/* Adjust top position when direct payment banner is shown */}
       <div className={cn(
-        "absolute left-3 right-3 z-10 transition-all duration-300",
-        mode === 'provider' && isDirectPaymentToProvider ? "top-32" : "top-20",
+        "absolute left-3 right-3 z-10 transition-all duration-300 top-20",
         showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
       )}>
         {mode === 'provider' ? (
