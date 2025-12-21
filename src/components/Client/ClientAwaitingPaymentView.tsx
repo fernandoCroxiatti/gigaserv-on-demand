@@ -14,7 +14,9 @@ import {
   Car,
   Smartphone,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Banknote,
+  AlertTriangle
 } from 'lucide-react';
 import { PaymentMethod } from '@/types/chamado';
 import type { Stripe } from '@stripe/stripe-js';
@@ -23,8 +25,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getStripePromise } from '@/lib/stripe';
 import { WalletPaymentForm } from './WalletPaymentForm';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-type ExtendedPaymentMethod = PaymentMethod | 'wallet' | 'saved_card';
+type ExtendedPaymentMethod = PaymentMethod | 'wallet' | 'saved_card' | 'direct_payment';
 
 interface SavedCard {
   id: string;
@@ -37,6 +49,7 @@ interface SavedCard {
 const basePaymentMethods: { id: ExtendedPaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean; walletOnly?: boolean }[] = [
   { id: 'wallet', name: 'Apple Pay / Google Pay', icon: Smartphone, description: 'Carteira digital', available: true, walletOnly: true },
   { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento seguro', available: true },
+  { id: 'direct_payment', name: 'PIX / Dinheiro ao prestador', icon: Banknote, description: 'Pague diretamente ao prestador', available: true },
 ];
 
 function CardPaymentForm({ 
@@ -126,12 +139,17 @@ export function ClientAwaitingPaymentView() {
   const [selectedSavedCard, setSelectedSavedCard] = useState<string | null>(null);
   const [showSavedCards, setShowSavedCards] = useState(false);
   const [payingWithSavedCard, setPayingWithSavedCard] = useState(false);
+  
+  // Direct payment dialog state
+  const [showDirectPaymentDialog, setShowDirectPaymentDialog] = useState(false);
+  const [processingDirectPayment, setProcessingDirectPayment] = useState(false);
+  const [commissionPercentage, setCommissionPercentage] = useState<number>(10);
 
   useEffect(() => {
     setStripePromise(getStripePromise());
   }, []);
 
-  // Fetch saved cards on mount
+  // Fetch saved cards and commission percentage on mount
   useEffect(() => {
     const fetchSavedCards = async () => {
       try {
@@ -151,6 +169,25 @@ export function ClientAwaitingPaymentView() {
       }
     };
     fetchSavedCards();
+  }, []);
+
+  // Fetch commission percentage
+  useEffect(() => {
+    const fetchCommissionPercentage = async () => {
+      try {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'app_commission_percentage')
+          .single();
+        if (data?.value) {
+          setCommissionPercentage(Number(data.value));
+        }
+      } catch (err) {
+        console.error('Error fetching commission:', err);
+      }
+    };
+    fetchCommissionPercentage();
   }, []);
 
   // Filter payment methods based on wallet availability
@@ -306,11 +343,59 @@ export function ClientAwaitingPaymentView() {
     }
   }, [chamado?.id]);
 
-  // When payment method changes, create new payment intent
+  // When payment method changes, create new payment intent (only for stripe methods)
   const handlePaymentMethodChange = (method: ExtendedPaymentMethod) => {
     if (method === selectedPayment) return;
     setSelectedPayment(method);
-    createPaymentIntent(method);
+    
+    // Only create payment intent for card-based payments
+    if (method !== 'direct_payment') {
+      createPaymentIntent(method);
+    }
+  };
+
+  // Handle direct payment to provider
+  const handleDirectPaymentClick = () => {
+    setShowDirectPaymentDialog(true);
+  };
+
+  const handleConfirmDirectPayment = async () => {
+    if (!chamado?.id) return;
+    
+    setProcessingDirectPayment(true);
+    try {
+      // Update chamado to mark as direct payment
+      const { error } = await supabase
+        .from('chamados')
+        .update({
+          direct_payment_to_provider: true,
+          payment_method: 'pix',
+          payment_status: 'paid_mock',
+          payment_completed_at: new Date().toISOString(),
+          status: 'in_service',
+          navigation_phase: 'to_client',
+        })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
+
+      // Record the fee for the provider
+      await supabase.functions.invoke('record-service-fee', {
+        body: { chamado_id: chamado.id }
+      });
+
+      toast.success('Pagamento registrado!', {
+        description: 'Pague diretamente ao prestador. O serviço foi iniciado.',
+        duration: 4000,
+      });
+      
+      setShowDirectPaymentDialog(false);
+    } catch (err) {
+      console.error('Error processing direct payment:', err);
+      toast.error('Erro ao processar. Tente novamente.');
+    } finally {
+      setProcessingDirectPayment(false);
+    }
   };
 
   // Handle wallet not available - fallback to card
@@ -625,7 +710,28 @@ export function ClientAwaitingPaymentView() {
               )
             )}
 
-            {!clientSecret && !loadingPayment && paymentError && (
+            {/* Direct Payment Button */}
+            {selectedPayment === 'direct_payment' && !loadingPayment && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-700">
+                    <p className="font-medium">Atenção: Taxa do App</p>
+                    <p className="mt-0.5">Ao pagar diretamente ao prestador, será gerada uma taxa de {commissionPercentage}% (R$ {((chamado.valor || 0) * commissionPercentage / 100).toFixed(2)}) que o prestador deverá pagar ao app.</p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={handleDirectPaymentClick}
+                  className="w-full h-11"
+                  variant="outline"
+                >
+                  <Banknote className="w-4 h-4" />
+                  Pagar PIX/Dinheiro ao Prestador
+                </Button>
+              </div>
+            )}
+
+            {!clientSecret && !loadingPayment && paymentError && selectedPayment !== 'direct_payment' && (
               <Button 
                 onClick={() => createPaymentIntent(selectedPayment)}
                 className="w-full"
@@ -637,7 +743,7 @@ export function ClientAwaitingPaymentView() {
             
             <button 
               onClick={cancelChamado}
-              disabled={isProcessing || loadingPayment}
+              disabled={isProcessing || loadingPayment || processingDirectPayment}
               className="w-full text-center text-sm text-destructive py-2 disabled:opacity-50"
             >
               Cancelar serviço
@@ -645,6 +751,48 @@ export function ClientAwaitingPaymentView() {
           </div>
         </div>
       </div>
+
+      {/* Direct Payment Confirmation Dialog */}
+      <AlertDialog open={showDirectPaymentDialog} onOpenChange={setShowDirectPaymentDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Confirmar Pagamento Direto
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                Você escolheu pagar <strong>R$ {chamado.valor?.toFixed(2)}</strong> diretamente ao prestador via PIX ou dinheiro.
+              </p>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                <p className="text-amber-800 dark:text-amber-200 text-sm font-medium">
+                  ⚠️ Uma taxa de {commissionPercentage}% (R$ {((chamado.valor || 0) * commissionPercentage / 100).toFixed(2)}) será gerada para o prestador pagar ao app.
+                </p>
+              </div>
+              <p className="text-sm">
+                O serviço será iniciado após confirmar. Pague diretamente ao prestador quando ele chegar.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processingDirectPayment}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDirectPayment}
+              disabled={processingDirectPayment}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {processingDirectPayment ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Processando...
+                </>
+              ) : (
+                'Confirmar Pagamento'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
