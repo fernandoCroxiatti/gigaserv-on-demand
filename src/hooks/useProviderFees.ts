@@ -170,6 +170,30 @@ export function useProviderFees() {
 
       if (providerError) throw providerError;
 
+      // Get provider name for notification
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('user_id', user.id)
+        .single();
+
+      const providerName = profileData?.name || 'Prestador';
+      const pendingAmount = pendingFees.reduce((acc, f) => acc + f.feeAmount, 0);
+
+      // Notify all admins about the payment declaration
+      try {
+        await supabase.functions.invoke('notify-admin-payment', {
+          body: {
+            providerId: user.id,
+            providerName,
+            amount: pendingAmount,
+          }
+        });
+      } catch (notifErr) {
+        console.error('Error sending admin notification:', notifErr);
+        // Don't block the flow
+      }
+
       await fetchFees();
       return { success: true };
     } catch (err) {
