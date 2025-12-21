@@ -907,18 +907,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           console.error('Error recording service fee:', feeError);
           // Don't block the finish flow, just log the error
         } else {
-          console.log('Service fee recorded successfully for chamado:', chamado.id);
+        console.log('Service fee recorded successfully for chamado:', chamado.id);
         }
       } catch (feeErr) {
         console.error('Error invoking record-service-fee:', feeErr);
       }
 
       toast.success('Serviço finalizado com sucesso!');
-
-      setTimeout(() => {
-        setChamado(null);
-        setChatMessages([]);
-      }, 5000);
+      // NOTE: Do NOT clear chamado here - let the user complete the review first
+      // The chamado will be cleared when user submits review or clicks "Pular"
     } catch (error) {
       console.error('Error finishing service:', error);
       toast.error('Erro ao finalizar serviço');
