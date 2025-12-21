@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
@@ -15,17 +16,49 @@ import {
   Truck,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
+
+// Templates pré-prontos para prestadores
+const providerTemplates = [
+  { title: 'Novos chamados na sua região!', body: 'Há novos clientes precisando de guincho na sua área. Fique online e aproveite!' },
+  { title: 'Bônus do dia ativo!', body: 'Complete 3 chamados hoje e ganhe um bônus especial. Não perca!' },
+  { title: 'Atualize seu cadastro', body: 'Mantenha seus dados atualizados para continuar recebendo chamados.' },
+  { title: 'Pagamento liberado!', body: 'Seu pagamento foi processado e está disponível na sua conta.' },
+  { title: 'Taxa pendente', body: 'Você tem taxas pendentes. Regularize para continuar operando.' },
+  { title: 'Horário de pico!', body: 'Muitos chamados neste momento. Fique online e aumente seus ganhos!' },
+];
+
+// Templates pré-prontos para clientes
+const clientTemplates = [
+  { title: 'Precisando de guincho?', body: 'Solicite agora mesmo e tenha um prestador em minutos!' },
+  { title: 'Novidade no GIGA S.O.S', body: 'Confira as novidades do app e aproveite os novos recursos.' },
+  { title: 'Avalie seu último serviço', body: 'Sua opinião é importante! Avalie o prestador do seu último chamado.' },
+  { title: 'Promoção especial!', body: 'Desconto exclusivo no seu próximo chamado. Aproveite!' },
+  { title: 'Dica de segurança', body: 'Nunca combine pagamentos fora do app. Use sempre os métodos oficiais.' },
+  { title: 'Obrigado por usar o GIGA S.O.S', body: 'Estamos sempre melhorando para você. Conte conosco!' },
+];
+
+// Templates gerais (para todos)
+const generalTemplates = [
+  { title: 'Atualização do App', body: 'Atualize o app para ter acesso às últimas melhorias e correções.' },
+  { title: 'Manutenção programada', body: 'O app passará por manutenção hoje às 00h. Previsão de retorno: 02h.' },
+  { title: 'Novos recursos disponíveis', body: 'Confira as novidades que preparamos para você!' },
+  { title: 'Feliz Natal!', body: 'Toda a equipe GIGA S.O.S deseja a você um Feliz Natal!' },
+  { title: 'Feliz Ano Novo!', body: 'Um próspero Ano Novo cheio de conquistas! Conte com o GIGA S.O.S.' },
+];
 
 export default function AdminNotifications() {
   const [sending, setSending] = useState(false);
   const [targetType, setTargetType] = useState<'providers' | 'clients' | 'all'>('all');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   // Fetch notification stats
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -203,6 +236,135 @@ export default function AdminNotifications() {
               </div>
             </RadioGroup>
           </div>
+
+          {/* Templates Selector */}
+          <Collapsible open={templatesOpen} onOpenChange={setTemplatesOpen}>
+            <CollapsibleTrigger asChild>
+              <Button 
+                variant="outline" 
+                className="w-full justify-between text-muted-foreground hover:text-foreground"
+              >
+                <span className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Mensagens pré-prontas
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${templatesOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 space-y-3">
+              {/* Show templates based on target type */}
+              {targetType === 'providers' && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Para Prestadores:</p>
+                  <div className="grid gap-2">
+                    {providerTemplates.map((template, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setTitle(template.title);
+                          setBody(template.body);
+                          setTemplatesOpen(false);
+                        }}
+                        className="text-left p-2 rounded-lg border border-border hover:bg-accent transition-colors"
+                      >
+                        <p className="text-sm font-medium">{template.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{template.body}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {targetType === 'clients' && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Para Clientes:</p>
+                  <div className="grid gap-2">
+                    {clientTemplates.map((template, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setTitle(template.title);
+                          setBody(template.body);
+                          setTemplatesOpen(false);
+                        }}
+                        className="text-left p-2 rounded-lg border border-border hover:bg-accent transition-colors"
+                      >
+                        <p className="text-sm font-medium">{template.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{template.body}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {targetType === 'all' && (
+                <>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Gerais:</p>
+                    <div className="grid gap-2">
+                      {generalTemplates.map((template, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setTitle(template.title);
+                            setBody(template.body);
+                            setTemplatesOpen(false);
+                          }}
+                          className="text-left p-2 rounded-lg border border-border hover:bg-accent transition-colors"
+                        >
+                          <p className="text-sm font-medium">{template.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{template.body}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Para Prestadores:</p>
+                    <div className="grid gap-2">
+                      {providerTemplates.slice(0, 3).map((template, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setTitle(template.title);
+                            setBody(template.body);
+                            setTemplatesOpen(false);
+                          }}
+                          className="text-left p-2 rounded-lg border border-border hover:bg-accent transition-colors"
+                        >
+                          <p className="text-sm font-medium">{template.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{template.body}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Para Clientes:</p>
+                    <div className="grid gap-2">
+                      {clientTemplates.slice(0, 3).map((template, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setTitle(template.title);
+                            setBody(template.body);
+                            setTemplatesOpen(false);
+                          }}
+                          className="text-left p-2 rounded-lg border border-border hover:bg-accent transition-colors"
+                        >
+                          <p className="text-sm font-medium">{template.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{template.body}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Title */}
           <div className="space-y-2">
