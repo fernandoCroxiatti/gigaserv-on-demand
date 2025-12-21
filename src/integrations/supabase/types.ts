@@ -84,6 +84,8 @@ export type Database = {
           destino_address: string | null
           destino_lat: number | null
           destino_lng: number | null
+          direct_payment_confirmed_at: string | null
+          direct_payment_receipt_confirmed: boolean | null
           direct_payment_to_provider: boolean | null
           id: string
           navigation_phase: string | null
@@ -120,6 +122,8 @@ export type Database = {
           destino_address?: string | null
           destino_lat?: number | null
           destino_lng?: number | null
+          direct_payment_confirmed_at?: string | null
+          direct_payment_receipt_confirmed?: boolean | null
           direct_payment_to_provider?: boolean | null
           id?: string
           navigation_phase?: string | null
@@ -156,6 +160,8 @@ export type Database = {
           destino_address?: string | null
           destino_lat?: number | null
           destino_lng?: number | null
+          direct_payment_confirmed_at?: string | null
+          direct_payment_receipt_confirmed?: boolean | null
           direct_payment_to_provider?: boolean | null
           id?: string
           navigation_phase?: string | null

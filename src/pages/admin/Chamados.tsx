@@ -11,7 +11,10 @@ import {
   MapPin,
   Clock,
   User,
-  UserCheck
+  UserCheck,
+  DollarSign,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import {
   Table,
@@ -166,6 +169,7 @@ export default function AdminChamados() {
                     <TableHead>Data</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Serviço</TableHead>
+                    <TableHead>Pagamento</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Prestador</TableHead>
                     <TableHead>Origem</TableHead>
@@ -174,10 +178,13 @@ export default function AdminChamados() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredChamados.map((c) => {
+                {filteredChamados.map((c) => {
                     const statusConfig = STATUS_CONFIG[c.status as ChamadoStatus];
                     const valor = c.valor || 0;
                     const commission = c.commission_amount || (valor * (c.commission_percentage || 15) / 100);
+                    const isDirectPayment = (c as any).direct_payment_to_provider === true;
+                    const receiptConfirmed = (c as any).direct_payment_receipt_confirmed === true;
+                    const confirmedAt = (c as any).direct_payment_confirmed_at;
                     
                     return (
                       <TableRow key={c.id}>
@@ -196,6 +203,36 @@ export default function AdminChamados() {
                           <Badge variant="outline">
                             {SERVICE_LABELS[c.tipo_servico as ServiceType] || c.tipo_servico}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {isDirectPayment ? (
+                            <div className="space-y-1">
+                              <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
+                                <DollarSign className="w-3 h-3 mr-1" />
+                                Direto
+                              </Badge>
+                              {receiptConfirmed ? (
+                                <div className="flex items-center gap-1 text-xs text-green-600">
+                                  <CheckCircle className="w-3 h-3" />
+                                  <span>Confirmado</span>
+                                  {confirmedAt && (
+                                    <span className="text-muted-foreground">
+                                      {format(new Date(confirmedAt), "dd/MM HH:mm")}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : c.status === 'finished' ? (
+                                <div className="flex items-center gap-1 text-xs text-red-600">
+                                  <XCircle className="w-3 h-3" />
+                                  <span>Não confirmado</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              {c.payment_method || 'App'}
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
