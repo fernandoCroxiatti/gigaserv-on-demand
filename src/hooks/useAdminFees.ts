@@ -136,8 +136,8 @@ export function useAdminFees(filter: FilterType = 'all') {
           if (fee.paymentApprovedAt && (!existing.lastPaymentAt || fee.paymentApprovedAt > existing.lastPaymentAt)) {
             existing.lastPaymentAt = fee.paymentApprovedAt;
           }
-          // Update proof URL if newer
-          if (fee.paymentProofUrl && fee.status === 'AGUARDANDO_APROVACAO') {
+          // Update proof URL - prioritize most recent fee with proof
+          if (fee.paymentProofUrl && (fee.status === 'AGUARDANDO_APROVACAO' || !existing.proofUrl)) {
             existing.proofUrl = fee.paymentProofUrl;
           }
         } else {
@@ -152,7 +152,7 @@ export function useAdminFees(filter: FilterType = 'all') {
             totalFees: fee.feeAmount,
             stripeFees: fee.feeType === 'STRIPE' ? fee.feeAmount : 0,
             manualFees: fee.feeType === 'MANUAL_PIX' ? fee.feeAmount : 0,
-            proofUrl: fee.paymentProofUrl,
+            proofUrl: fee.paymentProofUrl || null,
           });
         }
       }

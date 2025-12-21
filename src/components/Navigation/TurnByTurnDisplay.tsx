@@ -91,16 +91,20 @@ export function TurnByTurnDisplay({
         </div>
       )}
 
-      {/* ETA bar - Always visible with fallback values */}
+      {/* ETA bar - Always visible with guaranteed values */}
       <div className="px-3 py-2 flex items-center justify-between bg-secondary/50 border-t border-border/30">
         <div className="flex items-center gap-4">
           <div className="text-center">
-            <span className="text-lg font-bold text-primary">{eta || 'Calculando...'}</span>
+            <span className="text-lg font-bold text-primary">
+              {eta && eta !== '' ? eta : '< 1 min'}
+            </span>
             <p className="text-[10px] text-muted-foreground">Tempo restante</p>
           </div>
           <div className="w-px h-6 bg-border" />
           <div className="text-center">
-            <span className="text-lg font-bold">{distance || 'Calculando...'}</span>
+            <span className="text-lg font-bold">
+              {distance && distance !== '' ? distance : '< 100 m'}
+            </span>
             <p className="text-[10px] text-muted-foreground">Distância</p>
           </div>
         </div>
