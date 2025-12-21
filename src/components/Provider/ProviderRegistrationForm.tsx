@@ -10,7 +10,8 @@ import {
   Camera, 
   Loader2,
   Truck,
-  AlertCircle
+  AlertCircle,
+  CreditCard
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -21,6 +22,7 @@ interface ProviderRegistrationFormProps {
   currentPhone: string;
   currentAvatar: string | null;
   currentVehiclePlate: string | null;
+  currentCpf: string | null;
   onComplete: () => void;
 }
 
@@ -47,23 +49,65 @@ function formatPlate(value: string): string {
   return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
 }
 
+function formatCPF(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function validateCPF(cpf: string): boolean {
+  const cleaned = cpf.replace(/\D/g, '');
+  if (cleaned.length !== 11) return false;
+  
+  // Check for known invalid CPFs (all same digits)
+  if (/^(\d)\1{10}$/.test(cleaned)) return false;
+  
+  // Validate first check digit
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(cleaned[i]) * (10 - i);
+  }
+  let remainder = (sum * 10) % 11;
+  if (remainder === 10) remainder = 0;
+  if (remainder !== parseInt(cleaned[9])) return false;
+  
+  // Validate second check digit
+  sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(cleaned[i]) * (11 - i);
+  }
+  remainder = (sum * 10) % 11;
+  if (remainder === 10) remainder = 0;
+  if (remainder !== parseInt(cleaned[10])) return false;
+  
+  return true;
+}
+
 export function ProviderRegistrationForm({
   userId,
   currentName,
   currentPhone,
   currentAvatar,
   currentVehiclePlate,
+  currentCpf,
   onComplete,
 }: ProviderRegistrationFormProps) {
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(currentName || '');
   const [phone, setPhone] = useState(currentPhone ? formatPhone(currentPhone) : '');
+  const [cpf, setCpf] = useState(currentCpf ? formatCPF(currentCpf) : '');
+  const [cpfError, setCpfError] = useState<string | null>(null);
   const [vehiclePlate, setVehiclePlate] = useState(currentVehiclePlate ? formatPlate(currentVehiclePlate) : '');
   const [vehicleType, setVehicleType] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(currentAvatar);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // If CPF is already set, it cannot be changed
+  const cpfLocked = !!currentCpf;
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -123,6 +167,37 @@ export function ProviderRegistrationForm({
     }
   };
 
+  const handleCpfChange = (value: string) => {
+    const formatted = formatCPF(value);
+    setCpf(formatted);
+    setCpfError(null);
+    
+    // Validate when complete
+    const digits = formatted.replace(/\D/g, '');
+    if (digits.length === 11) {
+      if (!validateCPF(formatted)) {
+        setCpfError('CPF inválido');
+      }
+    }
+  };
+
+  const checkCpfUniqueness = async (cpfValue: string): Promise<boolean> => {
+    const cleanCpf = cpfValue.replace(/\D/g, '');
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('cpf', cleanCpf)
+      .neq('user_id', userId)
+      .maybeSingle();
+    
+    if (error) {
+      console.error('Error checking CPF:', error);
+      return true; // Allow to proceed if check fails
+    }
+    
+    return !data; // Return true if CPF is unique (no other user has it)
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -135,6 +210,27 @@ export function ProviderRegistrationForm({
     if (!phone || phone.replace(/\D/g, '').length < 10) {
       toast.error('Telefone válido é obrigatório');
       return;
+    }
+
+    // CPF validation (required for providers)
+    if (!cpfLocked) {
+      const cpfDigits = cpf.replace(/\D/g, '');
+      if (cpfDigits.length !== 11) {
+        toast.error('CPF é obrigatório para prestadores');
+        return;
+      }
+      if (!validateCPF(cpf)) {
+        toast.error('CPF inválido');
+        return;
+      }
+      
+      // Check uniqueness
+      const isUnique = await checkCpfUniqueness(cpf);
+      if (!isUnique) {
+        setCpfError('Este CPF já está cadastrado');
+        toast.error('Este CPF já está cadastrado no sistema');
+        return;
+      }
     }
 
     if (!avatarUrl) {
@@ -159,17 +255,32 @@ export function ProviderRegistrationForm({
 
     setLoading(true);
     try {
-      // Update profile
+      // Update profile (include CPF only if not locked)
+      const profileUpdate: Record<string, any> = {
+        name: name.trim(),
+        phone: phone.replace(/\D/g, ''),
+        avatar_url: avatarUrl,
+      };
+      
+      if (!cpfLocked) {
+        profileUpdate.cpf = cpf.replace(/\D/g, '');
+      }
+      
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          name: name.trim(),
-          phone: phone.replace(/\D/g, ''),
-          avatar_url: avatarUrl,
-        })
+        .update(profileUpdate)
         .eq('user_id', userId);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        // Check if it's a unique constraint violation
+        if (profileError.code === '23505' && profileError.message?.includes('cpf')) {
+          setCpfError('Este CPF já está cadastrado');
+          toast.error('Este CPF já está cadastrado no sistema');
+          setLoading(false);
+          return;
+        }
+        throw profileError;
+      }
 
       // Update provider_data
       const { error: providerError } = await supabase
@@ -187,7 +298,7 @@ export function ProviderRegistrationForm({
 
       toast.success('Cadastro concluído com sucesso!');
       onComplete();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error completing registration:', error);
       toast.error('Erro ao salvar cadastro. Tente novamente.');
     } finally {
@@ -264,6 +375,34 @@ export function ProviderRegistrationForm({
                   className="pl-10 h-12 rounded-xl"
                 />
               </div>
+            </div>
+
+            {/* CPF */}
+            <div className="space-y-2">
+              <Label htmlFor="cpf">CPF <span className="text-destructive">*</span></Label>
+              <div className="relative">
+                <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  id="cpf"
+                  value={cpf}
+                  onChange={(e) => handleCpfChange(e.target.value)}
+                  placeholder="000.000.000-00"
+                  className={`pl-10 h-12 rounded-xl ${cpfError ? 'border-destructive' : ''} ${cpfLocked ? 'bg-muted cursor-not-allowed' : ''}`}
+                  maxLength={14}
+                  disabled={cpfLocked}
+                />
+              </div>
+              {cpfError && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {cpfError}
+                </p>
+              )}
+              {cpfLocked && (
+                <p className="text-xs text-muted-foreground">
+                  CPF não pode ser alterado após o cadastro
+                </p>
+              )}
             </div>
 
             {/* Vehicle Type */}
