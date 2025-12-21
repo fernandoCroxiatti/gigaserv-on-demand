@@ -483,6 +483,7 @@ export type Database = {
           max_debt_limit: number | null
           payout_enabled: boolean | null
           pending_fee_balance: number | null
+          pending_fee_warning_sent_at: string | null
           permanently_blocked: boolean | null
           permanently_blocked_at: string | null
           permanently_blocked_by: string | null
@@ -533,6 +534,7 @@ export type Database = {
           max_debt_limit?: number | null
           payout_enabled?: boolean | null
           pending_fee_balance?: number | null
+          pending_fee_warning_sent_at?: string | null
           permanently_blocked?: boolean | null
           permanently_blocked_at?: string | null
           permanently_blocked_by?: string | null
@@ -585,6 +587,7 @@ export type Database = {
           max_debt_limit?: number | null
           payout_enabled?: boolean | null
           pending_fee_balance?: number | null
+          pending_fee_warning_sent_at?: string | null
           permanently_blocked?: boolean | null
           permanently_blocked_at?: string | null
           permanently_blocked_by?: string | null
@@ -841,6 +844,15 @@ export type Database = {
           current_debt: number
           is_over_limit: boolean
           max_limit: number
+        }[]
+      }
+      get_providers_needing_warning: {
+        Args: never
+        Returns: {
+          max_limit: number
+          pending_balance: number
+          percent_used: number
+          user_id: string
         }[]
       }
       has_role: {
