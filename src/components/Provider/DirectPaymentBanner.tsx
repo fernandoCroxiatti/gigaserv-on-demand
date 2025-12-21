@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DollarSign, AlertTriangle, AlertCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { calculateFee, formatCurrency, formatPercentage, canFinalizeWithFee } from '@/lib/feeCalculator';
+import { getAppCommissionPercentage } from '@/lib/appSettings';
 
 interface DirectPaymentBannerProps {
   amount: number;
@@ -24,36 +24,29 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
 
   // Fetch commission percentage on mount
   useEffect(() => {
+    let cancelled = false;
+
     const fetchCommission = async () => {
       setLoadingFee(true);
       setFetchError(false);
-      try {
-        const { data, error } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'app_commission_percentage')
-          .single();
-        
-        if (error) throw error;
-        
-        if (data?.value !== undefined && data?.value !== null) {
-          const parsed = Number(data.value);
-          if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-            setFeePercentage(parsed);
-          } else {
-            setFetchError(true);
-          }
-        } else {
-          setFetchError(true);
-        }
-      } catch (err) {
-        console.error('Error fetching commission:', err);
+
+      const pct = await getAppCommissionPercentage();
+      if (cancelled) return;
+
+      if (pct === null) {
         setFetchError(true);
-      } finally {
-        setLoadingFee(false);
+        setFeePercentage(null);
+      } else {
+        setFeePercentage(pct);
       }
+
+      setLoadingFee(false);
     };
+
     fetchCommission();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Show loading state

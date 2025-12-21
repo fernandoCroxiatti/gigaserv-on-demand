@@ -29,6 +29,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { calculateFee, createFeeAuditLog, canFinalizeWithFee } from '@/lib/feeCalculator';
+import { parseSettingNumber } from '@/lib/appSettings';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -390,14 +391,21 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
     try {
       // Get commission percentage for audit log
-      const { data: commissionSetting } = await supabase
+      const { data: commissionSetting, error: commissionError } = await supabase
         .from('app_settings')
         .select('value')
         .eq('key', 'app_commission_percentage')
         .single();
-      
-      const commissionPercentage = commissionSetting?.value ? Number(commissionSetting.value) : 0;
-      
+
+      if (commissionError) throw commissionError;
+
+      const commissionPercentage = parseSettingNumber(commissionSetting?.value);
+      if (commissionPercentage === null || commissionPercentage < 0 || commissionPercentage > 100) {
+        toast.error('Taxa do app não configurada. Verifique a configuração.');
+        setIsConfirming(false);
+        return;
+      }
+
       // Calculate fee with invariant checks
       const feeCalc = calculateFee(serviceValue, commissionPercentage);
       
