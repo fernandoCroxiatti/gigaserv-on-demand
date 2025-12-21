@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useAdminFees, FinancialStatus, PixConfig } from '@/hooks/useAdminFees';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   Loader2, 
@@ -19,7 +20,8 @@ import {
   CreditCard,
   Save,
   RefreshCw,
-  Filter
+  Filter,
+  ExternalLink
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -88,6 +90,36 @@ export default function ProviderFinances() {
   );
   const [confirmAction, setConfirmAction] = useState<{ type: 'approve' | 'reject'; providerId: string; providerName: string } | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [loadingProof, setLoadingProof] = useState<string | null>(null);
+
+  const handleViewProof = async (proofPath: string) => {
+    if (!proofPath) return;
+    
+    setLoadingProof(proofPath);
+    try {
+      // Check if it's already a full URL (legacy) or just a path
+      if (proofPath.startsWith('http')) {
+        window.open(proofPath, '_blank');
+        return;
+      }
+      
+      // Generate signed URL for private bucket
+      const { data, error } = await supabase.storage
+        .from('payment-proofs')
+        .createSignedUrl(proofPath, 3600); // 1 hour expiry
+
+      if (error) throw error;
+      
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Error getting signed URL:', err);
+      toast.error('Erro ao abrir comprovante');
+    } finally {
+      setLoadingProof(null);
+    }
+  };
 
   React.useEffect(() => {
     if (pixConfig) {
@@ -384,9 +416,14 @@ export default function ProviderFinances() {
                         <Button 
                           size="sm" 
                           variant="outline"
-                          onClick={() => window.open(provider.proofUrl, '_blank')}
+                          disabled={loadingProof === provider.proofUrl}
+                          onClick={() => handleViewProof(provider.proofUrl!)}
                         >
-                          <Receipt className="w-4 h-4 mr-1" />
+                          {loadingProof === provider.proofUrl ? (
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <ExternalLink className="w-4 h-4 mr-1" />
+                          )}
                           Ver comprovante
                         </Button>
                       ) : (
