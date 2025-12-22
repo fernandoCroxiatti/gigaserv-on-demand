@@ -11,12 +11,9 @@ import {
   Lock,
   Loader2,
   AlertCircle,
-  Car,
-  Smartphone,
   ChevronDown,
   ChevronUp,
-  Banknote,
-  AlertTriangle
+  Banknote
 } from 'lucide-react';
 import { PaymentMethod } from '@/types/chamado';
 import type { Stripe } from '@stripe/stripe-js';
@@ -24,7 +21,6 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getStripePromise } from '@/lib/stripe';
-import { WalletPaymentForm } from './WalletPaymentForm';
 import { calculateFee, formatCurrency, formatPercentage } from '@/lib/feeCalculator';
 import {
   AlertDialog,
@@ -37,7 +33,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-type ExtendedPaymentMethod = PaymentMethod | 'wallet' | 'saved_card' | 'direct_payment';
+type ExtendedPaymentMethod = PaymentMethod | 'saved_card' | 'direct_payment';
 
 interface SavedCard {
   id: string;
@@ -47,8 +43,7 @@ interface SavedCard {
   exp_year?: number;
 }
 
-const basePaymentMethods: { id: ExtendedPaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean; walletOnly?: boolean }[] = [
-  { id: 'wallet', name: 'Apple Pay / Google Pay', icon: Smartphone, description: 'Carteira digital', available: true, walletOnly: true },
+const basePaymentMethods: { id: ExtendedPaymentMethod; name: string; icon: React.ElementType; description: string; available: boolean }[] = [
   { id: 'credit_card', name: 'Cartão de crédito/débito', icon: CreditCard, description: 'Pagamento seguro', available: true },
   { id: 'direct_payment', name: 'PIX / Dinheiro ao prestador', icon: Banknote, description: 'Pague diretamente ao prestador', available: true },
 ];
@@ -132,7 +127,6 @@ export function ClientAwaitingPaymentView() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<ExtendedPaymentMethod | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
-  const [walletAvailable, setWalletAvailable] = useState<boolean | null>(null);
   
   // Saved cards state
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
@@ -195,14 +189,8 @@ export function ClientAwaitingPaymentView() {
     fetchCommissionPercentage();
   }, []);
 
-  // Filter payment methods based on wallet availability
-  const paymentMethods = basePaymentMethods
-    .filter((method) => {
-      if (method.walletOnly) {
-        return walletAvailable === true;
-      }
-      return true;
-    });
+  // Payment methods list (no filtering needed)
+  const paymentMethods = basePaymentMethods;
 
   const provider = availableProviders.find(p => p.id === chamado?.prestadorId);
 
@@ -307,40 +295,6 @@ export function ClientAwaitingPaymentView() {
     }
   }, [chamado?.id, chamado?.valor]);
 
-  // Check wallet availability on mount
-  useEffect(() => {
-    const checkWalletAvailability = async () => {
-      const stripe = await stripePromise;
-      if (!stripe) return;
-
-      try {
-        const pr = stripe.paymentRequest({
-          country: 'BR',
-          currency: 'brl',
-          total: {
-            label: 'GigaSOS - Verificação',
-            amount: 100, // dummy amount for check
-          },
-        });
-
-        const result = await pr.canMakePayment();
-        console.log('Wallet availability check:', result);
-        setWalletAvailable(!!result);
-        
-        // If wallet is available, auto-select it for better UX
-        if (result && walletAvailable === null) {
-          setSelectedPayment('wallet');
-        }
-      } catch (err) {
-        console.log('Wallet check error:', err);
-        setWalletAvailable(false);
-      }
-    };
-
-    if (stripePromise && walletAvailable === null) {
-      checkWalletAvailability();
-    }
-  }, [stripePromise, walletAvailable]);
 
   useEffect(() => {
     if (chamado?.id) {
@@ -403,22 +357,6 @@ export function ClientAwaitingPaymentView() {
     }
   };
 
-  // Handle wallet not available - fallback to card
-  const handleWalletNotAvailable = useCallback(() => {
-    setWalletAvailable(false);
-    // If wallet was selected, switch to card
-    if (selectedPayment === 'wallet') {
-      setSelectedPayment('credit_card');
-      createPaymentIntent('credit_card');
-    }
-  }, [selectedPayment, createPaymentIntent]);
-
-  // Handle wallet available detection
-  const handleWalletAvailable = useCallback(() => {
-    if (walletAvailable === null) {
-      setWalletAvailable(true);
-    }
-  }, [walletAvailable]);
 
   // For Card/Wallet: The webhook handles status update, but we can show success immediately
   const handlePaymentSuccess = () => {
@@ -688,37 +626,6 @@ export function ClientAwaitingPaymentView() {
               </>
             )}
 
-            {/* WALLET PAYMENT - Only show when wallet is selected */}
-            {selectedPayment === 'wallet' && !loadingPayment && (
-              <>
-                {clientSecret && stripePromise ? (
-                  <Elements 
-                    stripe={stripePromise} 
-                    options={{ 
-                      clientSecret,
-                      appearance: {
-                        theme: 'stripe',
-                        variables: {
-                          colorPrimary: 'hsl(var(--primary))',
-                        },
-                      },
-                    }}
-                  >
-                    <WalletPaymentForm 
-                      clientSecret={clientSecret}
-                      onSuccess={handlePaymentSuccess}
-                      onError={handlePaymentError}
-                      amount={paymentAmount}
-                      onNotAvailable={handleWalletNotAvailable}
-                    />
-                  </Elements>
-                ) : !paymentError ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  </div>
-                ) : null}
-              </>
-            )}
 
             {/* DIRECT PAYMENT (PIX/CASH) - Only show when direct_payment is selected */}
             {selectedPayment === 'direct_payment' && (() => {
