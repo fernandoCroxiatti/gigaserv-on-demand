@@ -385,7 +385,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('chamados')
         .select('*')
         .eq('status', 'searching')
-        .is('prestador_id', null);
+        .is('prestador_id', null)
+        .neq('cliente_id', authUser.id); // Don't show own chamados
 
       if (error) {
         console.error('[Chamados] Error checking existing chamados:', error);
@@ -402,6 +403,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         for (const dbChamado of searchingChamados) {
           const chamadoData = mapDbChamadoToChamado(dbChamado);
+          
+          // CRITICAL: Don't show own chamados (extra safety check)
+          if (dbChamado.cliente_id === authUser.id) {
+            console.log(`[Chamados] Skipping chamado ${chamadoData.id}: is own chamado`);
+            continue;
+          }
           
           // Check if this provider has already declined this chamado
           const declinedProviderIds = dbChamado.declined_provider_ids || [];
@@ -454,6 +461,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const dbChamado = payload.new as DbChamado;
           const newChamado = mapDbChamadoToChamado(dbChamado);
+          
+          // CRITICAL: Don't show own chamados
+          if (dbChamado.cliente_id === authUser.id) {
+            console.log(`[Chamados] New chamado ${newChamado.id}: is own chamado, skipping`);
+            return;
+          }
           
           // Check if this provider has already declined this chamado
           const declinedProviderIds = dbChamado.declined_provider_ids || [];
@@ -528,6 +541,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // Only process UPDATE if it's for a chamado going TO searching status
           // OR if declined_provider_ids changed (someone declined)
           if (dbChamado.status !== 'searching' || dbChamado.prestador_id !== null) {
+            return;
+          }
+          
+          // CRITICAL: Don't show own chamados
+          if (dbChamado.cliente_id === authUser.id) {
+            console.log(`[Chamados] Updated chamado ${dbChamado.id}: is own chamado, skipping`);
             return;
           }
           
