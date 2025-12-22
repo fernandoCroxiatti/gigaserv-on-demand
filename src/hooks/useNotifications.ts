@@ -70,6 +70,39 @@ export function useNotifications() {
     }
   }, [isNative]);
 
+  // Deep link navigation handler
+  const handleDeepLinkNavigation = useCallback((data: Record<string, unknown>) => {
+    const url = data?.url as string;
+    const chamadoId = data?.chamadoId as string;
+    const notificationType = data?.notificationType as string;
+
+    console.log('[useNotifications] Deep link navigation:', { url, chamadoId, notificationType });
+
+    // Navigate using window.location for reliable navigation
+    if (url && url !== '/') {
+      window.location.href = url;
+      return;
+    }
+
+    if (chamadoId) {
+      window.location.href = `/?chamado=${chamadoId}`;
+      return;
+    }
+
+    if (notificationType?.includes('payment')) {
+      window.location.href = '/profile?tab=payments';
+      return;
+    }
+
+    if (notificationType?.includes('fee') || notificationType?.includes('pending')) {
+      window.location.href = '/profile?tab=fees';
+      return;
+    }
+
+    // Default to home
+    window.location.href = '/';
+  }, []);
+
   // Setup native push listeners
   useEffect(() => {
     if (!isNative || !user?.id) return;
@@ -86,16 +119,30 @@ export function useNotifications() {
       // On notification received (foreground)
       (notification) => {
         console.log('[useNotifications] Native notification received:', notification);
-        // Could trigger local sound/vibration here
+        // Show in-app toast for foreground notifications
+        const data = notification.data || {};
+        const title = notification.title || 'Notificação';
+        const body = notification.body || '';
+        
+        // Import toast dynamically to avoid circular deps
+        import('sonner').then(({ toast }) => {
+          toast(title, {
+            description: body,
+            action: data.url ? {
+              label: 'Ver',
+              onClick: () => handleDeepLinkNavigation(data)
+            } : undefined,
+            duration: 5000
+          });
+        });
       },
       // On notification action (user tapped)
       (action) => {
         console.log('[useNotifications] Notification action:', action);
         // Navigate based on notification data
-        const data = action.notification.data;
-        if (data?.chamadoId) {
-          // Could trigger navigation here
-        }
+        const data = action.notification.data || {};
+        handleDeepLinkNavigation(data);
+        
         // Clear delivered notifications
         removeAllDeliveredNotifications();
       }
