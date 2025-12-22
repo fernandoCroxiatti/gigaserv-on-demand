@@ -70,7 +70,35 @@ export function useNotifications() {
     }
   }, [isNative]);
 
-  // Deep link navigation handler
+  // Save FCM token to database - MUST be defined before the useEffect that uses it
+  const saveFcmToken = useCallback(async (token: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('notification_subscriptions')
+        .upsert({
+          user_id: user.id,
+          endpoint: `fcm://${token}`, // Use fcm:// prefix to identify FCM tokens
+          p256dh: 'fcm', // Placeholder for FCM
+          auth: 'fcm', // Placeholder for FCM
+          user_agent: navigator.userAgent,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,endpoint'
+        });
+
+      if (error) {
+        console.error('[useNotifications] Error saving FCM token:', error);
+      } else {
+        console.log('[useNotifications] FCM token saved to database');
+      }
+    } catch (error) {
+      console.error('[useNotifications] Error saving FCM token:', error);
+    }
+  }, [user?.id]);
+
+  // Deep link navigation handler - MUST be defined before the useEffect that uses it
   const handleDeepLinkNavigation = useCallback((data: Record<string, unknown>) => {
     const url = data?.url as string;
     const chamadoId = data?.chamadoId as string;
@@ -155,35 +183,7 @@ export function useNotifications() {
         nativeListenersCleanupRef.current();
       }
     };
-  }, [isNative, user?.id]);
-
-  // Save FCM token to database
-  const saveFcmToken = useCallback(async (token: string) => {
-    if (!user?.id) return;
-
-    try {
-      const { error } = await supabase
-        .from('notification_subscriptions')
-        .upsert({
-          user_id: user.id,
-          endpoint: `fcm://${token}`, // Use fcm:// prefix to identify FCM tokens
-          p256dh: 'fcm', // Placeholder for FCM
-          auth: 'fcm', // Placeholder for FCM
-          user_agent: navigator.userAgent,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,endpoint'
-        });
-
-      if (error) {
-        console.error('[useNotifications] Error saving FCM token:', error);
-      } else {
-        console.log('[useNotifications] FCM token saved to database');
-      }
-    } catch (error) {
-      console.error('[useNotifications] Error saving FCM token:', error);
-    }
-  }, [user?.id]);
+  }, [isNative, user?.id, saveFcmToken, handleDeepLinkNavigation]);
 
   // Load user preferences
   useEffect(() => {
