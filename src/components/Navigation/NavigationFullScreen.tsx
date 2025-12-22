@@ -102,13 +102,21 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     clearRoute 
   } = useNavigationRoute();
 
+  // Track last toast time to avoid spam
+  const lastRecalcToastRef = useRef<number>(0);
+
   // Route deviation detection for auto-recalculation
   const { checkDeviation, clearRouteCache } = useRouteDeviation({
     maxDeviationMeters: 50,
     minTimeOffRoute: 3000,
     onRecalculateNeeded: useCallback(() => {
       if (mode === 'provider' && providerGPSLocation && currentDestination) {
-        toast.info('Recalculando rota...');
+        // Only show toast if 15 seconds passed since last one
+        const now = Date.now();
+        if (now - lastRecalcToastRef.current > 15000) {
+          lastRecalcToastRef.current = now;
+          // Silent recalculation - no toast for auto recalc
+        }
         forceRecalculateRoute(providerGPSLocation, currentDestination, chamado?.id || '', navigationPhase);
       }
     }, [mode, forceRecalculateRoute, navigationPhase]),
@@ -476,7 +484,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       return;
     }
     
-    toast.info('Recalculando rota...');
+    // Brief toast only for manual recalculation
+    toast.info('Recalculando...');
     
     const result = await forceRecalculateRoute(
       providerLocation,
