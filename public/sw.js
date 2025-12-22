@@ -83,28 +83,57 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Notification click event
+// Notification click event - handles deep links
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked:', event);
   
   event.notification.close();
   
-  const urlToOpen = event.notification.data?.url || '/';
+  // Get deep link URL from notification data
+  const notificationData = event.notification.data || {};
+  let urlToOpen = notificationData.url || '/';
+  
+  // Handle action buttons if present
+  if (event.action) {
+    console.log('[SW] Action clicked:', event.action);
+    // Handle specific actions
+    if (event.action === 'view') {
+      urlToOpen = notificationData.url || '/';
+    } else if (event.action === 'dismiss') {
+      return; // Just close the notification
+    }
+  }
+  
+  // Ensure URL is absolute
+  if (urlToOpen.startsWith('/')) {
+    urlToOpen = self.location.origin + urlToOpen;
+  }
+  
+  console.log('[SW] Opening URL:', urlToOpen);
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((windowClients) => {
-        // Check if there's already a window open
+        // Check if there's already a window open at our origin
         for (let client of windowClients) {
           if (client.url.includes(self.location.origin) && 'focus' in client) {
+            // Send message to existing window with deep link data
             client.postMessage({
               type: 'NOTIFICATION_CLICKED',
-              data: event.notification.data
+              data: notificationData,
+              url: urlToOpen
             });
+            
+            // Navigate the existing window to the deep link
+            if ('navigate' in client) {
+              client.navigate(urlToOpen);
+            }
+            
             return client.focus();
           }
         }
-        // If no window is open, open a new one
+        
+        // If no window is open, open a new one with the deep link
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }

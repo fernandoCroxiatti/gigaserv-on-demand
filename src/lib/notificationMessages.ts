@@ -120,9 +120,12 @@ export function getRandomMessage<T>(messages: T[]): T {
   return messages[Math.floor(Math.random() * messages.length)];
 }
 
-// Check if within preferred notification hours
+// Check if within preferred notification hours (08h-20h Brazil time)
 export function isWithinPreferredHours(): boolean {
-  const hour = new Date().getHours();
-  // Morning: 7h-9h or Evening: 17h-19h
-  return (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19);
+  const now = new Date();
+  // Brazil is UTC-3
+  const utcHour = now.getUTCHours();
+  const brazilHour = utcHour - 3 < 0 ? utcHour - 3 + 24 : utcHour - 3;
+  // Allow notifications between 08:00 and 20:00
+  return brazilHour >= 8 && brazilHour <= 20;
 }

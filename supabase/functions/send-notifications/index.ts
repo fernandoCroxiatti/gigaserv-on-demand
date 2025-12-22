@@ -70,11 +70,14 @@ function getRandomMessage<T>(messages: T[]): T {
   return messages[Math.floor(Math.random() * messages.length)];
 }
 
+// Check if within preferred notification hours (08h-20h Brazil time)
 function isWithinPreferredHours(): boolean {
   const now = new Date();
+  // Brazil is UTC-3
   const hour = now.getUTCHours() - 3;
   const adjustedHour = hour < 0 ? hour + 24 : hour;
-  return (adjustedHour >= 7 && adjustedHour <= 9) || (adjustedHour >= 17 && adjustedHour <= 19);
+  // Allow notifications between 08:00 and 20:00
+  return adjustedHour >= 8 && adjustedHour <= 20;
 }
 
 // Base64URL encoding helpers
@@ -541,14 +544,51 @@ async function sendPushToUser(
     return false;
   }
 
+  // Build deep link URL based on notification type
+  const getDeepLinkUrl = (type: string, notifData: Record<string, unknown> | undefined): string => {
+    const baseUrl = '/';
+    
+    // Deep link mapping by notification type
+    if (type.includes('new_chamado') || type.includes('chamado_received')) {
+      return notifData?.chamadoId ? `/?chamado=${notifData.chamadoId}` : '/';
+    }
+    if (type.includes('provider_accepted') || type.includes('chamado_accepted')) {
+      return notifData?.chamadoId ? `/?chamado=${notifData.chamadoId}` : '/';
+    }
+    if (type.includes('payment')) {
+      return '/profile?tab=payments';
+    }
+    if (type.includes('stripe') || type.includes('payout')) {
+      return '/profile?tab=bank';
+    }
+    if (type.includes('fee') || type.includes('pending')) {
+      return '/profile?tab=fees';
+    }
+    if (type.includes('provider_motivational')) {
+      return '/'; // Main provider screen
+    }
+    if (type.includes('client_reengagement')) {
+      return '/'; // Main client screen
+    }
+    
+    return baseUrl;
+  };
+
+  const deepLinkUrl = getDeepLinkUrl(notificationType, data);
+
   const payload = {
     title,
     body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     tag: notificationType,
-    data: data || {},
-    requireInteraction: notificationType.includes('chamado'),
+    data: {
+      ...(data || {}),
+      url: deepLinkUrl,
+      notificationType,
+      timestamp: Date.now()
+    },
+    requireInteraction: notificationType.includes('chamado') || notificationType.includes('new_chamado'),
     vibrate: notificationType.includes('chamado') ? [300, 100, 300] : [200, 100, 200]
   };
 
