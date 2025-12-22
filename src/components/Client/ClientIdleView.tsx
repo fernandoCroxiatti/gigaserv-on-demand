@@ -1,20 +1,42 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyProviders } from '@/hooks/useNearbyProviders';
+import { useNotifications } from '@/hooks/useNotifications';
 import { Button } from '../ui/button';
 import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 import { VehicleType } from '@/types/vehicleTypes';
 import { VehicleTypeSelector } from './VehicleTypeSelector';
+import { LocationPermissionModal } from '../Permissions/LocationPermissionModal';
+import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
+import { NotificationPermissionModal } from '../Notifications/NotificationPermissionModal';
 
 const NEARBY_RADIUS_KM = 15;
 
 export function ClientIdleView() {
   const { createChamado } = useApp();
-  const { location: userLocation, loading: locationLoading, error: locationError, refresh: refreshLocation } = useGeolocation();
+  const { 
+    location: userLocation, 
+    loading: locationLoading, 
+    error: locationError, 
+    refresh: refreshLocation,
+    requestLocation,
+    permissionStatus,
+    isGranted: locationGranted,
+    isDenied: locationDenied,
+    needsPermission: locationNeedsPermission
+  } = useGeolocation({ watch: false, autoRequest: false });
+  
+  const {
+    shouldAskPermission: shouldAskNotifPermission,
+    requestPermission: requestNotifPermission,
+    showPermissionModal: showNotifModal,
+    handlePermissionConfirm: handleNotifConfirm,
+    handlePermissionDecline: handleNotifDecline,
+  } = useNotifications();
   
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
   const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType>('carro_passeio');
@@ -23,6 +45,16 @@ export function ClientIdleView() {
   const [usingGpsLocation, setUsingGpsLocation] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
+  
+  // Permission modals
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [locationPermissionLoading, setLocationPermissionLoading] = useState(false);
+  const [dismissedLocationBanner, setDismissedLocationBanner] = useState(false);
+  
+  // Pending action after permission
+  const pendingActionRef = useRef<'gps' | 'submit' | null>(null);
+  const hasAskedNotifRef = useRef(false);
 
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
@@ -49,6 +81,16 @@ export function ClientIdleView() {
     return nearbyProviders.filter(p => p.services.includes(selectedService)).length;
   }, [nearbyProviders, selectedService]);
 
+  // Handle location permission result
+  useEffect(() => {
+    if (locationGranted && userLocation && pendingActionRef.current === 'gps') {
+      setOrigem(userLocation);
+      setOrigemText(userLocation.address);
+      setUsingGpsLocation(true);
+      pendingActionRef.current = null;
+    }
+  }, [locationGranted, userLocation]);
+
   const handleOrigemSelect = (location: Location) => {
     setOrigem(location);
     setOrigemText(location.address);
@@ -66,13 +108,40 @@ export function ClientIdleView() {
   };
 
   const handleUseMyLocation = () => {
-    if (userLocation) {
-      setOrigem(userLocation);
-      setOrigemText(userLocation.address);
-      setUsingGpsLocation(true);
-    } else {
-      refreshLocation();
+    // If permission already granted, just get location
+    if (locationGranted) {
+      if (userLocation) {
+        setOrigem(userLocation);
+        setOrigemText(userLocation.address);
+        setUsingGpsLocation(true);
+      } else {
+        refreshLocation();
+      }
+      return;
     }
+
+    // If permission denied, show banner (already visible)
+    if (locationDenied) {
+      return;
+    }
+
+    // Need to ask for permission - show explanation modal first
+    pendingActionRef.current = 'gps';
+    setShowLocationModal(true);
+  };
+
+  const handleLocationPermissionConfirm = async () => {
+    setLocationPermissionLoading(true);
+    setShowLocationModal(false);
+    
+    // Now request the actual system permission
+    requestLocation();
+    setLocationPermissionLoading(false);
+  };
+
+  const handleLocationPermissionDecline = () => {
+    setShowLocationModal(false);
+    pendingActionRef.current = null;
   };
 
   const handleDestinoSelect = (location: Location) => {
@@ -85,10 +154,26 @@ export function ClientIdleView() {
     setDestino(null);
   };
 
-  const handleSolicitar = () => {
+  const handleSolicitar = async () => {
     if (!origem) return;
     if (needsDestination && !destino) return;
+    
+    // Ask for notification permission after first submit
+    if (shouldAskNotifPermission && !hasAskedNotifRef.current) {
+      hasAskedNotifRef.current = true;
+      setShowNotificationModal(true);
+    }
+    
     createChamado(selectedService, origem, needsDestination ? destino : null, selectedVehicleType);
+  };
+
+  const handleNotifModalConfirm = async () => {
+    setShowNotificationModal(false);
+    await requestNotifPermission();
+  };
+
+  const handleNotifModalDecline = () => {
+    setShowNotificationModal(false);
   };
 
   const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType;
@@ -102,14 +187,22 @@ export function ClientIdleView() {
         destino={needsDestination ? destino : null}
         showRoute={needsDestination && !!origem && !!destino}
         providers={mapProviders}
-        showUserLocation={!origem}
+        showUserLocation={!origem && locationGranted}
         animateProviders={true}
         className="absolute inset-0" 
         zoom={origem ? 14 : 13}
       />
       
       {/* Provider status - Compact floating card */}
-      <div className="absolute top-20 left-3 right-3 z-10">
+      <div className="absolute top-20 left-3 right-3 z-10 space-y-2">
+        {/* Location denied banner */}
+        {locationDenied && !dismissedLocationBanner && (
+          <PermissionDeniedBanner 
+            type="location"
+            onDismiss={() => setDismissedLocationBanner(true)}
+          />
+        )}
+        
         <div className="bg-card rounded-xl px-4 py-3 shadow-sm flex items-center gap-3 animate-fade-in">
           <div className="relative flex-shrink-0">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -142,8 +235,12 @@ export function ClientIdleView() {
               </>
             ) : (
               <>
-                <p className="text-sm font-medium text-muted-foreground">Procurando prestadores...</p>
-                <p className="text-xs text-muted-foreground">Normalmente leva poucos minutos</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {!origem && !userLocation ? 'Informe sua localização' : 'Procurando prestadores...'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {!origem && !userLocation ? 'Use o GPS ou digite o endereço' : 'Normalmente leva poucos minutos'}
+                </p>
               </>
             )}
           </div>
@@ -219,11 +316,13 @@ export function ClientIdleView() {
               {/* GPS Button - Primary action */}
               <button
                 onClick={handleUseMyLocation}
-                disabled={locationLoading}
+                disabled={locationLoading || locationDenied}
                 className={`w-full flex items-center gap-3 p-3 mb-2 rounded-xl transition-all ${
                   usingGpsLocation 
                     ? 'bg-primary/10 ring-1 ring-primary/30' 
-                    : 'bg-secondary/50 hover:bg-secondary'
+                    : locationDenied
+                      ? 'bg-muted/50 opacity-60 cursor-not-allowed'
+                      : 'bg-secondary/50 hover:bg-secondary'
                 }`}
               >
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
@@ -237,10 +336,10 @@ export function ClientIdleView() {
                 </div>
                 <div className="flex-1 text-left">
                   <p className={`font-medium text-sm ${usingGpsLocation ? 'text-primary' : 'text-foreground'}`}>
-                    Usar minha localização
+                    {locationDenied ? 'Localização desativada' : 'Usar minha localização'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {usingGpsLocation ? 'GPS ativo' : 'Detectar via GPS'}
+                    {usingGpsLocation ? 'GPS ativo' : locationDenied ? 'Ative nas configurações' : 'Detectar via GPS'}
                   </p>
                 </div>
                 {usingGpsLocation && (
@@ -259,7 +358,7 @@ export function ClientIdleView() {
                 />
               </div>
               
-              {locationError && (
+              {locationError && !locationDenied && (
                 <p className="text-xs text-destructive mt-1.5 flex items-center gap-1">
                   <MapPin className="w-3 h-3" />
                   {locationError}
@@ -309,6 +408,23 @@ export function ClientIdleView() {
           </Button>
         </div>
       </div>
+
+      {/* Location Permission Modal */}
+      <LocationPermissionModal 
+        open={showLocationModal}
+        onConfirm={handleLocationPermissionConfirm}
+        onDecline={handleLocationPermissionDecline}
+        userType="client"
+        loading={locationPermissionLoading}
+      />
+
+      {/* Notification Permission Modal */}
+      <NotificationPermissionModal 
+        open={showNotificationModal}
+        onConfirm={handleNotifModalConfirm}
+        onDecline={handleNotifModalDecline}
+        userType="client"
+      />
     </div>
   );
 }
