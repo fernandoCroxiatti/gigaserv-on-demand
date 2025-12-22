@@ -136,6 +136,7 @@ export type Database = {
           provider_amount: number | null
           provider_arrived_at_destination: boolean | null
           provider_arrived_at_vehicle: boolean | null
+          provider_finish_requested_at: string | null
           route_distance_meters: number | null
           route_duration_seconds: number | null
           route_polyline: string | null
@@ -174,6 +175,7 @@ export type Database = {
           provider_amount?: number | null
           provider_arrived_at_destination?: boolean | null
           provider_arrived_at_vehicle?: boolean | null
+          provider_finish_requested_at?: string | null
           route_distance_meters?: number | null
           route_duration_seconds?: number | null
           route_polyline?: string | null
@@ -212,6 +214,7 @@ export type Database = {
           provider_amount?: number | null
           provider_arrived_at_destination?: boolean | null
           provider_arrived_at_vehicle?: boolean | null
+          provider_finish_requested_at?: string | null
           route_distance_meters?: number | null
           route_duration_seconds?: number | null
           route_polyline?: string | null
@@ -903,6 +906,7 @@ export type Database = {
         | "negotiating"
         | "awaiting_payment"
         | "in_service"
+        | "pending_client_confirmation"
         | "finished"
         | "canceled"
       fee_type: "STRIPE" | "MANUAL_PIX"
@@ -1071,6 +1075,7 @@ export const Constants = {
         "negotiating",
         "awaiting_payment",
         "in_service",
+        "pending_client_confirmation",
         "finished",
         "canceled",
       ],

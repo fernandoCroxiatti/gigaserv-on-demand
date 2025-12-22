@@ -11,6 +11,7 @@ const statusConfig: Record<ChamadoStatus, { label: string; icon: React.ElementTy
   awaiting_payment: { label: 'Aguardando pagamento', icon: Clock, color: 'bg-status-searching/10 text-status-searching' },
   confirmed: { label: 'Confirmado', icon: CreditCard, color: 'bg-status-accepted/10 text-status-accepted' },
   in_service: { label: 'Em serviço', icon: Navigation, color: 'bg-status-inService/10 text-status-inService' },
+  pending_client_confirmation: { label: 'Aguard. Confirmação', icon: Clock, color: 'bg-orange-500/10 text-orange-500' },
   finished: { label: 'Finalizado', icon: Flag, color: 'bg-status-finished/10 text-status-finished' },
   canceled: { label: 'Cancelado', icon: XCircle, color: 'bg-status-canceled/10 text-status-canceled' },
 };

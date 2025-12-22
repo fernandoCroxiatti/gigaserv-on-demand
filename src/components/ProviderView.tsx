@@ -4,6 +4,7 @@ import { ProviderIdleView } from './Provider/ProviderIdleView';
 import { ProviderNegotiatingView } from './Provider/ProviderNegotiatingView';
 import { ProviderAwaitingPaymentView } from './Provider/ProviderAwaitingPaymentView';
 import { ProviderInServiceView } from './Provider/ProviderInServiceView';
+import { ProviderPendingConfirmationView } from './Provider/ProviderPendingConfirmationView';
 import { ProviderFinishedView } from './Provider/ProviderFinishedView';
 import { IncomingRequestCard } from './Provider/IncomingRequestCard';
 import { TermsAcceptanceModal } from './Provider/TermsAcceptanceModal';
@@ -68,6 +69,8 @@ export function ProviderView() {
           case 'confirmed':
           case 'in_service':
             return <ProviderInServiceView />;
+          case 'pending_client_confirmation':
+            return <ProviderPendingConfirmationView />;
           case 'finished':
             return <ProviderFinishedView />;
           case 'canceled':

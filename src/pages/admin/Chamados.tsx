@@ -38,6 +38,7 @@ const STATUS_CONFIG: Record<ChamadoStatus, { label: string; className: string }>
   negotiating: { label: 'Negociando', className: 'bg-status-inService text-white' },
   awaiting_payment: { label: 'Aguard. Pagamento', className: 'bg-amber-500 text-white' },
   in_service: { label: 'Em Andamento', className: 'bg-status-inService text-white' },
+  pending_client_confirmation: { label: 'Aguard. Confirmação', className: 'bg-orange-500 text-white' },
   finished: { label: 'Concluída', className: 'bg-status-finished text-white' },
   canceled: { label: 'Cancelada', className: 'bg-destructive text-white' },
 };
