@@ -11,14 +11,18 @@ interface UseRouteDeviationOptions {
   maxDeviationMeters?: number;
   /** Minimum time off-route before triggering recalculation (ms) */
   minTimeOffRoute?: number;
+  /** Minimum time between recalculations (ms) - debounce */
+  minRecalculateInterval?: number;
   /** Callback when route recalculation is needed */
   onRecalculateNeeded?: () => void;
 }
 
-// Default deviation threshold (50 meters from route)
-const DEFAULT_MAX_DEVIATION = 50;
-// Time to wait before triggering recalculation (3 seconds)
-const DEFAULT_MIN_TIME_OFF_ROUTE = 3000;
+// Default deviation threshold (100 meters from route - increased to reduce API calls)
+const DEFAULT_MAX_DEVIATION = 100;
+// Time to wait before triggering recalculation (5 seconds for confirmation)
+const DEFAULT_MIN_TIME_OFF_ROUTE = 5000;
+// MINIMUM 2 MINUTES between recalculations to reduce API costs
+const DEFAULT_MIN_RECALCULATE_INTERVAL = 120000;
 
 /**
  * Decode Google Maps encoded polyline to array of coordinates
@@ -119,18 +123,25 @@ function pointToSegmentDistance(
 
 /**
  * Hook to detect if user has deviated from the calculated route
- * and trigger automatic route recalculation
+ * and trigger automatic route recalculation with strict controls.
+ * 
+ * OPTIMIZED FOR COST REDUCTION:
+ * - 100m deviation threshold (vs 50m before)
+ * - 2 minute minimum between recalculations
+ * - 5 second confirmation before triggering
  */
 export function useRouteDeviation(options: UseRouteDeviationOptions = {}) {
   const {
     maxDeviationMeters = DEFAULT_MAX_DEVIATION,
     minTimeOffRoute = DEFAULT_MIN_TIME_OFF_ROUTE,
+    minRecalculateInterval = DEFAULT_MIN_RECALCULATE_INTERVAL,
     onRecalculateNeeded,
   } = options;
 
   const offRouteStartRef = useRef<number | null>(null);
   const lastRecalculateRef = useRef<number>(0);
   const decodedRouteRef = useRef<Array<{ lat: number; lng: number }>>([]);
+  const isRecalculatingRef = useRef<boolean>(false);
 
   /**
    * Check if current location is off the route
@@ -143,7 +154,7 @@ export function useRouteDeviation(options: UseRouteDeviationOptions = {}) {
       return { isOffRoute: false, distanceFromRoute: 0 };
     }
 
-    // Decode polyline if changed
+    // Decode polyline if changed (cached for performance)
     if (decodedRouteRef.current.length === 0) {
       try {
         decodedRouteRef.current = decodePolyline(routePolyline);
@@ -172,8 +183,8 @@ export function useRouteDeviation(options: UseRouteDeviationOptions = {}) {
         minDistance = distance;
       }
       
-      // Early exit if on route
-      if (minDistance < maxDeviationMeters * 0.5) break;
+      // Early exit if clearly on route
+      if (minDistance < maxDeviationMeters * 0.3) break;
     }
 
     const isOffRoute = minDistance > maxDeviationMeters;
@@ -186,18 +197,34 @@ export function useRouteDeviation(options: UseRouteDeviationOptions = {}) {
         console.log('[RouteDeviation] User went off route, distance:', minDistance.toFixed(0), 'm');
       }
 
-      // Check if off-route long enough for recalculation
+      // Check if off-route long enough AND debounce period passed
       const timeOffRoute = now - offRouteStartRef.current;
       const timeSinceLastRecalc = now - lastRecalculateRef.current;
 
-      if (timeOffRoute >= minTimeOffRoute && timeSinceLastRecalc > 10000) {
-        console.log('[RouteDeviation] Triggering route recalculation');
+      // STRICT CONDITIONS:
+      // 1. Off-route for at least 5 seconds (confirmation)
+      // 2. At least 2 minutes since last recalculation
+      // 3. Not currently recalculating
+      if (
+        timeOffRoute >= minTimeOffRoute && 
+        timeSinceLastRecalc >= minRecalculateInterval &&
+        !isRecalculatingRef.current
+      ) {
+        console.log('[RouteDeviation] Triggering route recalculation (controlled)');
+        isRecalculatingRef.current = true;
         lastRecalculateRef.current = now;
         decodedRouteRef.current = []; // Clear cached route
+        
+        // Call the recalculate callback
         onRecalculateNeeded?.();
+        
+        // Reset the recalculating flag after a delay
+        setTimeout(() => {
+          isRecalculatingRef.current = false;
+        }, 5000);
       }
     } else {
-      // Reset off-route timer
+      // Reset off-route timer when back on route
       if (offRouteStartRef.current !== null) {
         console.log('[RouteDeviation] User back on route');
         offRouteStartRef.current = null;
@@ -205,18 +232,28 @@ export function useRouteDeviation(options: UseRouteDeviationOptions = {}) {
     }
 
     return { isOffRoute, distanceFromRoute: minDistance };
-  }, [maxDeviationMeters, minTimeOffRoute, onRecalculateNeeded]);
+  }, [maxDeviationMeters, minTimeOffRoute, minRecalculateInterval, onRecalculateNeeded]);
 
   /**
-   * Clear cached route data (call when route changes)
+   * Clear cached route data (call when route changes or phase changes)
    */
   const clearRouteCache = useCallback(() => {
     decodedRouteRef.current = [];
     offRouteStartRef.current = null;
+    isRecalculatingRef.current = false;
+  }, []);
+
+  /**
+   * Force reset the recalculation timer (for manual recalculations)
+   */
+  const resetRecalculateTimer = useCallback(() => {
+    lastRecalculateRef.current = Date.now();
+    isRecalculatingRef.current = false;
   }, []);
 
   return {
     checkDeviation,
     clearRouteCache,
+    resetRecalculateTimer,
   };
 }
