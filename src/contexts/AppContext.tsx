@@ -40,6 +40,8 @@ interface AppContextType {
   confirmValue: () => Promise<void>;
   cancelChamado: () => Promise<void>;
   finishService: () => Promise<void>;
+  confirmServiceFinish: () => Promise<void>;
+  disputeServiceFinish: () => Promise<void>;
   resetChamado: () => void;
   submitReview: (rating: number, tags: string[], comment: string) => Promise<void>;
   
@@ -903,6 +905,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Change to pending_client_confirmation instead of finished
+      const { error } = await supabase
+        .from('chamados')
+        .update({ 
+          status: 'pending_client_confirmation',
+          provider_finish_requested_at: new Date().toISOString()
+        })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
+
+      toast.success('Aguardando confirmação do cliente');
+    } catch (error) {
+      console.error('Error finishing service:', error);
+      toast.error('Erro ao finalizar serviço');
+    }
+  }, [chamado, canAccessProviderFeatures]);
+
+  // Client confirms that service was completed successfully
+  const confirmServiceFinish = useCallback(async () => {
+    if (!chamado) return;
+
+    try {
       const { error } = await supabase
         .from('chamados')
         .update({ status: 'finished' })
@@ -910,13 +935,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      if (providerData) {
-        await supabase
+      // Increment provider's total services
+      if (chamado.prestadorId) {
+        const { data: providerInfo } = await supabase
           .from('provider_data')
-          .update({
-            total_services: (providerData.total_services || 0) + 1,
-          })
-          .eq('user_id', authUser?.id);
+          .select('total_services')
+          .eq('user_id', chamado.prestadorId)
+          .single();
+        
+        if (providerInfo) {
+          await supabase
+            .from('provider_data')
+            .update({
+              total_services: (providerInfo.total_services || 0) + 1,
+            })
+            .eq('user_id', chamado.prestadorId);
+        }
       }
 
       // Record service fee automatically
@@ -927,22 +961,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
         
         if (feeError) {
           console.error('Error recording service fee:', feeError);
-          // Don't block the finish flow, just log the error
         } else {
-        console.log('Service fee recorded successfully for chamado:', chamado.id);
+          console.log('Service fee recorded successfully for chamado:', chamado.id);
         }
       } catch (feeErr) {
         console.error('Error invoking record-service-fee:', feeErr);
       }
 
       toast.success('Serviço finalizado com sucesso!');
-      // NOTE: Do NOT clear chamado here - let the user complete the review first
-      // The chamado will be cleared when user submits review or clicks "Pular"
     } catch (error) {
-      console.error('Error finishing service:', error);
-      toast.error('Erro ao finalizar serviço');
+      console.error('Error confirming service finish:', error);
+      toast.error('Erro ao confirmar finalização');
     }
-  }, [chamado, providerData, authUser, canAccessProviderFeatures]);
+  }, [chamado]);
+
+  // Client disputes that service was not completed correctly
+  const disputeServiceFinish = useCallback(async () => {
+    if (!chamado) return;
+
+    try {
+      // Revert to in_service status so they can resolve the issue
+      const { error } = await supabase
+        .from('chamados')
+        .update({ 
+          status: 'in_service',
+          provider_finish_requested_at: null 
+        })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
+
+      toast.info('Disputa registrada. O serviço voltou ao status "Em Andamento".');
+    } catch (error) {
+      console.error('Error disputing service finish:', error);
+      toast.error('Erro ao registrar disputa');
+    }
+  }, [chamado]);
 
   const resetChamado = useCallback(() => {
     setChamado(null);
@@ -1165,6 +1219,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirmValue,
       cancelChamado,
       finishService,
+      confirmServiceFinish,
+      disputeServiceFinish,
       resetChamado,
       submitReview,
       initiatePayment,

@@ -6,6 +6,7 @@ export type ChamadoStatus =
   | 'awaiting_payment'
   | 'confirmed'
   | 'in_service'
+  | 'pending_client_confirmation'
   | 'finished'
   | 'canceled';
 
