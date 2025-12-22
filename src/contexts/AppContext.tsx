@@ -247,14 +247,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
             
             setChamado(updated);
             
-            if (updated.status === 'accepted') {
-              toast.success('Um prestador aceitou seu chamado!');
-            } else if (updated.status === 'in_service') {
-              toast.success('Pagamento aprovado! Serviço iniciado.');
-            } else if (updated.status === 'finished') {
-              toast.success('Serviço finalizado!');
+            // Notify based on new status and user role
+            if (profile?.active_profile === 'client') {
+              if (newStatus === 'accepted') {
+                toast.success('Um prestador aceitou seu chamado!');
+              } else if (newStatus === 'in_service') {
+                toast.success('Pagamento aprovado! Serviço iniciado.');
+              } else if (newStatus === 'pending_client_confirmation') {
+                toast.info('O prestador finalizou o serviço. Por favor, confirme.');
+              } else if (newStatus === 'finished') {
+                toast.success('Serviço finalizado!');
+              }
+            } else if (profile?.active_profile === 'provider') {
+              if (newStatus === 'finished' && oldStatus === 'pending_client_confirmation') {
+                toast.success('Cliente confirmou a finalização!');
+              } else if (newStatus === 'in_service' && oldStatus === 'pending_client_confirmation') {
+                toast.warning('Cliente reportou um problema. Verifique.');
+              }
             }
-            // Removed: searching status toast - too noisy
           }
         }
       )
