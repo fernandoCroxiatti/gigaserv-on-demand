@@ -102,27 +102,29 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     clearRoute 
   } = useNavigationRoute();
 
-  // Track last toast time to avoid spam
-  const lastRecalcToastRef = useRef<number>(0);
-
-  // Route deviation detection for auto-recalculation
-  const { checkDeviation, clearRouteCache } = useRouteDeviation({
-    maxDeviationMeters: 50,
-    minTimeOffRoute: 3000,
+  // Track GPS availability for timeout detection
+  const lastGpsSignalRef = useRef<number>(Date.now());
+  const gpsTimeoutCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  // OPTIMIZED: Route deviation detection with strict controls
+  // - 100m deviation threshold
+  // - 2 minute minimum between recalculations
+  // - 5 second confirmation before triggering
+  const { checkDeviation, clearRouteCache, resetRecalculateTimer } = useRouteDeviation({
+    maxDeviationMeters: 100, // Increased from 50m to reduce API calls
+    minTimeOffRoute: 5000, // 5 seconds to confirm deviation
+    minRecalculateInterval: 120000, // 2 MINUTES minimum between recalculations
     onRecalculateNeeded: useCallback(() => {
       if (mode === 'provider' && providerGPSLocation && currentDestination) {
-        // Only show toast if 15 seconds passed since last one
-        const now = Date.now();
-        if (now - lastRecalcToastRef.current > 15000) {
-          lastRecalcToastRef.current = now;
-          // Silent recalculation - no toast for auto recalc
-        }
+        // Silent recalculation - no toast for auto recalc
+        console.log('[Navigation] Auto-recalculating due to route deviation (controlled)');
         forceRecalculateRoute(providerGPSLocation, currentDestination, chamado?.id || '', navigationPhase);
       }
     }, [mode, forceRecalculateRoute, navigationPhase]),
   });
 
   // Provider mode: use realtime GPS with throttled updates
+  // GPS updates marker position LOCALLY only - no API calls
   const { 
     location: providerGPSLocation, 
     error: gpsError, 
@@ -134,16 +136,22 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     maximumAge: GPS_UPDATE_INTERVAL,
     enableSmoothing: true,
     onLocationUpdate: async (location) => {
-      // Throttle database updates to reduce load
+      // Update last GPS signal time for timeout detection
+      lastGpsSignalRef.current = Date.now();
+      
+      // Throttle database updates to reduce load (5 seconds)
       const now = Date.now();
       if (now - lastGpsUpdateRef.current < GPS_UPDATE_INTERVAL) return;
       lastGpsUpdateRef.current = now;
 
-      // Check route deviation
+      // Check route deviation LOCALLY (no API call here)
+      // Only triggers recalculation if >100m off route for >5s
+      // AND at least 2 minutes since last recalculation
       if (routePolyline) {
         checkDeviation(location, routePolyline);
       }
 
+      // Update provider position in database (for client tracking)
       if (mode === 'provider' && profile?.user_id) {
         try {
           await supabase
@@ -161,6 +169,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       }
     },
   });
+
+  // NOTE: GPS timeout useEffect moved after currentDestination declaration
 
   // Client mode: track provider location via DB
   const { location: trackedProviderLocation } = useProviderTracking(
@@ -191,6 +201,28 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
   // Current destination based on phase
   const currentDestination = isGoingToClient ? chamado.origem : chamado.destino;
+
+  // GPS timeout detection - recalculate if GPS unavailable for 30+ seconds
+  useEffect(() => {
+    if (mode !== 'provider') return;
+    
+    gpsTimeoutCheckRef.current = setInterval(() => {
+      const timeSinceLastSignal = Date.now() - lastGpsSignalRef.current;
+      
+      // If GPS unavailable for more than 30 seconds
+      if (timeSinceLastSignal > 30000 && providerGPSLocation && currentDestination) {
+        console.log('[Navigation] GPS unavailable for 30s, may need recalculation when signal returns');
+        // Clear route cache so next GPS signal can trigger fresh calculation if needed
+        clearRouteCache();
+      }
+    }, 10000); // Check every 10 seconds
+    
+    return () => {
+      if (gpsTimeoutCheckRef.current) {
+        clearInterval(gpsTimeoutCheckRef.current);
+      }
+    };
+  }, [mode, providerGPSLocation, currentDestination, clearRouteCache]);
 
   // Use navigation instructions hook for turn-by-turn and status
   const navigationState = useNavigationInstructions({
@@ -487,6 +519,10 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     // Brief toast only for manual recalculation
     toast.info('Recalculando...');
     
+    // Reset the recalculation timer to respect debounce
+    resetRecalculateTimer();
+    clearRouteCache();
+    
     const result = await forceRecalculateRoute(
       providerLocation,
       currentDestination,
@@ -501,7 +537,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       routeCalculatedRef.current = `${chamado.id}-${navigationPhase}`;
       toast.success('Rota atualizada!');
     }
-  }, [providerLocation, currentDestination, chamado.id, navigationPhase, forceRecalculateRoute]);
+  }, [providerLocation, currentDestination, chamado.id, navigationPhase, forceRecalculateRoute, resetRecalculateTimer, clearRouteCache]);
 
   // Format helpers
   function formatDistance(meters: number): string {
