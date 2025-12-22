@@ -70,9 +70,39 @@ serve(async (req) => {
       );
     }
 
-    // Parse request body
-    const { chamado_id, payment_method_type = 'card' } = await req.json();
-    if (!chamado_id) throw new Error("chamado_id is required");
+    // Parse and validate request body
+    const body = await req.json();
+    const chamado_id = body.chamado_id;
+    const payment_method_type = body.payment_method_type || 'card';
+
+    // Validate payment method type - only allow whitelisted values
+    if (!['card', 'pix'].includes(payment_method_type)) {
+      logStep("Invalid payment method type", { received: payment_method_type });
+      return new Response(
+        JSON.stringify({ error: "Tipo de pagamento inválido. Use 'card' ou 'pix'." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+
+    // Validate chamado_id is present and is a valid UUID format
+    if (!chamado_id || typeof chamado_id !== 'string') {
+      logStep("Missing chamado_id");
+      return new Response(
+        JSON.stringify({ error: "chamado_id é obrigatório" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+
+    // UUID v4 format validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(chamado_id)) {
+      logStep("Invalid chamado_id format", { received: chamado_id });
+      return new Response(
+        JSON.stringify({ error: "Formato de chamado_id inválido" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+
     logStep("Processing chamado", { chamadoId: chamado_id, paymentMethodType: payment_method_type });
 
     // Get chamado details
