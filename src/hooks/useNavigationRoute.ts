@@ -80,6 +80,11 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
         origin: { lat: origin.lat, lng: origin.lng },
         destination: { lat: destination.lat, lng: destination.lng },
         travelMode: google.maps.TravelMode.DRIVING,
+        // Ensure route follows roads with best options
+        avoidHighways: false,
+        avoidTolls: false,
+        provideRouteAlternatives: false,
+        optimizeWaypoints: false,
       });
 
       const leg = result.routes[0]?.legs[0];
@@ -88,13 +93,53 @@ export function useNavigationRoute(): UseNavigationRouteReturn {
       }
 
       // Get encoded polyline string - overview_polyline is an object with 'points' property
-      const overviewPolyline = result.routes[0].overview_polyline;
-      const polylineString = typeof overviewPolyline === 'string' 
-        ? overviewPolyline 
-        : (overviewPolyline as any)?.points || '';
+      // This is the FULL polyline that follows the roads
+      const overviewPolyline = result.routes[0].overview_polyline as unknown;
+      let polylineString = '';
+      
+      if (typeof overviewPolyline === 'string') {
+        polylineString = overviewPolyline;
+      } else if (overviewPolyline && typeof overviewPolyline === 'object') {
+        // It's an object - try to extract the points property
+        const polyObj = overviewPolyline as { points?: string; toJSON?: () => unknown };
+        if (typeof polyObj.points === 'string') {
+          polylineString = polyObj.points;
+        } else if (typeof polyObj.toJSON === 'function') {
+          const json = polyObj.toJSON();
+          polylineString = typeof json === 'string' ? json : ((json as { points?: string })?.points || '');
+        }
+      }
+      
+      // Fallback: try to get from routes directly
+      if (!polylineString && result.routes[0]) {
+        try {
+          // Try to build polyline from all steps
+          const allPoints: google.maps.LatLng[] = [];
+          result.routes[0].legs.forEach(leg => {
+            leg.steps.forEach(step => {
+              if (step.path) {
+                allPoints.push(...step.path);
+              }
+            });
+          });
+          
+          if (allPoints.length > 0) {
+            // Encode the path manually
+            polylineString = google.maps.geometry?.encoding?.encodePath(allPoints) || '';
+          }
+        } catch (e) {
+          console.warn('[Navigation] Failed to build polyline from steps:', e);
+        }
+      }
+      
+      console.log('[Navigation] Polyline obtained:', {
+        hasPolyline: !!polylineString,
+        polylineLength: polylineString.length,
+        polylinePreview: polylineString.substring(0, 50),
+      });
       
       if (!polylineString) {
-        console.warn('[Navigation] No polyline returned from directions API');
+        console.warn('[Navigation] No polyline returned from directions API - route will show as straight line');
       }
       
       const newRouteData: RouteData = {
