@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '@/hooks/useNotifications';
 import { NotificationPermissionModal } from '../Notifications/NotificationPermissionModal';
+import { LocationPermissionModal } from '../Permissions/LocationPermissionModal';
+import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
 import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { FinancialAlertBanner } from './FinancialAlertBanner';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,7 +22,17 @@ const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chav
 export function ProviderIdleView() {
   const { user, toggleProviderOnline, setProviderRadarRange, setProviderServices, updateProviderLocation, providerData } = useApp();
   const { user: authUser } = useAuth();
-  const { location, error: geoError } = useGeolocation(true);
+  const { 
+    location, 
+    error: geoError, 
+    requestLocation,
+    permissionStatus,
+    isGranted: locationGranted,
+    isDenied: locationDenied,
+    needsPermission: locationNeedsPermission,
+    loading: locationLoading
+  } = useGeolocation({ watch: true, autoRequest: false });
+  
   const [showServiceConfig, setShowServiceConfig] = useState(false);
   const [stripeVerified, setStripeVerified] = useState(false);
   const [checkingStripe, setCheckingStripe] = useState(true);
@@ -38,8 +50,15 @@ export function ProviderIdleView() {
     shouldAskPermission,
     requestPermission
   } = useNotifications();
+  
+  // Permission modals
   const [showNotifModal, setShowNotifModal] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [locationPermissionLoading, setLocationPermissionLoading] = useState(false);
+  const [dismissedLocationBanner, setDismissedLocationBanner] = useState(false);
+  
   const hasAskedNotifRef = useRef(false);
+  const pendingToggleOnlineRef = useRef(false);
   
   const isOnline = user?.providerData?.online || false;
   const radarRange = user?.providerData?.radarRange || 15;
@@ -83,6 +102,14 @@ export function ProviderIdleView() {
     checkFinancialStatus();
   }, [authUser?.id, checkDebtLimit, checkProviderCanAccept]);
 
+  // Handle pending toggle online after location permission granted
+  useEffect(() => {
+    if (locationGranted && pendingToggleOnlineRef.current) {
+      pendingToggleOnlineRef.current = false;
+      proceedWithToggleOnline();
+    }
+  }, [locationGranted]);
+
   const toggleService = (service: ServiceType) => {
     const newServices = currentServices.includes(service)
       ? currentServices.filter(s => s !== service)
@@ -93,41 +120,81 @@ export function ProviderIdleView() {
     }
   };
 
-  const handleToggleOnline = async () => {
-    if (!isOnline) {
-      if (!isRegistrationComplete) {
-        toast.error('Finalize seu cadastro para começar a atender.', {
-          action: { label: 'Ir para cadastro', onClick: () => navigate('/profile') },
-        });
-        return;
-      }
+  const proceedWithToggleOnline = async () => {
+    // Ask for notification permission when going online
+    if (shouldAskPermission && !hasAskedNotifRef.current) {
+      hasAskedNotifRef.current = true;
+      setShowNotifModal(true);
+    }
+    
+    await toggleProviderOnline();
+  };
 
-      if (!stripeVerified) {
-        toast.error('Ative os recebimentos para começar a atender.', {
-          action: { label: 'Configurar', onClick: () => navigate('/profile?tab=bank') },
+  const handleToggleOnline = async () => {
+    // If going offline, just toggle
+    if (isOnline) {
+      await toggleProviderOnline();
+      return;
+    }
+
+    // Going online - check requirements first
+    if (!isRegistrationComplete) {
+      toast.error('Finalize seu cadastro para começar a atender.', {
+        action: { label: 'Ir para cadastro', onClick: () => navigate('/profile') },
+      });
+      return;
+    }
+
+    if (!stripeVerified) {
+      toast.error('Ative os recebimentos para começar a atender.', {
+        action: { label: 'Configurar', onClick: () => navigate('/profile?tab=bank') },
+      });
+      return;
+    }
+    
+    // Check if can accept financially
+    if (authUser?.id) {
+      const canAcceptInfo = await checkProviderCanAccept(authUser.id);
+      if (!canAcceptInfo.canAccept) {
+        toast.error('Você possui pendências que impedem de ficar online.', {
+          action: { label: 'Ver taxas', onClick: () => navigate('/profile?tab=fees') },
+          duration: 5000,
         });
         return;
-      }
-      
-      // Check if can accept
-      if (authUser?.id) {
-        const canAcceptInfo = await checkProviderCanAccept(authUser.id);
-        if (!canAcceptInfo.canAccept) {
-          toast.error('Você possui pendências que impedem de ficar online.', {
-            action: { label: 'Ver taxas', onClick: () => navigate('/profile?tab=fees') },
-            duration: 5000,
-          });
-          return;
-        }
-      }
-      
-      if (shouldAskPermission && !hasAskedNotifRef.current) {
-        hasAskedNotifRef.current = true;
-        setShowNotifModal(true);
       }
     }
 
-    await toggleProviderOnline();
+    // Check location permission
+    if (locationDenied) {
+      toast.error('Permissão de localização necessária para ficar online.', {
+        description: 'Ative nas configurações do dispositivo.',
+      });
+      return;
+    }
+
+    if (locationNeedsPermission || !locationGranted) {
+      // Show location explanation modal first
+      pendingToggleOnlineRef.current = true;
+      setShowLocationModal(true);
+      return;
+    }
+
+    // All checks passed, proceed
+    await proceedWithToggleOnline();
+  };
+
+  const handleLocationPermissionConfirm = async () => {
+    setLocationPermissionLoading(true);
+    setShowLocationModal(false);
+    
+    // Request the actual system permission
+    requestLocation();
+    setLocationPermissionLoading(false);
+  };
+
+  const handleLocationPermissionDecline = () => {
+    setShowLocationModal(false);
+    pendingToggleOnlineRef.current = false;
   };
 
   useEffect(() => {
@@ -140,16 +207,24 @@ export function ProviderIdleView() {
     <div className="relative h-full provider-theme">
       <RealMapView className="absolute inset-0" center={location || undefined} showSearchRadius={isOnline} searchRadius={radarRange} />
 
-      {geoError && (
+      {/* Location error/denied banner */}
+      {(geoError || locationDenied) && !dismissedLocationBanner && (
         <div className="absolute top-20 left-3 right-3 z-10">
-          <div className="bg-destructive/10 rounded-xl px-4 py-3 flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-destructive flex-shrink-0" />
-            <p className="text-sm text-destructive">{geoError}</p>
-          </div>
+          {locationDenied ? (
+            <PermissionDeniedBanner 
+              type="location"
+              onDismiss={() => setDismissedLocationBanner(true)}
+            />
+          ) : geoError ? (
+            <div className="bg-destructive/10 rounded-xl px-4 py-3 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-destructive flex-shrink-0" />
+              <p className="text-sm text-destructive">{geoError}</p>
+            </div>
+          ) : null}
         </div>
       )}
 
-      <div className={`absolute ${geoError ? 'top-36' : 'top-20'} left-3 right-3 z-10 animate-slide-down`}>
+      <div className={`absolute ${(geoError || locationDenied) && !dismissedLocationBanner ? 'top-36' : 'top-20'} left-3 right-3 z-10 animate-slide-down`}>
         <div className={`bg-card rounded-xl px-4 py-3 shadow-sm ${isOnline ? 'ring-1 ring-provider-primary/20' : ''}`}>
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">
@@ -213,8 +288,13 @@ export function ProviderIdleView() {
                 <p className="text-xs text-muted-foreground">{isOnline ? 'Recebendo chamados' : 'Ative para receber'}</p>
               </div>
             </div>
-            <Button variant={isOnline ? 'provider' : 'outline'} onClick={handleToggleOnline} className="h-10 px-5 font-semibold" disabled={checkingStripe}>
-              {isOnline ? 'Ficar offline' : 'Ficar online'}
+            <Button 
+              variant={isOnline ? 'provider' : 'outline'} 
+              onClick={handleToggleOnline} 
+              className="h-10 px-5 font-semibold" 
+              disabled={checkingStripe || locationLoading}
+            >
+              {locationLoading ? 'Obtendo GPS...' : isOnline ? 'Ficar offline' : 'Ficar online'}
             </Button>
           </div>
 
@@ -269,7 +349,25 @@ export function ProviderIdleView() {
         </div>
       </div>
       
-      <NotificationPermissionModal open={showNotifModal} onConfirm={async () => { setShowNotifModal(false); await requestPermission(); }} onDecline={() => setShowNotifModal(false)} userType="provider" />
+      {/* Location Permission Modal */}
+      <LocationPermissionModal 
+        open={showLocationModal}
+        onConfirm={handleLocationPermissionConfirm}
+        onDecline={handleLocationPermissionDecline}
+        userType="provider"
+        loading={locationPermissionLoading}
+      />
+
+      {/* Notification Permission Modal */}
+      <NotificationPermissionModal 
+        open={showNotifModal} 
+        onConfirm={async () => { 
+          setShowNotifModal(false); 
+          await requestPermission(); 
+        }} 
+        onDecline={() => setShowNotifModal(false)} 
+        userType="provider" 
+      />
     </div>
   );
 }
