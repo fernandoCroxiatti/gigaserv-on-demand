@@ -4,8 +4,8 @@
   "description": "Assistência veicular 24h - Guincho, Borracharia, Mecânica e Chaveiro",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FF6B00",
-  "theme_color": "#FF6B00",
+  "background_color": "#0A2E1A",
+  "theme_color": "#22C55E",
   "orientation": "portrait",
   "icons": [
     {
