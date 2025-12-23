@@ -839,7 +839,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [chamado]);
 
   const cancelChamado = useCallback(async () => {
-    if (!chamado || !authUser) return;
+    if (!chamado || !authUser) {
+      console.log('[CancelChamado] No chamado or authUser');
+      return;
+    }
 
     const isProvider = profile?.active_profile === 'provider' && canAccessProviderFeatures;
     const isBeforeServiceStart = ['searching', 'accepted', 'negotiating', 'awaiting_payment'].includes(chamado.status);
@@ -849,14 +852,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (isProvider && isBeforeServiceStart) {
         console.log('[CancelChamado] Provider canceling before service start - resuming search');
         
-        // Get current declined providers list
-        const { data: currentChamado } = await supabase
+        // Get current declined providers list - use maybeSingle to avoid error on no rows
+        const { data: currentChamado, error: fetchError } = await supabase
           .from('chamados')
-          .select('declined_provider_ids')
+          .select('declined_provider_ids, status')
           .eq('id', chamado.id)
-          .single();
+          .maybeSingle();
 
-        const declinedIds = currentChamado?.declined_provider_ids || [];
+        if (fetchError) {
+          console.error('[CancelChamado] Error fetching chamado:', fetchError);
+          throw fetchError;
+        }
+
+        // If chamado no longer exists or status changed, just clear local state
+        if (!currentChamado) {
+          console.log('[CancelChamado] Chamado no longer exists, clearing local state');
+          setChamado(null);
+          setChatMessages([]);
+          return;
+        }
+
+        const declinedIds = currentChamado.declined_provider_ids || [];
         
         // Add current provider to declined list
         const updatedDeclinedIds = [...new Set([...declinedIds, authUser.id])];
@@ -872,33 +888,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
             stripe_payment_intent_id: null,
             declined_provider_ids: updatedDeclinedIds,
           })
-          .eq('id', chamado.id);
+          .eq('id', chamado.id)
+          .eq('prestador_id', authUser.id); // Only update if this provider is assigned
 
-        if (error) throw error;
-        // Removed toast - provider already sees the state change
+        if (error) {
+          console.error('[CancelChamado] Error updating chamado:', error);
+          throw error;
+        }
+        
+        toast.info('Chamado liberado para outros prestadores');
         
         // Clear provider's local chamado state
-        setTimeout(() => {
-          setChamado(null);
-          setChatMessages([]);
-        }, 1000);
+        setChamado(null);
+        setChatMessages([]);
         return;
       }
 
       // For CLIENT canceling or DURING/AFTER service: full cancel
+      console.log('[CancelChamado] Client or post-service cancel');
+      
       const { error } = await supabase
         .from('chamados')
         .update({ status: 'canceled' })
-        .eq('id', chamado.id);
+        .eq('id', chamado.id)
+        .eq('cliente_id', authUser.id); // Only update if this client owns the chamado
 
-      if (error) throw error;
+      if (error) {
+        console.error('[CancelChamado] Error canceling:', error);
+        throw error;
+      }
 
       toast.info('Chamado cancelado');
       
-      setTimeout(() => {
-        setChamado(null);
-        setChatMessages([]);
-      }, 2000);
+      setChamado(null);
+      setChatMessages([]);
     } catch (error) {
       console.error('Error canceling chamado:', error);
       toast.error('Erro ao cancelar chamado');
