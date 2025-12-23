@@ -37,7 +37,7 @@ const POSITION_UPDATE_INTERVAL = 5000; // 5 seconds for real-time position updat
 // After a provider declines, wait this long before expanding radius
 const DECLINE_EXPANSION_DELAY = 2000; // 2 seconds
 // Cooldown before retrying a declined provider (when no one else is available)
-const COOLDOWN_RETRY_MS = 2 * 60 * 1000; // 2 minutes
+const COOLDOWN_RETRY_MS = 10 * 1000; // 10 seconds
 
 // Track decline timestamps per provider for this chamado
 interface DeclineInfo {
