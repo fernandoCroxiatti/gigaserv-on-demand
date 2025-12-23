@@ -225,12 +225,15 @@ export function useProgressiveSearch({
     );
     
     const elapsed = now - oldestDecline.declinedAt;
-    const remaining = Math.max(0, COOLDOWN_RETRY_MS - elapsed);
+    // ALWAYS wait at least COOLDOWN_RETRY_MS from NOW if this is a fresh decline
+    // (elapsed < 1000 means it just happened)
+    const remaining = elapsed < 1000 ? COOLDOWN_RETRY_MS : Math.max(0, COOLDOWN_RETRY_MS - elapsed);
     
-    console.log(`[ProgressiveSearch] Cooldown remaining: ${Math.ceil(remaining / 1000)}s for provider ${oldestDecline.providerId}`);
+    console.log(`[ProgressiveSearch] Cooldown remaining: ${Math.ceil(remaining / 1000)}s for provider ${oldestDecline.providerId} (elapsed: ${elapsed}ms)`);
     
     // Update UI with countdown
-    setCooldownRemaining(Math.ceil(remaining / 1000));
+    const initialCountdown = Math.ceil(remaining / 1000);
+    setCooldownRemaining(initialCountdown);
     
     // Start countdown interval
     if (cooldownIntervalRef.current) clearInterval(cooldownIntervalRef.current);
@@ -403,11 +406,18 @@ export function useProgressiveSearch({
     declineInfoRef.current = [];
     
     // Initialize declined providers from DB
+    // NOTE: We don't add excludedProviderIds to declineInfoRef here because
+    // these come from the database (provider already declined) and we want
+    // the cooldown to start fresh from when the search begins
     setDeclinedProviderIds(new Set(excludedProviderIds));
-    // Also track decline timestamps from DB (assume they just happened)
-    excludedProviderIds.forEach(id => {
-      declineInfoRef.current.push({ providerId: id, declinedAt: Date.now() });
-    });
+    // Track decline timestamps for DB-excluded providers as "just happened"
+    // so they get the full cooldown period before retry
+    if (excludedProviderIds.length > 0) {
+      console.log(`[ProgressiveSearch] Initializing ${excludedProviderIds.length} excluded providers from DB with fresh cooldown`);
+      excludedProviderIds.forEach(id => {
+        declineInfoRef.current.push({ providerId: id, declinedAt: Date.now() });
+      });
+    }
 
     // Subscribe to real-time updates
     subscribeToProviderUpdates(userLocation, SEARCH_RADII[SEARCH_RADII.length - 1], serviceType);
