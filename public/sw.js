@@ -1,16 +1,35 @@
-// Service Worker for GIGA S.O.S Push Notifications with Web Push support
+// Service Worker for GIGA S.O.S - PWA with Push Notifications
+// Optimized for Web/PWA mode only (not registered in Capacitor)
 
-const CACHE_NAME = 'gigasos-v2';
+const CACHE_NAME = 'gigasos-v3';
+const STATIC_CACHE_NAME = 'gigasos-static-v3';
 
-// Install event - activate immediately
+// Assets to cache for offline support (static assets only)
+const STATIC_ASSETS = [
+  '/icon-192.png',
+  '/icon-512.png',
+  '/favicon.png',
+  '/manifest.json'
+];
+
+// Install event - cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v2...');
-  self.skipWaiting();
+  console.log('[SW] Installing service worker v3...');
+  
+  event.waitUntil(
+    caches.open(STATIC_CACHE_NAME)
+      .then((cache) => {
+        console.log('[SW] Caching static assets');
+        return cache.addAll(STATIC_ASSETS);
+      })
+      .then(() => self.skipWaiting())
+  );
 });
 
-// Activate event - claim all clients
+// Activate event - clean old caches and claim clients
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Service worker v2 activated');
+  console.log('[SW] Service worker v3 activated');
+  
   event.waitUntil(
     Promise.all([
       clients.claim(),
@@ -18,20 +37,91 @@ self.addEventListener('activate', (event) => {
       caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name !== CACHE_NAME)
-            .map((name) => caches.delete(name))
+            .filter((name) => name !== CACHE_NAME && name !== STATIC_CACHE_NAME)
+            .map((name) => {
+              console.log('[SW] Deleting old cache:', name);
+              return caches.delete(name);
+            })
         );
       })
     ])
   );
 });
 
-// Minimal fetch handler required for PWA installability (network pass-through, no caching)
+// Fetch handler - Network first for API/dynamic, Cache first for static assets
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests; do not interfere with mutations/uploads
+  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
-  event.respondWith(fetch(event.request));
+  const url = new URL(event.request.url);
+  
+  // Skip caching for:
+  // - Supabase API calls (always need fresh data)
+  // - Stripe calls
+  // - Google Maps
+  // - External APIs
+  const skipCache = 
+    url.hostname.includes('supabase') ||
+    url.hostname.includes('stripe') ||
+    url.hostname.includes('googleapis') ||
+    url.hostname.includes('google.com') ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname.includes('functions/v1');
+
+  if (skipCache) {
+    // Network only for API calls
+    return;
+  }
+
+  // Check if it's a static asset
+  const isStaticAsset = 
+    url.pathname.endsWith('.png') ||
+    url.pathname.endsWith('.jpg') ||
+    url.pathname.endsWith('.svg') ||
+    url.pathname.endsWith('.ico') ||
+    url.pathname === '/manifest.json';
+
+  if (isStaticAsset) {
+    // Cache first for static assets
+    event.respondWith(
+      caches.match(event.request)
+        .then((cachedResponse) => {
+          if (cachedResponse) {
+            // Return cached version, but update cache in background
+            fetch(event.request)
+              .then((networkResponse) => {
+                if (networkResponse.ok) {
+                  caches.open(STATIC_CACHE_NAME)
+                    .then((cache) => cache.put(event.request, networkResponse));
+                }
+              })
+              .catch(() => {});
+            return cachedResponse;
+          }
+          
+          // Not in cache, fetch from network
+          return fetch(event.request)
+            .then((networkResponse) => {
+              if (networkResponse.ok) {
+                const responseClone = networkResponse.clone();
+                caches.open(STATIC_CACHE_NAME)
+                  .then((cache) => cache.put(event.request, responseClone));
+              }
+              return networkResponse;
+            });
+        })
+    );
+    return;
+  }
+
+  // Network first for HTML/JS (ensures updates are immediate)
+  event.respondWith(
+    fetch(event.request)
+      .catch(() => {
+        // Only serve from cache if network fails (offline)
+        return caches.match(event.request);
+      })
+  );
 });
 
 // Push notification event - handles real web push from server
@@ -56,7 +146,6 @@ self.addEventListener('push', (event) => {
       data = { ...data, ...payload };
     } catch (e) {
       console.error('[SW] Error parsing push data:', e);
-      // Try as text
       try {
         data.body = event.data.text();
       } catch (e2) {
@@ -97,22 +186,18 @@ self.addEventListener('notificationclick', (event) => {
   
   event.notification.close();
   
-  // Get deep link URL from notification data
   const notificationData = event.notification.data || {};
   let urlToOpen = notificationData.url || '/';
   
-  // Handle action buttons if present
   if (event.action) {
     console.log('[SW] Action clicked:', event.action);
-    // Handle specific actions
     if (event.action === 'view') {
       urlToOpen = notificationData.url || '/';
     } else if (event.action === 'dismiss') {
-      return; // Just close the notification
+      return;
     }
   }
   
-  // Ensure URL is absolute
   if (urlToOpen.startsWith('/')) {
     urlToOpen = self.location.origin + urlToOpen;
   }
@@ -122,17 +207,14 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((windowClients) => {
-        // Check if there's already a window open at our origin
         for (let client of windowClients) {
           if (client.url.includes(self.location.origin) && 'focus' in client) {
-            // Send message to existing window with deep link data
             client.postMessage({
               type: 'NOTIFICATION_CLICKED',
               data: notificationData,
               url: urlToOpen
             });
             
-            // Navigate the existing window to the deep link
             if ('navigate' in client) {
               client.navigate(urlToOpen);
             }
@@ -141,7 +223,6 @@ self.addEventListener('notificationclick', (event) => {
           }
         }
         
-        // If no window is open, open a new one with the deep link
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }
@@ -154,18 +235,16 @@ self.addEventListener('notificationclose', (event) => {
   console.log('[SW] Notification closed:', event.notification.tag);
 });
 
-// Push subscription change event (when subscription expires or changes)
+// Push subscription change event
 self.addEventListener('pushsubscriptionchange', (event) => {
   console.log('[SW] Push subscription changed');
   
   event.waitUntil(
-    // Re-subscribe and update the server
     self.registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: event.oldSubscription?.options?.applicationServerKey
     }).then((subscription) => {
       console.log('[SW] New subscription:', subscription);
-      // Notify the main app to update the subscription on the server
       return clients.matchAll().then((clients) => {
         clients.forEach((client) => {
           client.postMessage({
@@ -178,7 +257,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
   );
 });
 
-// Background sync for analytics
+// Background sync
 self.addEventListener('sync', (event) => {
   if (event.tag === 'notification-clicked') {
     event.waitUntil(syncNotificationClicks());
@@ -188,3 +267,16 @@ self.addEventListener('sync', (event) => {
 async function syncNotificationClicks() {
   console.log('[SW] Syncing notification clicks...');
 }
+
+// Message handler for manual cache updates
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  
+  if (event.data && event.data.type === 'CLEAR_CACHE') {
+    caches.keys().then((names) => {
+      names.forEach((name) => caches.delete(name));
+    });
+  }
+});
