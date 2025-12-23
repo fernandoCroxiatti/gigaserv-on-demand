@@ -847,15 +847,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const isProvider = profile?.active_profile === 'provider' && canAccessProviderFeatures;
     const isBeforeServiceStart = ['searching', 'accepted', 'negotiating', 'awaiting_payment'].includes(chamado.status);
 
+    console.log('[CancelChamado] Starting cancel', {
+      chamadoId: chamado.id,
+      status: chamado.status,
+      isProvider,
+      isBeforeServiceStart,
+      userId: authUser.id,
+      prestadorId: chamado.prestadorId,
+      clienteId: chamado.clienteId
+    });
+
     try {
       // If PROVIDER cancels BEFORE service starts, resume search instead of canceling
       if (isProvider && isBeforeServiceStart) {
         console.log('[CancelChamado] Provider canceling before service start - resuming search');
         
-        // Get current declined providers list - use maybeSingle to avoid error on no rows
+        // Get current chamado state from DB
         const { data: currentChamado, error: fetchError } = await supabase
           .from('chamados')
-          .select('declined_provider_ids, status')
+          .select('declined_provider_ids, status, prestador_id')
           .eq('id', chamado.id)
           .maybeSingle();
 
@@ -864,38 +874,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
           throw fetchError;
         }
 
-        // If chamado no longer exists or status changed, just clear local state
+        // If chamado no longer exists, just clear local state
         if (!currentChamado) {
           console.log('[CancelChamado] Chamado no longer exists, clearing local state');
           setChamado(null);
           setChatMessages([]);
+          toast.info('Chamado não encontrado');
           return;
         }
 
+        // Check if this provider is actually assigned
+        const isAssigned = currentChamado.prestador_id === authUser.id;
+        console.log('[CancelChamado] Provider assignment check:', { 
+          dbPrestadorId: currentChamado.prestador_id, 
+          userId: authUser.id, 
+          isAssigned 
+        });
+
         const declinedIds = currentChamado.declined_provider_ids || [];
-        
-        // Add current provider to declined list
         const updatedDeclinedIds = [...new Set([...declinedIds, authUser.id])];
 
-        const { error } = await supabase
+        // Build update object
+        const updateData: any = {
+          declined_provider_ids: updatedDeclinedIds,
+        };
+
+        // Only reset fields if provider is actually assigned
+        if (isAssigned) {
+          updateData.status = 'searching';
+          updateData.prestador_id = null;
+          updateData.valor_proposto = null;
+          updateData.valor = null;
+          updateData.payment_status = null;
+          updateData.stripe_payment_intent_id = null;
+        }
+
+        const { error, count } = await supabase
           .from('chamados')
-          .update({ 
-            status: 'searching',
-            prestador_id: null,
-            valor_proposto: null,
-            valor: null,
-            payment_status: null,
-            stripe_payment_intent_id: null,
-            declined_provider_ids: updatedDeclinedIds,
-          })
-          .eq('id', chamado.id)
-          .eq('prestador_id', authUser.id); // Only update if this provider is assigned
+          .update(updateData)
+          .eq('id', chamado.id);
 
         if (error) {
           console.error('[CancelChamado] Error updating chamado:', error);
           throw error;
         }
         
+        console.log('[CancelChamado] Update successful, count:', count);
         toast.info('Chamado liberado para outros prestadores');
         
         // Clear provider's local chamado state
