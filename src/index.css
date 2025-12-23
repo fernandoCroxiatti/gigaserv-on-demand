@@ -300,3 +300,64 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/25;
 }
+
+/* Premium Toast - Uber/99 Style */
+[data-sonner-toaster] {
+  --width: auto;
+  --border-radius: 12px;
+  z-index: 9999 !important;
+}
+
+[data-sonner-toast] {
+  --normal-bg: hsl(0 0% 12%);
+  --normal-text: white;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+[data-sonner-toast][data-type="success"] {
+  --normal-bg: hsl(152 50% 25%);
+}
+
+[data-sonner-toast][data-type="error"] {
+  --normal-bg: hsl(0 55% 35%);
+}
+
+[data-sonner-toast][data-type="warning"] {
+  --normal-bg: hsl(35 75% 35%);
+}
+
+[data-sonner-toast][data-type="info"] {
+  --normal-bg: hsl(217 55% 35%);
+}
+
+/* Toast animation override for smoother feel */
+[data-sonner-toast][data-mounted="true"] {
+  animation: toast-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-sonner-toast][data-removed="true"] {
+  animation: toast-slide-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-slide-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
