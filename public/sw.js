@@ -26,6 +26,14 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Minimal fetch handler required for PWA installability (network pass-through, no caching)
+self.addEventListener('fetch', (event) => {
+  // Only handle GET requests; do not interfere with mutations/uploads
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(fetch(event.request));
+});
+
 // Push notification event - handles real web push from server
 self.addEventListener('push', (event) => {
   console.log('[SW] Push event received:', event);
