@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Send, MessageCircle, User, Navigation, Clock, ArrowRight, Check, Route, Phone } from 'lucide-react';
+import { Send, MessageCircle, User, Navigation, Clock, ArrowRight, Check, Route, Phone, MapPin } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
 import { calculateDistance } from '@/lib/distance';
@@ -12,6 +12,7 @@ export function ProviderNegotiatingView() {
   const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, providerData } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
+  const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
 
   // Fetch client info
   const { name: clientName, phone: clientPhone, loading: contactLoading } = useOtherPartyContact(
@@ -87,6 +88,12 @@ export function ProviderNegotiatingView() {
     if (isNaN(value) || value <= 0) return;
     proposeValue(value);
     setProposedValue('');
+    setSelectedSuggestion(null);
+  };
+
+  const handleSuggestionClick = (value: number) => {
+    setProposedValue(value.toString());
+    setSelectedSuggestion(value);
   };
 
   const handleConfirmValue = () => {
@@ -148,80 +155,156 @@ export function ProviderNegotiatingView() {
         </div>
       </div>
 
-      {/* Bottom negotiation panel - compact */}
+      {/* Bottom negotiation panel */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-2xl shadow-uber-lg max-h-[60vh] flex flex-col">
-          {/* Header - compact */}
-          <div className="px-4 py-2.5 border-b border-border/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-provider-primary/10 rounded-full flex items-center justify-center">
-                  <MessageCircle className="w-3.5 h-3.5 text-provider-primary" />
-                </div>
-                <h3 className="font-semibold text-sm">Negociação</h3>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="w-3 h-3" />
-                <span>{serviceConfig.estimatedTime}</span>
-              </div>
-            </div>
+        <div className="bg-card rounded-t-3xl shadow-uber-lg max-h-[65vh] flex flex-col">
+          
+          {/* Drag handle */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-10 h-1 bg-border rounded-full" />
           </div>
 
-          {/* Trip details with stats - compact */}
-          <div className="px-4 py-2 border-b border-border/30 bg-secondary/30">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex flex-col items-center gap-0.5">
-                <div className="w-1.5 h-1.5 bg-provider-primary rounded-full" />
+          {/* Resumo da corrida - Card compacto */}
+          <div className="px-4 pb-3">
+            <div className="bg-secondary/50 rounded-xl p-3">
+              <h4 className="text-xs font-medium text-muted-foreground mb-2">Resumo da corrida</h4>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1">
+                  <div className="w-7 h-7 bg-background rounded-lg flex items-center justify-center">
+                    <Navigation className="w-3.5 h-3.5 text-provider-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold">{formattedDistanceToClient}</p>
+                    <p className="text-[10px] text-muted-foreground">Até cliente</p>
+                  </div>
+                </div>
+                
                 {hasDestination && (
                   <>
-                    <div className="w-px h-2.5 bg-border" />
-                    <div className="w-1.5 h-1.5 bg-foreground rounded-full" />
+                    <div className="w-px h-8 bg-border" />
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className="w-7 h-7 bg-background rounded-lg flex items-center justify-center">
+                        <Route className="w-3.5 h-3.5 text-provider-primary" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold">{formattedRouteDistance}</p>
+                        <p className="text-[10px] text-muted-foreground">Trajeto</p>
+                      </div>
+                    </div>
+                    <div className="w-px h-8 bg-border" />
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className="w-7 h-7 bg-background rounded-lg flex items-center justify-center">
+                        <Clock className="w-3.5 h-3.5 text-provider-primary" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold">{formattedTravelTime}</p>
+                        <p className="text-[10px] text-muted-foreground">Estimado</p>
+                      </div>
+                    </div>
                   </>
                 )}
-              </div>
-              <div className="flex-1 min-w-0 space-y-0.5">
-                <p className="text-[10px] truncate">{chamado.origem.address}</p>
-                {hasDestination && chamado.destino && (
-                  <p className="text-[10px] truncate text-muted-foreground">{chamado.destino.address}</p>
+                
+                {!hasDestination && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Check className="w-3.5 h-3.5 text-provider-primary" />
+                    <span>Atendimento no local</span>
+                  </div>
                 )}
               </div>
-            </div>
-            
-            {/* Route stats - compact */}
-            {hasDestination && (
-              <div className="grid grid-cols-3 gap-1.5">
-                <div className="bg-background rounded-lg p-1.5 text-center">
-                  <Navigation className="w-3 h-3 mx-auto mb-0.5 text-provider-primary" />
-                  <p className="font-semibold text-[10px]">{formattedDistanceToClient}</p>
-                  <p className="text-[8px] text-muted-foreground">Até cliente</p>
-                </div>
-                <div className="bg-background rounded-lg p-1.5 text-center">
-                  <Route className="w-3 h-3 mx-auto mb-0.5 text-provider-primary" />
-                  <p className="font-semibold text-[10px]">{formattedRouteDistance}</p>
-                  <p className="text-[8px] text-muted-foreground">Trajeto</p>
-                </div>
-                <div className="bg-background rounded-lg p-1.5 text-center">
-                  <Clock className="w-3 h-3 mx-auto mb-0.5 text-provider-primary" />
-                  <p className="font-semibold text-[10px]">{formattedTravelTime}</p>
-                  <p className="text-[8px] text-muted-foreground">Estimado</p>
+              
+              {/* Endereços */}
+              <div className="mt-3 pt-3 border-t border-border/50">
+                <div className="flex items-start gap-2">
+                  <div className="flex flex-col items-center gap-0.5 pt-0.5">
+                    <div className="w-2 h-2 bg-provider-primary rounded-full" />
+                    {hasDestination && (
+                      <>
+                        <div className="w-px h-4 bg-border" />
+                        <MapPin className="w-2.5 h-2.5 text-foreground" />
+                      </>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <p className="text-xs truncate">{chamado.origem.address}</p>
+                    {hasDestination && chamado.destino && (
+                      <p className="text-xs truncate text-muted-foreground">{chamado.destino.address}</p>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
+          </div>
+
+          {/* Seção Negociação de valor */}
+          <div className="px-4 pb-3">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-semibold">Negociação de valor</h3>
+              <span className="text-[10px] text-muted-foreground">{serviceConfig.estimatedTime}</span>
+            </div>
             
-            {/* Service type indicator for non-destination services */}
-            {!hasDestination && (
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <Check className="w-2.5 h-2.5 text-provider-primary" />
-                <span>Atendimento no local</span>
+            {/* Sugestões de valor - Chips */}
+            <div className="flex gap-2 mb-3">
+              {suggestedValues.map((value) => (
+                <button
+                  key={value}
+                  onClick={() => handleSuggestionClick(value)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
+                    selectedSuggestion === value
+                      ? 'bg-provider-primary text-primary-foreground shadow-sm'
+                      : 'bg-secondary hover:bg-secondary/80 text-foreground'
+                  }`}
+                >
+                  R$ {value}
+                </button>
+              ))}
+            </div>
+
+            {/* Campo propor valor */}
+            <div className="flex gap-2 mb-3">
+              <div className="flex-1 flex items-center bg-secondary rounded-xl px-3 border border-border/50 focus-within:border-provider-primary/50 transition-colors">
+                <span className="text-muted-foreground text-sm">R$</span>
+                <input
+                  type="number"
+                  value={proposedValue}
+                  onChange={(e) => {
+                    setProposedValue(e.target.value);
+                    setSelectedSuggestion(null);
+                  }}
+                  placeholder="Proponha um valor"
+                  className="flex-1 bg-transparent py-2.5 px-2 focus:outline-none text-sm font-medium"
+                />
+              </div>
+              <Button 
+                variant="provider" 
+                onClick={handleProposeValue} 
+                disabled={!proposedValue} 
+                size="sm" 
+                className="px-5 h-10 rounded-xl"
+              >
+                Propor
+              </Button>
+            </div>
+
+            {/* Valor acordado */}
+            {chamado.valorProposto && (
+              <div className="p-3 bg-provider-primary/10 rounded-xl flex items-center justify-between border border-provider-primary/20">
+                <span className="text-xs text-muted-foreground">Valor acordado</span>
+                <span className="text-lg font-bold text-provider-primary">
+                  R$ {chamado.valorProposto.toFixed(2)}
+                </span>
               </div>
             )}
           </div>
 
+          {/* Divider */}
+          <div className="mx-4 border-t border-border/50" />
+
           {/* Chat messages - compact */}
-          <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1.5 min-h-[50px] max-h-[80px]">
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-[40px] max-h-[70px]">
             {chatMessages.length === 0 ? (
-              <div className="text-center text-muted-foreground text-[10px] py-1">
-                <p>Proponha um valor</p>
+              <div className="text-center text-muted-foreground text-xs py-1">
+                <MessageCircle className="w-4 h-4 mx-auto mb-1 opacity-50" />
+                <p>Nenhuma mensagem ainda</p>
               </div>
             ) : (
               chatMessages.map((msg) => (
@@ -229,89 +312,55 @@ export function ProviderNegotiatingView() {
                   key={msg.id}
                   className={`flex ${msg.senderType === 'provider' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`max-w-[80%] px-2.5 py-1 rounded-lg ${
+                  <div className={`max-w-[80%] px-3 py-1.5 rounded-2xl ${
                     msg.senderType === 'provider'
-                      ? 'bg-provider-primary text-primary-foreground'
-                      : 'bg-secondary'
+                      ? 'bg-provider-primary text-primary-foreground rounded-br-md'
+                      : 'bg-secondary rounded-bl-md'
                   }`}>
-                    <p className="text-[10px]">{msg.message}</p>
+                    <p className="text-xs">{msg.message}</p>
                   </div>
                 </div>
               ))
             )}
           </div>
 
-          {/* Quick value suggestions - compact */}
-          <div className="px-4 py-1.5">
-            <p className="text-[10px] text-muted-foreground mb-1">Sugestões</p>
-            <div className="flex gap-1.5">
-              {suggestedValues.map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setProposedValue(value.toString())}
-                  className="flex-1 py-1.5 bg-secondary rounded-lg text-xs font-medium hover:bg-provider-primary/10 transition-colors"
-                >
-                  R$ {value}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Value proposal - compact with prominent agreed value */}
-          <div className="px-4 py-2 border-t border-border/30">
-            <div className="flex gap-2">
-              <div className="flex-1 flex items-center bg-secondary/80 rounded-lg px-3">
-                <span className="text-muted-foreground text-sm">R$</span>
-                <input
-                  type="number"
-                  value={proposedValue}
-                  onChange={(e) => setProposedValue(e.target.value)}
-                  placeholder="0,00"
-                  className="flex-1 bg-transparent py-2 px-1.5 focus:outline-none text-base font-semibold"
-                />
-              </div>
-              <Button variant="provider" onClick={handleProposeValue} disabled={!proposedValue} size="sm" className="px-4">
-                Propor
-              </Button>
-            </div>
-
-            {chamado.valorProposto && (
-              <div className="mt-2 p-2 bg-provider-primary/10 rounded-lg flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Valor acordado</span>
-                <span className="text-xl font-bold text-provider-primary">
-                  R$ {chamado.valorProposto.toFixed(2)}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Message input - compact */}
-          <div className="px-4 py-2 border-t border-border/30">
+          {/* Campo de mensagem */}
+          <div className="px-4 py-2">
             <div className="flex gap-2">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Digite uma mensagem..."
-                className="flex-1 bg-secondary/80 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-provider-primary/50"
+                placeholder="Mensagem opcional para o cliente"
+                className="flex-1 bg-secondary rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-provider-primary/50 border border-border/50"
               />
-              <Button variant="provider" onClick={handleSendMessage} size="icon" className="h-9 w-9">
+              <Button 
+                variant="provider" 
+                onClick={handleSendMessage} 
+                size="icon" 
+                className="h-10 w-10 rounded-xl"
+                disabled={!message.trim()}
+              >
                 <Send className="w-4 h-4" />
               </Button>
             </div>
           </div>
 
-          {/* Action buttons - wider */}
-          <div className="px-4 py-3 border-t border-border/50 flex gap-2">
-            <Button variant="outline" onClick={cancelChamado} className="flex-1 h-11 text-sm">
+          {/* Botões de ação - Rodapé */}
+          <div className="px-4 pt-2 pb-4 flex gap-3">
+            <Button 
+              variant="ghost" 
+              onClick={cancelChamado} 
+              className="flex-1 h-12 text-sm font-medium bg-secondary/80 hover:bg-secondary text-muted-foreground rounded-xl"
+            >
               Cancelar
             </Button>
             <Button 
               variant="provider"
               onClick={handleConfirmValue} 
               disabled={!chamado.valorProposto}
-              className="flex-1 h-11 text-sm gap-1.5"
+              className="flex-[2] h-12 text-sm font-semibold gap-2 rounded-xl shadow-md"
             >
               Confirmar valor
               <ArrowRight className="w-4 h-4" />
