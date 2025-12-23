@@ -32,11 +32,11 @@ export function TermsAcceptanceModal({ open, onAccept, isLoading = false }: Term
   return (
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent 
-        className="sm:max-w-md" 
+        className="sm:max-w-md max-h-[90vh] flex flex-col" 
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader className="text-center">
+        <DialogHeader className="text-center shrink-0">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
             <FileText className="h-8 w-8 text-primary" />
           </div>
@@ -48,7 +48,7 @@ export function TermsAcceptanceModal({ open, onAccept, isLoading = false }: Term
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="flex-1 overflow-y-auto space-y-4 py-4 min-h-0">
           <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
             <div className="flex gap-3">
               <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
@@ -61,7 +61,7 @@ export function TermsAcceptanceModal({ open, onAccept, isLoading = false }: Term
             </div>
           </div>
 
-          <ScrollArea className="h-48 rounded-md border p-4">
+          <ScrollArea className="h-40 rounded-md border p-4">
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>
                 Atualizamos nossos Termos de Uso para reforçar regras de segurança, 
@@ -103,7 +103,7 @@ export function TermsAcceptanceModal({ open, onAccept, isLoading = false }: Term
           </Button>
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="shrink-0 pt-4 border-t">
           <Button 
             onClick={handleAccept} 
             disabled={accepting || isLoading}
