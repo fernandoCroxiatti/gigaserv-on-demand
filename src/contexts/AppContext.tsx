@@ -126,7 +126,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   
   // Track recently declined chamados by this provider to prevent immediate re-showing
-  const recentlyDeclinedRef = useRef<Set<string>>(new Set());
+  // Format: chamadoId -> timestamp when declined
+  const recentlyDeclinedRef = useRef<Map<string, number>>(new Map());
+  
+  // Cooldown duration for re-offering declined chamados (10 seconds)
+  const DECLINE_COOLDOWN_MS = 10 * 1000;
 
   // CRITICAL: Determine if user can access provider features
   const perfilPrincipal = (profile?.perfil_principal as 'client' | 'provider') || 'client';
@@ -570,10 +574,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return;
           }
           
-          // Also check our local recently declined set (for race conditions)
-          if (recentlyDeclinedRef.current.has(dbChamado.id)) {
-            console.log(`[Chamados] Updated chamado ${dbChamado.id}: provider recently declined (local), skipping`);
-            return;
+          // Also check our local recently declined map (for race conditions and cooldown)
+          const declinedAt = recentlyDeclinedRef.current.get(dbChamado.id);
+          if (declinedAt) {
+            const elapsed = Date.now() - declinedAt;
+            if (elapsed < DECLINE_COOLDOWN_MS) {
+              const remaining = Math.ceil((DECLINE_COOLDOWN_MS - elapsed) / 1000);
+              console.log(`[Chamados] Updated chamado ${dbChamado.id}: still in cooldown (${remaining}s remaining), skipping`);
+              return;
+            } else {
+              // Cooldown expired, remove from map
+              recentlyDeclinedRef.current.delete(dbChamado.id);
+            }
           }
           
           // Don't re-trigger for the same chamado we already have as incomingRequest
@@ -921,6 +933,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('[CancelChamado] Update successful, provider declined:', authUser.id);
+        
+        // Add to local recently declined map with cooldown to prevent re-offering immediately
+        recentlyDeclinedRef.current.set(chamado.id, Date.now());
+        setTimeout(() => {
+          recentlyDeclinedRef.current.delete(chamado.id);
+          console.log(`[CancelChamado] Cooldown expired for chamado ${chamado.id}, can be re-offered now`);
+        }, DECLINE_COOLDOWN_MS);
+        
         toast.info('Chamado liberado para outros prestadores');
         
         // Clear provider's local chamado state
@@ -1225,8 +1245,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const chamadoId = incomingRequest.id;
     
-    // IMMEDIATELY add to local recently declined set to prevent race conditions
-    recentlyDeclinedRef.current.add(chamadoId);
+    // IMMEDIATELY add to local recently declined map with timestamp to prevent race conditions
+    // The chamado will stay blocked for DECLINE_COOLDOWN_MS (10 seconds)
+    recentlyDeclinedRef.current.set(chamadoId, Date.now());
+    
+    // Schedule removal after cooldown period (10 seconds)
+    setTimeout(() => {
+      recentlyDeclinedRef.current.delete(chamadoId);
+      console.log(`[Chamado] Cooldown expired for chamado ${chamadoId}, can be re-offered now`);
+    }, DECLINE_COOLDOWN_MS);
     
     // Clear the incoming request immediately
     setIncomingRequest(null);
@@ -1249,7 +1276,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .eq('id', chamadoId);
       }
 
-      console.log('[Chamado] Provider declined, recorded in chamado');
+      console.log(`[Chamado] Provider declined chamado ${chamadoId}, cooldown active for ${DECLINE_COOLDOWN_MS / 1000}s`);
     } catch (err) {
       console.error('[Chamado] Error recording decline:', err);
     }
