@@ -26,7 +26,7 @@ export function TermsAcceptanceModal({ open, onAccept, isLoading = false }: Term
   };
 
   const handleReadTerms = () => {
-    window.open('/terms', '_blank');
+    navigate('/terms');
   };
 
   return (

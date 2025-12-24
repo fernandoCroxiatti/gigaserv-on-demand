@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { safeLocalStorage } from '@/lib/safeStorage';
 
 /**
  * Boot phases for safe initialization
@@ -20,17 +21,6 @@ interface SafeInitializationState {
 
 /**
  * Safe Initialization Hook
- * 
- * Manages a safe boot sequence for Android release builds:
- * 1. Shows static splash (no async operations)
- * 2. Waits for basic environment to be ready
- * 3. Shows profile selection before any auth check
- * 4. Only then proceeds to auth and backend operations
- * 
- * This prevents crashes from:
- * - Accessing native APIs before they're ready
- * - Async operations during app startup
- * - Missing permissions blocking the boot
  */
 export function useSafeInitialization() {
   const [state, setState] = useState<SafeInitializationState>({
@@ -54,7 +44,7 @@ export function useSafeInitialization() {
 
         // Check if we're in a native app environment
         const isNative = Capacitor.isNativePlatform();
-        
+
         setState(prev => ({
           ...prev,
           isNative,
@@ -67,7 +57,6 @@ export function useSafeInitialization() {
         if (!mounted) return;
 
         // ALWAYS show welcome/presentation screen first
-        // No automatic login, API calls, or location requests
         setState(prev => ({
           ...prev,
           phase: 'profile_select',
@@ -93,12 +82,8 @@ export function useSafeInitialization() {
 
   // Called when user clicks "Começar" - ONLY then start auth check
   const selectProfile = useCallback((profile: 'client' | 'provider') => {
-    try {
-      localStorage.setItem('selectedProfile', profile);
-    } catch {
-      // localStorage might not be available
-    }
-    
+    safeLocalStorage.setItem('selectedProfile', profile);
+
     setState(prev => ({
       ...prev,
       selectedProfile: profile,
@@ -116,12 +101,8 @@ export function useSafeInitialization() {
 
   // Reset to welcome screen (for logout or error recovery)
   const resetToProfileSelection = useCallback(() => {
-    try {
-      localStorage.removeItem('selectedProfile');
-    } catch {
-      // Ignore errors
-    }
-    
+    safeLocalStorage.removeItem('selectedProfile');
+
     setState(prev => ({
       ...prev,
       selectedProfile: null,

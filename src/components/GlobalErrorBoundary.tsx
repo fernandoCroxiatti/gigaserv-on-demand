@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { spaNavigate } from '@/lib/spaNavigation';
 
 interface Props {
   children: ReactNode;
@@ -33,14 +34,14 @@ export class GlobalErrorBoundary extends Component<Props, State> {
 
   handleRetry = () => {
     this.setState({ hasError: false, error: null });
-    // Force page reload to reset all state
-    window.location.reload();
+    // No hard reload (safer for WebView). Re-dispatch current route.
+    spaNavigate(window.location.pathname + window.location.search, { replace: true });
   };
 
   handleGoHome = () => {
     this.setState({ hasError: false, error: null });
-    // Navigate to home without full reload
-    window.location.href = '/';
+    // SPA navigation (no page reload)
+    spaNavigate('/', { replace: true });
   };
 
   render() {

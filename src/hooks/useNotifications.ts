@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { spaNavigate } from '@/lib/spaNavigation';
 import { 
   isNativeApp, 
   isPushAvailable, 
@@ -79,9 +80,9 @@ export function useNotifications() {
         .from('notification_subscriptions')
         .upsert({
           user_id: user.id,
-          endpoint: `fcm://${token}`, // Use fcm:// prefix to identify FCM tokens
-          p256dh: 'fcm', // Placeholder for FCM
-          auth: 'fcm', // Placeholder for FCM
+          endpoint: `fcm://${token}`,
+          p256dh: 'fcm',
+          auth: 'fcm',
           user_agent: navigator.userAgent,
           updated_at: new Date().toISOString()
         }, {
@@ -98,7 +99,7 @@ export function useNotifications() {
     }
   }, [user?.id]);
 
-  // Deep link navigation handler - MUST be defined before the useEffect that uses it
+  // Deep link navigation handler
   const handleDeepLinkNavigation = useCallback((data: Record<string, unknown>) => {
     const url = data?.url as string;
     const chamadoId = data?.chamadoId as string;
@@ -106,29 +107,28 @@ export function useNotifications() {
 
     console.log('[useNotifications] Deep link navigation:', { url, chamadoId, notificationType });
 
-    // Navigate using window.location for reliable navigation
-    if (url && url !== '/') {
-      window.location.href = url;
+    // Prefer SPA navigation (no reload) for internal routes
+    if (url && url.startsWith('/')) {
+      spaNavigate(url);
       return;
     }
 
     if (chamadoId) {
-      window.location.href = `/?chamado=${chamadoId}`;
+      spaNavigate(`/?chamado=${chamadoId}`);
       return;
     }
 
     if (notificationType?.includes('payment')) {
-      window.location.href = '/profile?tab=payments';
+      spaNavigate('/profile?tab=payments');
       return;
     }
 
     if (notificationType?.includes('fee') || notificationType?.includes('pending')) {
-      window.location.href = '/profile?tab=fees';
+      spaNavigate('/profile?tab=fees');
       return;
     }
 
-    // Default to home
-    window.location.href = '/';
+    spaNavigate('/');
   }, []);
 
   // Setup native push listeners
