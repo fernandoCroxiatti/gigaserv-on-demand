@@ -243,12 +243,11 @@ function SafeAppWrapper() {
     return <SafeSplashScreen />;
   }
 
-  // Phase 2: Profile selection (before any auth/backend)
+  // Phase 2: Welcome screen (before any auth/backend)
   if (isProfileSelectPhase) {
     return (
       <ProfileSelectionScreen
-        onSelectClient={() => selectProfile('client')}
-        onSelectProvider={() => selectProfile('provider')}
+        onStart={() => selectProfile('client')}
       />
     );
   }
