@@ -894,12 +894,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const declinedIds = currentChamado.declined_provider_ids || [];
         const updatedDeclinedIds = [...new Set([...declinedIds, authUser.id])];
 
-        // Build update object
+        // Build update object - always add to declined list
         const updateData: any = {
           declined_provider_ids: updatedDeclinedIds,
         };
 
-        // Only reset fields if provider is actually assigned
+        // Only reset status/fields if provider is actually assigned to this chamado
         if (isAssigned) {
           updateData.status = 'searching';
           updateData.prestador_id = null;
@@ -909,17 +909,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
           updateData.stripe_payment_intent_id = null;
         }
 
-        const { error, count } = await supabase
+        // Use a simpler update without restrictive conditions
+        const { error: updateError } = await supabase
           .from('chamados')
           .update(updateData)
           .eq('id', chamado.id);
 
-        if (error) {
-          console.error('[CancelChamado] Error updating chamado:', error);
-          throw error;
+        if (updateError) {
+          console.error('[CancelChamado] Error updating chamado:', updateError);
+          throw updateError;
         }
         
-        console.log('[CancelChamado] Update successful, count:', count);
+        console.log('[CancelChamado] Update successful, provider declined:', authUser.id);
         toast.info('Chamado liberado para outros prestadores');
         
         // Clear provider's local chamado state
