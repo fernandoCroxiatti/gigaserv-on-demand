@@ -7,6 +7,10 @@ import { GoogleMapsProvider } from "./components/Map/GoogleMapsProvider";
 import { useAuth } from "./hooks/useAuth";
 import { useAdmin } from "./hooks/useAdmin";
 import { NotificationProvider } from "./components/Notifications/NotificationProvider";
+import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
+import { SafeSplashScreen } from "./components/SafeSplashScreen";
+import { ProfileSelectionScreen } from "./components/ProfileSelectionScreen";
+import { useSafeInitialization } from "./hooks/useSafeInitialization";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
@@ -28,8 +32,18 @@ import StripeAuditReport from "./pages/StripeAuditReport";
 import ProviderFinances from "./pages/admin/ProviderFinances";
 import AdminAntiFraud from "./pages/admin/AntiFraud";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Prevent queries from running during initialization
+      enabled: true,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -100,7 +114,6 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 // Wrapper to access app context for notification provider
-// NOTE: During hot-reload or transitional states, the context may be temporarily unavailable.
 function AppWithNotifications({ children }: { children: React.ReactNode }) {
   const context = useOptionalApp();
   const activeProfile = context?.user?.activeProfile || 'client';
@@ -112,96 +125,168 @@ function AppWithNotifications({ children }: { children: React.ReactNode }) {
   );
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <GoogleMapsProvider>
-        <AppProvider>
-          <AppWithNotifications>
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-              <Route 
-                path="/" 
-                element={
-                  <ProtectedRoute>
-                    <Index />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/auth" 
-                element={
-                  <PublicRoute>
-                    <Auth />
-                  </PublicRoute>
-                } 
-              />
-              <Route 
-                path="/profile" 
-                element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                } 
-              />
-              {/* Stripe callback routes */}
-              <Route 
-                path="/stripe/callback" 
-                element={
-                  <ProtectedRoute>
-                    <StripeCallback />
-                  </ProtectedRoute>
-                } 
-              />
-              {/* Legal pages - publicly accessible */}
-              <Route path="/privacy" element={<PrivacyPolicy />} />
-              <Route path="/terms" element={<TermsOfUse />} />
-              {/* Support page */}
-              <Route 
-                path="/support" 
-                element={
-                  <ProtectedRoute>
-                    <Support />
-                  </ProtectedRoute>
-                } 
-              />
-              {/* Settings page */}
-              <Route 
-                path="/settings" 
-                element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                } 
-              />
-              {/* Admin Routes */}
-              <Route 
-                path="/admin" 
-                element={
-                  <AdminRoute>
-                    <AdminLayout />
-                  </AdminRoute>
-                }
-              >
-                <Route index element={<AdminDashboard />} />
-                <Route path="settings" element={<AdminSettings />} />
-                <Route path="notifications" element={<AdminNotifications />} />
-                <Route path="reports" element={<AdminReports />} />
-                <Route path="providers" element={<AdminProviders />} />
-                <Route path="clients" element={<AdminClients />} />
-                <Route path="chamados" element={<AdminChamados />} />
-                <Route path="finances" element={<ProviderFinances />} />
-                <Route path="antifraud" element={<AdminAntiFraud />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+/**
+ * Main App Routes - Only rendered after safe initialization
+ */
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route 
+        path="/" 
+        element={
+          <ProtectedRoute>
+            <Index />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/auth" 
+        element={
+          <PublicRoute>
+            <Auth />
+          </PublicRoute>
+        } 
+      />
+      <Route 
+        path="/profile" 
+        element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        } 
+      />
+      {/* Stripe callback routes */}
+      <Route 
+        path="/stripe/callback" 
+        element={
+          <ProtectedRoute>
+            <StripeCallback />
+          </ProtectedRoute>
+        } 
+      />
+      {/* Legal pages - publicly accessible */}
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfUse />} />
+      {/* Support page */}
+      <Route 
+        path="/support" 
+        element={
+          <ProtectedRoute>
+            <Support />
+          </ProtectedRoute>
+        } 
+      />
+      {/* Settings page */}
+      <Route 
+        path="/settings" 
+        element={
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        } 
+      />
+      {/* Admin Routes */}
+      <Route 
+        path="/admin" 
+        element={
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
+        }
+      >
+        <Route index element={<AdminDashboard />} />
+        <Route path="settings" element={<AdminSettings />} />
+        <Route path="notifications" element={<AdminNotifications />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="providers" element={<AdminProviders />} />
+        <Route path="clients" element={<AdminClients />} />
+        <Route path="chamados" element={<AdminChamados />} />
+        <Route path="finances" element={<ProviderFinances />} />
+        <Route path="antifraud" element={<AdminAntiFraud />} />
+      </Route>
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
+
+/**
+ * Safe App Wrapper - Manages initialization phases
+ * 
+ * Boot sequence:
+ * 1. Splash screen (static, no logic)
+ * 2. Profile selection (client/provider) 
+ * 3. Auth check
+ * 4. Full app ready
+ */
+function SafeAppWrapper() {
+  const {
+    isSplashPhase,
+    isProfileSelectPhase,
+    isAuthCheckPhase,
+    isReady,
+    selectProfile,
+    markReady,
+    selectedProfile,
+  } = useSafeInitialization();
+
+  const { loading: authLoading } = useAuth();
+
+  // Mark as ready when auth check completes
+  useEffect(() => {
+    if (isAuthCheckPhase && !authLoading) {
+      markReady();
+    }
+  }, [isAuthCheckPhase, authLoading, markReady]);
+
+  // Phase 1: Static splash screen
+  if (isSplashPhase) {
+    return <SafeSplashScreen />;
+  }
+
+  // Phase 2: Profile selection (before any auth/backend)
+  if (isProfileSelectPhase) {
+    return (
+      <ProfileSelectionScreen
+        onSelectClient={() => selectProfile('client')}
+        onSelectProvider={() => selectProfile('provider')}
+      />
+    );
+  }
+
+  // Phase 3: Auth check in progress
+  if (isAuthCheckPhase && authLoading) {
+    return <SafeSplashScreen />;
+  }
+
+  // Phase 4: App ready - render full app
+  return (
+    <GoogleMapsProvider>
+      <AppProvider>
+        <AppWithNotifications>
+          <Sonner />
+          <BrowserRouter>
+            <AppRoutes />
           </BrowserRouter>
-          </AppWithNotifications>
-        </AppProvider>
-      </GoogleMapsProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+        </AppWithNotifications>
+      </AppProvider>
+    </GoogleMapsProvider>
+  );
+}
+
+/**
+ * Root App Component
+ * 
+ * Wrapped in GlobalErrorBoundary to catch any unhandled errors
+ * and prevent crashes on Android release builds.
+ */
+const App = () => (
+  <GlobalErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <SafeAppWrapper />
+      </TooltipProvider>
+    </QueryClientProvider>
+  </GlobalErrorBoundary>
 );
 
 export default App;
