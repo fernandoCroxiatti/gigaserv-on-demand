@@ -18,18 +18,13 @@ interface GeolocationState {
   permissionStatus: PermissionState;
 }
 
-interface UseGeolocationOptions {
+interface UseCapacitorGeolocationOptions {
   watch?: boolean;
-  autoRequest?: boolean; // Default false - don't request automatically
+  autoRequest?: boolean;
 }
 
-export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions = false) {
-  // Handle both old signature (boolean) and new signature (options object)
-  const options: UseGeolocationOptions = typeof watchOrOptions === 'boolean' 
-    ? { watch: watchOrOptions, autoRequest: false }
-    : { watch: false, autoRequest: false, ...watchOrOptions };
-
-  const { watch, autoRequest } = options;
+export function useCapacitorGeolocation(options: UseCapacitorGeolocationOptions = {}) {
+  const { watch = false, autoRequest = false } = options;
 
   const [state, setState] = useState<GeolocationState>({
     location: null,
@@ -56,7 +51,7 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
       }
       return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     } catch (error) {
-      console.error('[useGeolocation] Geocoding error:', error);
+      console.error('[useCapacitorGeolocation] Geocoding error:', error);
       return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     }
   }, []);
@@ -87,23 +82,14 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
     let errorMessage = 'Erro ao obter localização';
     let permissionStatus: PermissionState = state.permissionStatus;
     
-    // Check if it's a GeolocationPositionError
-    if (error?.code !== undefined) {
-      switch (error.code) {
-        case 1: // PERMISSION_DENIED
-          errorMessage = 'Permissão de localização negada. Ative nas configurações do dispositivo.';
-          permissionStatus = 'denied';
-          break;
-        case 2: // POSITION_UNAVAILABLE
-          errorMessage = 'Localização indisponível. Verifique se o GPS está ativado.';
-          break;
-        case 3: // TIMEOUT
-          errorMessage = 'Tempo esgotado ao obter localização. Tente novamente.';
-          break;
-      }
-    } else if (error?.message?.includes('permission')) {
+    // Check if it's a permission error
+    if (error?.code === 1 || error?.message?.includes('permission')) {
       errorMessage = 'Permissão de localização negada. Ative nas configurações do dispositivo.';
       permissionStatus = 'denied';
+    } else if (error?.code === 2 || error?.message?.includes('unavailable')) {
+      errorMessage = 'Localização indisponível. Verifique se o GPS está ativado.';
+    } else if (error?.code === 3 || error?.message?.includes('timeout')) {
+      errorMessage = 'Tempo esgotado ao obter localização. Tente novamente.';
     }
     
     setState(prev => ({
@@ -116,19 +102,19 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
 
   // Request location - called explicitly by user action
   const requestLocation = useCallback(async () => {
-    console.log('[useGeolocation] Requesting location...');
+    console.log('[useCapacitorGeolocation] Requesting location...');
     
     setState(prev => ({ ...prev, loading: true, error: null }));
     hasRequestedRef.current = true;
 
     try {
-      // Check/request permission using Capacitor or web fallback
+      // First check/request permission
       let permResult = await checkGeolocationPermission();
-      console.log('[useGeolocation] Permission check:', permResult);
+      console.log('[useCapacitorGeolocation] Permission check:', permResult);
 
       if (permResult.canRequest) {
         permResult = await requestGeolocationPermission();
-        console.log('[useGeolocation] Permission request result:', permResult);
+        console.log('[useCapacitorGeolocation] Permission request result:', permResult);
       }
 
       if (permResult.state === 'denied') {
@@ -154,9 +140,9 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
       // Get current position
       const position = await getCurrentPosition();
       
-      if (position && isMountedRef.current) {
+      if (position) {
         await updatePosition(position);
-      } else if (isMountedRef.current) {
+      } else {
         handleError({ message: 'Não foi possível obter a localização.' });
       }
 
@@ -168,10 +154,8 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
         );
       }
     } catch (error) {
-      console.error('[useGeolocation] Error:', error);
-      if (isMountedRef.current) {
-        handleError(error);
-      }
+      console.error('[useCapacitorGeolocation] Error:', error);
+      handleError(error);
     }
   }, [watch, updatePosition, handleError]);
 
@@ -181,9 +165,9 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
       setState(prev => ({ ...prev, loading: true, error: null }));
       
       const position = await getCurrentPosition();
-      if (position && isMountedRef.current) {
+      if (position) {
         await updatePosition(position);
-      } else if (isMountedRef.current) {
+      } else {
         handleError({ message: 'Não foi possível obter a localização.' });
       }
     } else {
@@ -205,7 +189,7 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
         permissionStatus: result.state,
       }));
 
-      // If already granted and autoRequest, get location silently
+      // If already granted and autoRequest, get location
       if (result.state === 'granted' && autoRequest) {
         requestLocation();
       }
@@ -221,7 +205,7 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
   // Cleanup watch on unmount
   useEffect(() => {
     return () => {
-      if (watchIdRef.current !== null) {
+      if (watchIdRef.current) {
         clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
