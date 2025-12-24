@@ -51,6 +51,9 @@ export function useProgressiveSearch({
   enabled,
   excludedProviderIds = []
 }: UseProgressiveSearchOptions) {
+  // Subscribe to realtime updates for declined providers - track channel separately
+  const realtimeDeclineHandledRef = useRef<Set<string>>(new Set());
+  
   const [searchState, setSearchState] = useState<SearchState>('idle');
   const [currentRadius, setCurrentRadius] = useState(SEARCH_RADII[0]);
   const [nearbyProviders, setNearbyProviders] = useState<NearbyProvider[]>([]);
@@ -66,6 +69,8 @@ export function useProgressiveSearch({
   const radiusIndexRef = useRef(0);
   // Track when each provider declined (for cooldown logic)
   const declineInfoRef = useRef<DeclineInfo[]>([]);
+  // Track if we're currently in cooldown mode to prevent restart
+  const inCooldownRef = useRef(false);
 
   // Fetch providers within radius
   const fetchProvidersInRadius = useCallback(async (
@@ -206,7 +211,14 @@ export function useProgressiveSearch({
   const startCooldownRetry = useCallback(async () => {
     if (!userLocation || !searchActiveRef.current) return;
     
+    // Prevent multiple cooldown starts
+    if (inCooldownRef.current) {
+      console.log('[ProgressiveSearch] Already in cooldown, ignoring duplicate call');
+      return;
+    }
+    
     console.log('[ProgressiveSearch] No providers available, starting cooldown for retry...');
+    inCooldownRef.current = true;
     setSearchState('waiting_cooldown');
     
     // Find the oldest declined provider to retry first
@@ -215,6 +227,7 @@ export function useProgressiveSearch({
     
     if (declineInfo.length === 0) {
       console.log('[ProgressiveSearch] No declined providers to retry, setting timeout');
+      inCooldownRef.current = false;
       setSearchState('timeout');
       return;
     }
@@ -225,14 +238,16 @@ export function useProgressiveSearch({
     );
     
     const elapsed = now - oldestDecline.declinedAt;
-    // ALWAYS wait at least COOLDOWN_RETRY_MS from NOW if this is a fresh decline
-    // (elapsed < 1000 means it just happened)
-    const remaining = elapsed < 1000 ? COOLDOWN_RETRY_MS : Math.max(0, COOLDOWN_RETRY_MS - elapsed);
+    // ALWAYS wait the full COOLDOWN_RETRY_MS - this ensures 10 second wait
+    const remaining = Math.max(0, COOLDOWN_RETRY_MS - elapsed);
     
-    console.log(`[ProgressiveSearch] Cooldown remaining: ${Math.ceil(remaining / 1000)}s for provider ${oldestDecline.providerId} (elapsed: ${elapsed}ms)`);
+    // If the decline JUST happened (less than 2 seconds ago), ensure full cooldown
+    const actualRemaining = elapsed < 2000 ? COOLDOWN_RETRY_MS : remaining;
+    
+    console.log(`[ProgressiveSearch] Cooldown remaining: ${Math.ceil(actualRemaining / 1000)}s for provider ${oldestDecline.providerId} (elapsed: ${elapsed}ms)`);
     
     // Update UI with countdown
-    const initialCountdown = Math.ceil(remaining / 1000);
+    const initialCountdown = Math.ceil(actualRemaining / 1000);
     setCooldownRemaining(initialCountdown);
     
     // Start countdown interval
@@ -250,6 +265,8 @@ export function useProgressiveSearch({
     // Schedule retry
     if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
     cooldownTimerRef.current = setTimeout(async () => {
+      inCooldownRef.current = false;
+      
       if (!searchActiveRef.current || !userLocation) return;
       
       console.log(`[ProgressiveSearch] Cooldown complete, clearing provider ${oldestDecline.providerId} and retrying`);
@@ -286,7 +303,7 @@ export function useProgressiveSearch({
           }
         }
       }, 500);
-    }, remaining);
+    }, actualRemaining);
   }, [userLocation, serviceType, fetchAllOnlineProviders, clearDeclinedProvider]);
 
   // Subscribe to real-time provider updates
@@ -394,6 +411,12 @@ export function useProgressiveSearch({
   // Start progressive search
   const startSearch = useCallback(async () => {
     if (!userLocation || !enabled) return;
+    
+    // Don't restart if we're currently in cooldown
+    if (inCooldownRef.current) {
+      console.log('[ProgressiveSearch] Currently in cooldown, not restarting search');
+      return;
+    }
 
     console.log('[ProgressiveSearch] Starting progressive search');
     searchActiveRef.current = true;
@@ -403,20 +426,21 @@ export function useProgressiveSearch({
     setCurrentRadius(SEARCH_RADII[0]);
     setNearbyProviders([]);
     setCooldownRemaining(0);
-    declineInfoRef.current = [];
     
-    // Initialize declined providers from DB
-    // NOTE: We don't add excludedProviderIds to declineInfoRef here because
-    // these come from the database (provider already declined) and we want
-    // the cooldown to start fresh from when the search begins
-    setDeclinedProviderIds(new Set(excludedProviderIds));
-    // Track decline timestamps for DB-excluded providers as "just happened"
-    // so they get the full cooldown period before retry
-    if (excludedProviderIds.length > 0) {
-      console.log(`[ProgressiveSearch] Initializing ${excludedProviderIds.length} excluded providers from DB with fresh cooldown`);
-      excludedProviderIds.forEach(id => {
-        declineInfoRef.current.push({ providerId: id, declinedAt: Date.now() });
-      });
+    // Only reset declineInfo if it's empty (fresh start, not a restart after provider decline)
+    if (declineInfoRef.current.length === 0) {
+      // Initialize declined providers from DB
+      setDeclinedProviderIds(new Set(excludedProviderIds));
+      // Track decline timestamps for DB-excluded providers as "just happened"
+      // so they get the full cooldown period before retry
+      if (excludedProviderIds.length > 0) {
+        console.log(`[ProgressiveSearch] Initializing ${excludedProviderIds.length} excluded providers from DB with fresh cooldown`);
+        excludedProviderIds.forEach(id => {
+          declineInfoRef.current.push({ providerId: id, declinedAt: Date.now() });
+        });
+      }
+    } else {
+      console.log('[ProgressiveSearch] Preserving existing decline info');
     }
 
     // Subscribe to real-time updates
@@ -505,6 +529,7 @@ export function useProgressiveSearch({
   // Reset search
   const resetSearch = useCallback(() => {
     cancelSearch();
+    inCooldownRef.current = false;
     setSearchState('idle');
     setCurrentRadius(SEARCH_RADII[0]);
     setRadiusIndex(0);
@@ -513,22 +538,39 @@ export function useProgressiveSearch({
     setDeclinedProviderIds(new Set());
     setCooldownRemaining(0);
     declineInfoRef.current = [];
+    realtimeDeclineHandledRef.current = new Set();
   }, [cancelSearch]);
 
   // Force expand radius (called when provider declines or times out)
   const forceExpandRadius = useCallback(async (declinedProviderId?: string) => {
     if (!userLocation || !searchActiveRef.current) return;
     
+    // If already in cooldown, ignore - the cooldown will handle retry
+    if (inCooldownRef.current) {
+      console.log('[ProgressiveSearch] Already in cooldown, ignoring forceExpandRadius');
+      return;
+    }
+    
+    // Prevent handling the same decline twice
+    if (declinedProviderId && realtimeDeclineHandledRef.current.has(declinedProviderId)) {
+      console.log(`[ProgressiveSearch] Already handled decline for ${declinedProviderId}, ignoring`);
+      return;
+    }
+    
     console.log('[ProgressiveSearch] Provider declined, forcing radius expansion');
     
     // Track declined provider with timestamp
     if (declinedProviderId) {
+      realtimeDeclineHandledRef.current.add(declinedProviderId);
       setDeclinedProviderIds(prev => new Set([...prev, declinedProviderId]));
-      // Track decline time for cooldown
-      declineInfoRef.current.push({
-        providerId: declinedProviderId,
-        declinedAt: Date.now(),
-      });
+      
+      // Only add to declineInfo if not already there
+      if (!declineInfoRef.current.some(d => d.providerId === declinedProviderId)) {
+        declineInfoRef.current.push({
+          providerId: declinedProviderId,
+          declinedAt: Date.now(),
+        });
+      }
     }
 
     // Remove declined provider from list
@@ -562,6 +604,12 @@ export function useProgressiveSearch({
     setTimeout(async () => {
       if (!searchActiveRef.current || !userLocation) return;
       
+      // Re-check cooldown status
+      if (inCooldownRef.current) {
+        console.log('[ProgressiveSearch] Entered cooldown during expansion delay, aborting');
+        return;
+      }
+      
       const newRadius = SEARCH_RADII[nextIndex];
       console.log(`[ProgressiveSearch] Expanding radius to ${newRadius}km after decline`);
       
@@ -586,6 +634,12 @@ export function useProgressiveSearch({
 
   // Auto-start search when enabled and location available
   useEffect(() => {
+    // Don't auto-start if we're in cooldown (waiting for retry)
+    if (inCooldownRef.current) {
+      console.log('[ProgressiveSearch] In cooldown, not auto-starting');
+      return;
+    }
+    
     if (enabled && userLocation && searchState === 'idle') {
       startSearch();
     }
