@@ -121,7 +121,6 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
-            <Routes>
               <Route 
                 path="/" 
                 element={

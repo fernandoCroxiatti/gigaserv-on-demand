@@ -301,49 +301,89 @@
   @apply bg-muted-foreground/25;
 }
 
-/* Premium Toast - Uber/99 Style */
+/* Premium Toast - Uber/99 Style Feedback */
 [data-sonner-toaster] {
   --width: auto;
-  --border-radius: 12px;
   z-index: 9999 !important;
 }
 
-[data-sonner-toast] {
-  --normal-bg: hsl(0 0% 12%);
-  --normal-text: white;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+/* Base toast styling */
+.feedback-toast {
+  background: hsl(0 0% 12% / 0.95) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
+  min-height: 0 !important;
+  max-width: calc(100vw - 32px) !important;
+  width: auto !important;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.25) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-[data-sonner-toast][data-type="success"] {
-  --normal-bg: hsl(152 50% 25%);
+.feedback-toast__title {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: white !important;
 }
 
-[data-sonner-toast][data-type="error"] {
-  --normal-bg: hsl(0 55% 35%);
+.feedback-toast__description {
+  font-size: 12px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
-[data-sonner-toast][data-type="warning"] {
-  --normal-bg: hsl(35 75% 35%);
+.feedback-toast__action {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
 }
 
-[data-sonner-toast][data-type="info"] {
-  --normal-bg: hsl(217 55% 35%);
+.feedback-toast__cancel {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
 }
 
-/* Toast animation override for smoother feel */
+.feedback-toast__icon {
+  color: rgba(255, 255, 255, 0.8) !important;
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Type-specific backgrounds */
+.feedback-toast--success {
+  background: hsl(152 50% 22% / 0.95) !important;
+}
+
+.feedback-toast--error {
+  background: hsl(0 55% 32% / 0.95) !important;
+}
+
+.feedback-toast--warning {
+  background: hsl(35 75% 32% / 0.95) !important;
+}
+
+.feedback-toast--info {
+  background: hsl(217 55% 32% / 0.95) !important;
+}
+
+/* Smooth animations */
 [data-sonner-toast][data-mounted="true"] {
-  animation: toast-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: feedback-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 [data-sonner-toast][data-removed="true"] {
-  animation: toast-slide-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: feedback-slide-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
-@keyframes toast-slide-in {
+@keyframes feedback-slide-in {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.96);
+    transform: translateY(12px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -351,13 +391,13 @@
   }
 }
 
-@keyframes toast-slide-out {
+@keyframes feedback-slide-out {
   from {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
   to {
     opacity: 0;
-    transform: translateY(8px) scale(0.96);
+    transform: translateY(6px) scale(0.96);
   }
 }
