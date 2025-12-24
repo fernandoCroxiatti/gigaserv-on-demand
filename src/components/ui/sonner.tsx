@@ -15,17 +15,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
       duration={2500}
       gap={8}
       toastOptions={{
+        unstyled: true,
         classNames: {
-          toast: "feedback-toast",
-          title: "feedback-toast__title",
-          description: "feedback-toast__description",
-          actionButton: "feedback-toast__action",
-          cancelButton: "feedback-toast__cancel",
-          icon: "feedback-toast__icon",
-          success: "feedback-toast--success",
-          error: "feedback-toast--error",
-          warning: "feedback-toast--warning",
-          info: "feedback-toast--info",
+          toast: "uber-toast",
+          title: "uber-toast__title",
+          description: "uber-toast__desc",
+          icon: "uber-toast__icon",
         },
       }}
       {...props}
