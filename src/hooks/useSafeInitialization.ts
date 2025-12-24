@@ -40,15 +40,15 @@ export function useSafeInitialization() {
     error: null,
   });
 
-  // Detect if running in native environment
+  // Phase 1: Show splash briefly, then welcome screen
+  // NO API calls, NO auth checks, NO location - just static UI
   useEffect(() => {
     let mounted = true;
 
-    const initializeSafely = async () => {
+    const showWelcomeScreen = async () => {
       try {
-        // Phase 1: Splash (already showing)
-        // Give time for the DOM to be fully ready
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Brief splash screen display
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         if (!mounted) return;
 
@@ -61,58 +61,42 @@ export function useSafeInitialization() {
           phase: 'initializing',
         }));
 
-        // Phase 2: Brief initialization delay for native bridge
-        if (isNative) {
-          // On Android, wait a bit longer for WebView to stabilize
-          await new Promise(resolve => setTimeout(resolve, 300));
-        } else {
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
+        // Brief delay for native bridge stability
+        await new Promise(resolve => setTimeout(resolve, isNative ? 200 : 50));
 
         if (!mounted) return;
 
-        // Check if user has already seen the welcome screen this session
-        const hasSeenWelcome = sessionStorage.getItem('hasSeenWelcome');
-        
-        if (hasSeenWelcome === 'true') {
-          // Already seen welcome this session, go directly to auth check
-          setState(prev => ({
-            ...prev,
-            selectedProfile: 'client',
-            phase: 'auth_check',
-          }));
-        } else {
-          // Show welcome/presentation screen
-          setState(prev => ({
-            ...prev,
-            phase: 'profile_select',
-          }));
-        }
+        // ALWAYS show welcome/presentation screen first
+        // No automatic login, API calls, or location requests
+        setState(prev => ({
+          ...prev,
+          phase: 'profile_select',
+        }));
       } catch (error) {
         console.error('[SafeInit] Initialization error:', error);
         if (mounted) {
           setState(prev => ({
             ...prev,
             error: error instanceof Error ? error : new Error('Unknown initialization error'),
-            phase: 'profile_select', // Fallback to profile selection
+            phase: 'profile_select',
           }));
         }
       }
     };
 
-    initializeSafely();
+    showWelcomeScreen();
 
     return () => {
       mounted = false;
     };
   }, []);
 
-  // Mark welcome as seen and proceed to auth check
+  // Called when user clicks "Começar" - ONLY then start auth check
   const selectProfile = useCallback((profile: 'client' | 'provider') => {
     try {
-      sessionStorage.setItem('hasSeenWelcome', 'true');
+      localStorage.setItem('selectedProfile', profile);
     } catch {
-      // sessionStorage might not be available, that's okay
+      // localStorage might not be available
     }
     
     setState(prev => ({
@@ -133,9 +117,9 @@ export function useSafeInitialization() {
   // Reset to welcome screen (for logout or error recovery)
   const resetToProfileSelection = useCallback(() => {
     try {
-      sessionStorage.removeItem('hasSeenWelcome');
+      localStorage.removeItem('selectedProfile');
     } catch {
-      // Ignore sessionStorage errors
+      // Ignore errors
     }
     
     setState(prev => ({
