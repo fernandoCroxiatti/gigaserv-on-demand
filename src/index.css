@@ -305,17 +305,18 @@
    Uber/99 Style Floating Toast - Overlay
    ======================================== */
 
-/* Container - floating overlay, não ocupa espaço do layout */
+/* Container - floating overlay no topo */
 [data-sonner-toaster] {
   position: fixed !important;
   z-index: 99999 !important;
   pointer-events: none !important;
-  bottom: 0 !important;
+  top: 0 !important;
+  bottom: auto !important;
   left: 0 !important;
   right: 0 !important;
   display: flex !important;
   justify-content: center !important;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px) !important;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 16px) !important;
 }
 
 /* Toast item - floating, compact, overlay */
@@ -362,7 +363,7 @@
 @keyframes uber-toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.96);
+    transform: translateY(-8px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -377,7 +378,7 @@
   }
   to {
     opacity: 0;
-    transform: translateY(4px) scale(0.98);
+    transform: translateY(-4px) scale(0.98);
   }
 }
 
