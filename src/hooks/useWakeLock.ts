@@ -1,18 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { safeLocalStorage } from '@/lib/safeStorage';
 
 const WAKE_LOCK_ENABLED_KEY = 'giga-sos-wake-lock-enabled';
 
-// Get saved preference from localStorage
+// Get saved preference from localStorage (safe for WebView)
 function getWakeLockPreference(): boolean {
-  const saved = localStorage.getItem(WAKE_LOCK_ENABLED_KEY);
+  const saved = safeLocalStorage.getItem(WAKE_LOCK_ENABLED_KEY);
   return saved === null ? true : saved === 'true'; // Default: enabled
 }
 
-// Save preference to localStorage
+// Save preference to localStorage (safe for WebView)
 export function setWakeLockPreference(enabled: boolean): void {
-  localStorage.setItem(WAKE_LOCK_ENABLED_KEY, String(enabled));
+  safeLocalStorage.setItem(WAKE_LOCK_ENABLED_KEY, String(enabled));
   // Dispatch event to notify other components
-  window.dispatchEvent(new CustomEvent('wakeLockPreferenceChange', { detail: enabled }));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('wakeLockPreferenceChange', { detail: enabled }));
+  }
 }
 
 export function useWakeLock() {

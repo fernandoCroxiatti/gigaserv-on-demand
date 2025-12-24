@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { redirectExternal } from '@/lib/openExternal';
 import type { Balance, Earnings, Payout, StripeStatus } from '@/hooks/useProviderFinancialData';
 
 interface ProviderBankTabProps {
@@ -79,7 +80,7 @@ export function ProviderBankTab({
       }
 
       if (data?.url) {
-        window.location.href = data.url;
+        await redirectExternal(data.url);
       } else {
         toast.error('Erro ao obter link de atualização. Tente novamente.');
       }

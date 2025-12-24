@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Location } from '@/types/chamado';
 import { toast } from 'sonner';
+import { safeLocalStorage } from '@/lib/safeStorage';
 
 interface GPSState {
   location: Location | null;
@@ -97,7 +98,7 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
   // Throttling refs for geocoding
   const lastGeocodeRef = useRef<{ lat: number; lng: number; time: number; address: string } | null>(null);
   // Timeout ref for GPS fix
-  const gpsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const gpsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track if we got a real fix
   const hasRealFixRef = useRef<boolean>(false);
   // Device compass heading
@@ -112,25 +113,21 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
   const targetPositionRef = useRef<{ lat: number; lng: number } | null>(null);
 
   /**
-   * Save location to localStorage as fallback
+   * Save location to localStorage as fallback (safe wrapper)
    */
   const saveLastKnownLocation = useCallback((location: Location) => {
-    try {
-      localStorage.setItem(LAST_KNOWN_LOCATION_KEY, JSON.stringify({
-        ...location,
-        timestamp: Date.now(),
-      }));
-    } catch (e) {
-      console.warn('[GPS] Failed to save last known location');
-    }
+    safeLocalStorage.setItem(LAST_KNOWN_LOCATION_KEY, JSON.stringify({
+      ...location,
+      timestamp: Date.now(),
+    }));
   }, []);
 
   /**
-   * Get last known location from localStorage
+   * Get last known location from localStorage (safe wrapper)
    */
   const getLastKnownLocation = useCallback((): Location | null => {
     try {
-      const stored = localStorage.getItem(LAST_KNOWN_LOCATION_KEY);
+      const stored = safeLocalStorage.getItem(LAST_KNOWN_LOCATION_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         // Only use if less than 24 hours old

@@ -75,7 +75,11 @@ export default function Support() {
   const handleGetSupport = () => {
     const subject = encodeURIComponent("Suporte GIGA S.O.S");
     const body = encodeURIComponent("Mande sua dúvida ao suporte.");
-    window.location.href = `mailto:gigasos1@hotmail.com?subject=${subject}&body=${body}`;
+    try {
+      window.location.href = `mailto:gigasos1@hotmail.com?subject=${subject}&body=${body}`;
+    } catch {
+      // ignore
+    }
   };
 
   return (

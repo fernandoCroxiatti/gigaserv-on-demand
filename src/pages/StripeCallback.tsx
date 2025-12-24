@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { redirectExternal } from '@/lib/openExternal';
 
 export default function StripeCallback() {
   const [searchParams] = useSearchParams();
@@ -61,7 +62,7 @@ export default function StripeCallback() {
       }
 
       if (data?.url) {
-        window.location.href = data.url;
+        await redirectExternal(data.url);
       } else {
         throw new Error('URL não retornada');
       }

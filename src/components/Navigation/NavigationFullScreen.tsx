@@ -372,7 +372,11 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       return;
     }
     const cleanPhone = otherPartyPhone.replace(/[^\d+]/g, '');
-    window.location.href = `tel:${cleanPhone}`;
+    try {
+      window.location.href = `tel:${cleanPhone}`;
+    } catch {
+      // ignore
+    }
   }, [otherPartyPhone]);
 
   // Handle message button click

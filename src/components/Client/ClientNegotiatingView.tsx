@@ -89,7 +89,11 @@ export function ClientNegotiatingView() {
 
   const handleCallProvider = () => {
     if (providerInfo.phone) {
-      window.location.href = `tel:${providerInfo.phone}`;
+      try {
+        window.location.href = `tel:${providerInfo.phone}`;
+      } catch {
+        // ignore
+      }
     }
   };
 
