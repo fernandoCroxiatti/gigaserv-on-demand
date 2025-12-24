@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { getDeviceId } from '@/lib/deviceFingerprint';
+import { NativeImagePicker } from '@/components/NativeImagePicker';
 
 interface ProviderRegistrationFormProps {
   userId: string;
@@ -121,6 +122,48 @@ export function ProviderRegistrationForm({
     getDeviceId().then(setDeviceId);
   }, []);
 
+  const handleAvatarSelected = async (file: File | null, dataUrl: string | null) => {
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    try {
+      // Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        // Use the dataUrl as fallback (temporary preview)
+        if (dataUrl) {
+          setAvatarUrl(dataUrl);
+          toast.success('Foto carregada!');
+        }
+        return;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      setAvatarUrl(publicUrl);
+      toast.success('Foto atualizada!');
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      // Fallback to dataUrl
+      if (dataUrl) {
+        setAvatarUrl(dataUrl);
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  // Legacy handler for file input (kept for web fallback)
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -137,46 +180,11 @@ export function ProviderRegistrationForm({
       return;
     }
 
-    setUploadingAvatar(true);
-    try {
-      // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${userId}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        // Use base64 as fallback
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setAvatarUrl(reader.result as string);
-          toast.success('Foto carregada!');
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      setAvatarUrl(publicUrl);
-      toast.success('Foto atualizada!');
-    } catch (error) {
-      console.error('Error uploading avatar:', error);
-      // Fallback to base64
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    } finally {
-      setUploadingAvatar(false);
-    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleAvatarSelected(file, reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleCpfChange = (value: string) => {
@@ -351,29 +359,15 @@ export function ProviderRegistrationForm({
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Avatar Upload */}
+            {/* Avatar Upload - Uses native camera on mobile */}
             <div className="flex flex-col items-center gap-3">
-              <div 
-                className="relative w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-provider-primary/50 flex items-center justify-center cursor-pointer overflow-hidden"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <Camera className="w-8 h-8 text-muted-foreground" />
-                )}
-                {uploadingAvatar && (
-                  <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 animate-spin text-provider-primary" />
-                  </div>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                className="hidden"
+              <NativeImagePicker
+                onImageSelected={handleAvatarSelected}
+                currentImageUrl={avatarUrl}
+                isLoading={uploadingAvatar}
+                shape="circle"
+                size="md"
+                placeholder={<Camera className="w-8 h-8 text-muted-foreground" />}
               />
               <p className="text-sm text-muted-foreground">
                 Foto de perfil <span className="text-destructive">*</span>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   Receipt, 
   CreditCard,
@@ -13,8 +13,10 @@ import {
   Info,
   Upload,
   Image as ImageIcon,
-  X
+  X,
+  Camera
 } from 'lucide-react';
+import { NativeImagePicker } from '@/components/NativeImagePicker';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -68,7 +70,6 @@ export function ProviderFeesTab() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCopyPixKey = () => {
     if (pixConfig?.key) {
@@ -77,6 +78,17 @@ export function ProviderFeesTab() {
     }
   };
 
+  // Handler for NativeImagePicker
+  const handleProofSelected = (file: File | null, dataUrl: string | null) => {
+    if (!file) return;
+    
+    setProofFile(file);
+    if (dataUrl) {
+      setProofPreview(dataUrl);
+    }
+  };
+
+  // Legacy file input handler (kept for web fallback)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -102,9 +114,6 @@ export function ProviderFeesTab() {
     if (proofPreview) {
       URL.revokeObjectURL(proofPreview);
       setProofPreview(null);
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
   };
 
@@ -424,7 +433,7 @@ export function ProviderFeesTab() {
               </div>
             )}
 
-            {/* Upload Proof Section */}
+            {/* Upload Proof Section - Uses native camera on mobile */}
             <div className="space-y-2">
               <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                 <p className="text-sm text-primary font-medium">
@@ -432,14 +441,6 @@ export function ProviderFeesTab() {
                 </p>
               </div>
               <p className="text-sm font-medium">Comprovante de pagamento</p>
-              
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="image/*"
-                className="hidden"
-              />
 
               {proofPreview ? (
                 <div className="relative">
@@ -458,18 +459,23 @@ export function ProviderFeesTab() {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  variant="outline"
+                <NativeImagePicker
+                  onImageSelected={handleProofSelected}
+                  currentImageUrl={null}
+                  isLoading={uploading}
+                  shape="square"
+                  size="lg"
+                  showPreview={false}
                   className="w-full h-24 border-dashed"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <Upload className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      Anexar comprovante
-                    </span>
-                  </div>
-                </Button>
+                  placeholder={
+                    <div className="flex flex-col items-center gap-2">
+                      <Camera className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Anexar comprovante
+                      </span>
+                    </div>
+                  }
+                />
               )}
             </div>
           </div>
