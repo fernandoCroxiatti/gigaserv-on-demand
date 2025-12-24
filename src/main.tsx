@@ -32,36 +32,73 @@ if (rootElement) {
 }
 
 // STEP 2: Register service worker AFTER render (web only, deferred)
-// This runs after the app is visible to prevent blocking the boot
+// In native (Capacitor/WebView) we DISABLE SW and clear aggressive caches.
 if (typeof window !== 'undefined') {
-  // Use requestIdleCallback or setTimeout to defer this work
-  const registerServiceWorker = () => {
+  // Mark "mounted" after initial render so storage access can be safely gated
+  setTimeout(() => {
+    (window as any).__APP_MOUNTED__ = true;
+  }, 0);
+
+  // Global error handlers (captures unhandled promise rejections, etc.)
+  window.addEventListener('error', (event) => {
+    console.error('[GlobalError] window.error:', event.error || event.message);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('[GlobalError] unhandledrejection:', event.reason);
+  });
+
+  const registerOrDisableServiceWorker = () => {
     // Dynamic import to prevent Capacitor from blocking boot
-    import('@capacitor/core').then(({ Capacitor }) => {
-      const isNative = Capacitor.isNativePlatform();
-      
-      if (!isNative && "serviceWorker" in navigator) {
-        navigator.serviceWorker
-          .register("/sw.js", { scope: "/" })
-          .then((registration) => {
-            console.log("[PWA] Service worker registered:", registration.scope);
-          })
-          .catch((error) => {
-            console.log("[PWA] Service worker registration failed:", error);
-          });
-      }
-    }).catch(() => {
-      // Capacitor not available, try registering SW anyway for web
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
-      }
-    });
+    import('@capacitor/core')
+      .then(async ({ Capacitor }) => {
+        const isNative = Capacitor.isNativePlatform();
+
+        if (isNative) {
+          // Disable SW + clear caches to prevent stale bundles/crashes in WebView
+          try {
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map((r) => r.unregister()));
+            }
+          } catch (e) {
+            console.log('[PWA] SW cleanup skipped:', e);
+          }
+
+          try {
+            if ('caches' in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.map((k) => caches.delete(k)));
+            }
+          } catch (e) {
+            console.log('[PWA] Cache cleanup skipped:', e);
+          }
+
+          return;
+        }
+
+        if (!isNative && 'serviceWorker' in navigator) {
+          navigator.serviceWorker
+            .register('/sw.js', { scope: '/' })
+            .then((registration) => {
+              console.log('[PWA] Service worker registered:', registration.scope);
+            })
+            .catch((error) => {
+              console.log('[PWA] Service worker registration failed:', error);
+            });
+        }
+      })
+      .catch(() => {
+        // If Capacitor isn't available, assume web and try registering SW
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+        }
+      });
   };
 
-  // Defer service worker registration to not block app boot
+  // Defer SW/caching work to not block app boot
   if ('requestIdleCallback' in window) {
-    (window as any).requestIdleCallback(registerServiceWorker, { timeout: 3000 });
+    (window as any).requestIdleCallback(registerOrDisableServiceWorker, { timeout: 3000 });
   } else {
-    setTimeout(registerServiceWorker, 1000);
+    setTimeout(registerOrDisableServiceWorker, 1000);
   }
 }

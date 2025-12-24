@@ -183,7 +183,6 @@ export default function Auth() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
           data: {
             name,
             phone: phone.replace(/\D/g, ''),
