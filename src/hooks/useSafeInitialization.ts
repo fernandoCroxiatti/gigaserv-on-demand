@@ -71,18 +71,18 @@ export function useSafeInitialization() {
 
         if (!mounted) return;
 
-        // Check if user has a stored profile preference
-        const storedProfile = localStorage.getItem('selectedProfile');
+        // Check if user has already seen the welcome screen this session
+        const hasSeenWelcome = sessionStorage.getItem('hasSeenWelcome');
         
-        if (storedProfile === 'client' || storedProfile === 'provider') {
-          // User has previously selected, skip profile selection
+        if (hasSeenWelcome === 'true') {
+          // Already seen welcome this session, go directly to auth check
           setState(prev => ({
             ...prev,
-            selectedProfile: storedProfile,
+            selectedProfile: 'client',
             phase: 'auth_check',
           }));
         } else {
-          // No stored preference, show profile selection
+          // Show welcome/presentation screen
           setState(prev => ({
             ...prev,
             phase: 'profile_select',
@@ -107,12 +107,12 @@ export function useSafeInitialization() {
     };
   }, []);
 
-  // Select profile and proceed to auth check
+  // Mark welcome as seen and proceed to auth check
   const selectProfile = useCallback((profile: 'client' | 'provider') => {
     try {
-      localStorage.setItem('selectedProfile', profile);
+      sessionStorage.setItem('hasSeenWelcome', 'true');
     } catch {
-      // localStorage might not be available, that's okay
+      // sessionStorage might not be available, that's okay
     }
     
     setState(prev => ({
@@ -130,12 +130,12 @@ export function useSafeInitialization() {
     }));
   }, []);
 
-  // Reset to profile selection (for logout or error recovery)
+  // Reset to welcome screen (for logout or error recovery)
   const resetToProfileSelection = useCallback(() => {
     try {
-      localStorage.removeItem('selectedProfile');
+      sessionStorage.removeItem('hasSeenWelcome');
     } catch {
-      // Ignore localStorage errors
+      // Ignore sessionStorage errors
     }
     
     setState(prev => ({
