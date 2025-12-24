@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useProviderFinancialData } from '@/hooks/useProviderFinancialData';
 import { Button } from '../ui/button';
+import { redirectExternal } from '@/lib/openExternal';
 import { 
   ArrowLeft, 
   User, 
@@ -146,7 +147,8 @@ export function ProviderProfile() {
       }
 
       if (data?.url) {
-        window.location.href = data.url;
+        // Use Capacitor Browser for external Stripe URL (redirect)
+        await redirectExternal(data.url);
       } else {
         toast.error('Erro ao obter link de cadastro. Tente novamente.');
       }
@@ -159,8 +161,9 @@ export function ProviderProfile() {
 
   const handleRegistrationComplete = useCallback(() => {
     setShowRegistrationForm(false);
-    window.location.reload();
-  }, []);
+    // Trigger profile data reload via context refetch (no hard reload)
+    navigate('/profile?tab=profile', { replace: true });
+  }, [navigate]);
 
   const handleSignOut = async () => {
     await signOut();

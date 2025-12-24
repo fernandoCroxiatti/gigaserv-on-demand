@@ -1,4 +1,5 @@
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
+import { safeLocalStorage } from '@/lib/safeStorage';
 
 const DEVICE_ID_KEY = 'giga_device_id';
 
@@ -15,8 +16,8 @@ export async function getDeviceId(): Promise<string> {
     return cachedDeviceId;
   }
 
-  // Check localStorage first
-  const storedId = localStorage.getItem(DEVICE_ID_KEY);
+  // Check localStorage first (safe wrapper)
+  const storedId = safeLocalStorage.getItem(DEVICE_ID_KEY);
   if (storedId) {
     cachedDeviceId = storedId;
     return storedId;
@@ -35,8 +36,8 @@ export async function getDeviceId(): Promise<string> {
     // Create a unique device ID
     const deviceId = `${visitorId}-${timestamp}-${randomPart}`;
     
-    // Store persistently
-    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    // Store persistently (safe wrapper)
+    safeLocalStorage.setItem(DEVICE_ID_KEY, deviceId);
     cachedDeviceId = deviceId;
     
     return deviceId;
@@ -45,7 +46,7 @@ export async function getDeviceId(): Promise<string> {
     
     // Fallback: generate a simpler ID if FingerprintJS fails
     const fallbackId = `fallback-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 15)}`;
-    localStorage.setItem(DEVICE_ID_KEY, fallbackId);
+    safeLocalStorage.setItem(DEVICE_ID_KEY, fallbackId);
     cachedDeviceId = fallbackId;
     
     return fallbackId;
@@ -71,6 +72,6 @@ export async function getBrowserFingerprint(): Promise<string> {
  * Clear the stored device ID (for testing purposes only).
  */
 export function clearDeviceId(): void {
-  localStorage.removeItem(DEVICE_ID_KEY);
+  safeLocalStorage.removeItem(DEVICE_ID_KEY);
   cachedDeviceId = null;
 }

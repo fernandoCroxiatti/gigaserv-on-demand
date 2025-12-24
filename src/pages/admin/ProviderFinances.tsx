@@ -8,6 +8,7 @@ import { useAdminFees, FinancialStatus, PixConfig } from '@/hooks/useAdminFees';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { openExternal } from '@/lib/openExternal';
 import { 
   Loader2, 
   Receipt, 
@@ -99,7 +100,7 @@ export default function ProviderFinances() {
     try {
       // Check if it's already a full URL (legacy) or just a path
       if (proofPath.startsWith('http')) {
-        window.open(proofPath, '_blank');
+        await openExternal(proofPath);
         return;
       }
       
@@ -111,7 +112,7 @@ export default function ProviderFinances() {
       if (error) throw error;
       
       if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
+        await openExternal(data.signedUrl);
       }
     } catch (err) {
       console.error('Error getting signed URL:', err);
