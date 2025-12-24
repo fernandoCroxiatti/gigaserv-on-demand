@@ -1,11 +1,9 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import gigaLogo from '@/assets/giga-logo.png';
 
 interface ProfileSelectionScreenProps {
-  onSelectClient?: () => void;
-  onSelectProvider?: () => void;
+  onStart?: () => void;
   isLoading?: boolean;
 }
 
@@ -15,14 +13,9 @@ interface ProfileSelectionScreenProps {
  * This is a static screen that doesn't depend on backend data
  */
 export const ProfileSelectionScreen: React.FC<ProfileSelectionScreenProps> = ({
+  onStart,
   isLoading = false,
 }) => {
-  const navigate = useNavigate();
-
-  const handleStart = () => {
-    navigate('/auth');
-  };
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Main content */}
@@ -44,7 +37,7 @@ export const ProfileSelectionScreen: React.FC<ProfileSelectionScreenProps> = ({
 
         {/* Start button */}
         <Button
-          onClick={handleStart}
+          onClick={onStart}
           disabled={isLoading}
           size="lg"
           className="w-full max-w-xs text-lg py-6"
@@ -57,9 +50,9 @@ export const ProfileSelectionScreen: React.FC<ProfileSelectionScreenProps> = ({
       <div className="p-6 text-center">
         <p className="text-xs text-muted-foreground">
           Ao continuar, você concorda com nossos{' '}
-          <a href="/terms" className="text-primary underline">Termos de Uso</a>
+          <span className="text-primary underline">Termos de Uso</span>
           {' '}e{' '}
-          <a href="/privacy" className="text-primary underline">Política de Privacidade</a>
+          <span className="text-primary underline">Política de Privacidade</span>
         </p>
       </div>
     </div>
