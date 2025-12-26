@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export type FeeType = 'STRIPE' | 'MANUAL_PIX';
@@ -44,6 +44,8 @@ export interface PixConfig {
 
 type FilterType = 'all' | 'PAGO' | 'DEVENDO' | 'AGUARDANDO_APROVACAO' | 'STRIPE' | 'MANUAL_PIX';
 
+const ADMIN_POLL_INTERVAL_MS = 12_000;
+
 export function useAdminFees(filter: FilterType = 'all') {
   const [providers, setProviders] = useState<AdminProviderFinancial[]>([]);
   const [fees, setFees] = useState<AdminProviderFee[]>([]);
@@ -51,12 +53,15 @@ export function useAdminFees(filter: FilterType = 'all') {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const hasLoadedRef = useRef(false);
+
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    const isInitial = !hasLoadedRef.current;
+    if (isInitial) setLoading(true);
+
     setError(null);
 
     try {
-      // Fetch all fees
       const { data: feesData, error: feesError } = await supabase
         .from('provider_fees')
         .select('*')
@@ -64,9 +69,8 @@ export function useAdminFees(filter: FilterType = 'all') {
 
       if (feesError) throw feesError;
 
-      // Fetch all provider profiles
-      const providerIds = [...new Set(feesData?.map(f => f.provider_id) || [])];
-      
+      const providerIds = [...new Set(feesData?.map((f) => f.provider_id) || [])];
+
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('user_id, name, email')
@@ -74,18 +78,16 @@ export function useAdminFees(filter: FilterType = 'all') {
 
       if (profilesError) throw profilesError;
 
-      const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+      const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
 
-      // Fetch provider data for financial status
       const { data: providerDataList, error: providerError } = await supabase
         .from('provider_data')
         .select('user_id, financial_status, pending_fee_balance, financial_blocked');
 
       if (providerError) throw providerError;
 
-      const providerDataMap = new Map(providerDataList?.map(pd => [pd.user_id, pd]) || []);
+      const providerDataMap = new Map(providerDataList?.map((pd) => [pd.user_id, pd]) || []);
 
-      // Map fees with provider info
       const mappedFees: AdminProviderFee[] = (feesData || []).map((f: any) => {
         const profile = profileMap.get(f.provider_id);
         return {
@@ -106,17 +108,15 @@ export function useAdminFees(filter: FilterType = 'all') {
         };
       });
 
-      // Apply filters
       let filteredFees = mappedFees;
       if (filter === 'STRIPE' || filter === 'MANUAL_PIX') {
-        filteredFees = mappedFees.filter(f => f.feeType === filter);
+        filteredFees = mappedFees.filter((f) => f.feeType === filter);
       } else if (filter === 'PAGO' || filter === 'DEVENDO' || filter === 'AGUARDANDO_APROVACAO') {
-        filteredFees = mappedFees.filter(f => f.status === filter);
+        filteredFees = mappedFees.filter((f) => f.status === filter);
       }
 
       setFees(filteredFees);
 
-      // Aggregate by provider
       const providerAggregates = new Map<string, AdminProviderFinancial>();
 
       for (const fee of mappedFees) {
@@ -136,7 +136,6 @@ export function useAdminFees(filter: FilterType = 'all') {
           if (fee.paymentApprovedAt && (!existing.lastPaymentAt || fee.paymentApprovedAt > existing.lastPaymentAt)) {
             existing.lastPaymentAt = fee.paymentApprovedAt;
           }
-          // Update proof URL - prioritize most recent fee with proof
           if (fee.paymentProofUrl && (fee.status === 'AGUARDANDO_APROVACAO' || !existing.proofUrl)) {
             existing.proofUrl = fee.paymentProofUrl;
           }
@@ -158,15 +157,12 @@ export function useAdminFees(filter: FilterType = 'all') {
       }
 
       let providersList = Array.from(providerAggregates.values());
-
-      // Filter providers list
       if (filter === 'PAGO' || filter === 'DEVENDO' || filter === 'AGUARDANDO_APROVACAO') {
-        providersList = providersList.filter(p => p.financialStatus === filter);
+        providersList = providersList.filter((p) => p.financialStatus === filter);
       }
 
       setProviders(providersList);
 
-      // Fetch PIX config
       const { data: pixData, error: pixError } = await supabase
         .from('app_settings')
         .select('value')
@@ -178,35 +174,63 @@ export function useAdminFees(filter: FilterType = 'all') {
       if (pixData?.value) {
         setPixConfig(pixData.value as unknown as PixConfig);
       }
-
     } catch (err) {
       console.error('Error fetching admin fees:', err);
       setError('Erro ao carregar dados financeiros');
     } finally {
+      if (!hasLoadedRef.current) {
+        hasLoadedRef.current = true;
+      }
       setLoading(false);
     }
   }, [filter]);
 
   useEffect(() => {
-    fetchData();
+    // Reset state on filter/tab change
+    hasLoadedRef.current = false;
+    setProviders([]);
+    setFees([]);
+    setPixConfig(null);
+    setLoading(true);
+
+    let cancelled = false;
+
+    const run = () => {
+      if (cancelled) return;
+      void fetchData();
+    };
+
+    run();
+    const intervalId = window.setInterval(run, ADMIN_POLL_INTERVAL_MS);
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') run();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [fetchData]);
 
   const approvePayment = async (providerId: string, adminId: string) => {
     try {
-      // Update all AGUARDANDO_APROVACAO fees to PAGO
       const { error: feesError } = await supabase
         .from('provider_fees')
         .update({
           status: 'PAGO',
           payment_approved_at: new Date().toISOString(),
           payment_approved_by: adminId,
+          updated_at: new Date().toISOString(),
         })
         .eq('provider_id', providerId)
         .eq('status', 'AGUARDANDO_APROVACAO');
 
       if (feesError) throw feesError;
 
-      // Update provider financial status
       const { error: providerError } = await supabase
         .from('provider_data')
         .update({
@@ -214,12 +238,12 @@ export function useAdminFees(filter: FilterType = 'all') {
           pending_fee_balance: 0,
           financial_blocked: false,
           financial_block_reason: null,
+          updated_at: new Date().toISOString(),
         })
         .eq('user_id', providerId);
 
       if (providerError) throw providerError;
 
-      // Log admin action
       await supabase.from('admin_logs').insert({
         admin_id: adminId,
         action: 'approve_fee_payment',
@@ -227,7 +251,6 @@ export function useAdminFees(filter: FilterType = 'all') {
         target_id: providerId,
       });
 
-      // Send notification to provider
       try {
         await supabase.functions.invoke('send-notifications', {
           body: {
@@ -253,7 +276,6 @@ export function useAdminFees(filter: FilterType = 'all') {
 
   const rejectPayment = async (providerId: string, adminId: string) => {
     try {
-      // Update all AGUARDANDO_APROVACAO fees back to DEVENDO
       const { error: feesError } = await supabase
         .from('provider_fees')
         .update({
@@ -261,13 +283,13 @@ export function useAdminFees(filter: FilterType = 'all') {
           payment_rejected_at: new Date().toISOString(),
           payment_rejected_by: adminId,
           payment_declared_at: null,
+          updated_at: new Date().toISOString(),
         })
         .eq('provider_id', providerId)
         .eq('status', 'AGUARDANDO_APROVACAO');
 
       if (feesError) throw feesError;
 
-      // Calculate pending balance
       const { data: pendingFees } = await supabase
         .from('provider_fees')
         .select('fee_amount')
@@ -277,18 +299,17 @@ export function useAdminFees(filter: FilterType = 'all') {
 
       const pendingBalance = pendingFees?.reduce((acc, f) => acc + f.fee_amount, 0) || 0;
 
-      // Update provider financial status
       const { error: providerError } = await supabase
         .from('provider_data')
         .update({
           financial_status: 'DEVENDO',
           pending_fee_balance: pendingBalance,
+          updated_at: new Date().toISOString(),
         })
         .eq('user_id', providerId);
 
       if (providerError) throw providerError;
 
-      // Log admin action
       await supabase.from('admin_logs').insert({
         admin_id: adminId,
         action: 'reject_fee_payment',
@@ -296,7 +317,6 @@ export function useAdminFees(filter: FilterType = 'all') {
         target_id: providerId,
       });
 
-      // Send notification to provider
       try {
         await supabase.functions.invoke('send-notifications', {
           body: {
