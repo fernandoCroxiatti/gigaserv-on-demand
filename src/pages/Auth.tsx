@@ -92,6 +92,22 @@ export default function Auth() {
     }
   };
 
+  const requestNotificationPermission = async () => {
+    // Only run in browser with Notification API support
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return;
+    }
+
+    // Only request if permission is "default" (never asked)
+    if (Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch (error) {
+        console.error('Error requesting notification permission:', error);
+      }
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!phone || !password) {
@@ -112,6 +128,10 @@ export default function Auth() {
         }
         return;
       }
+      
+      // Request notification permission immediately after successful login
+      // This is triggered by user action (clicking "Entrar" button)
+      await requestNotificationPermission();
       
       toast({ title: 'Sucesso', description: 'Login realizado com sucesso!' });
       navigate('/');
@@ -209,6 +229,10 @@ export default function Auth() {
       if (data.user) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
+      
+      // Request notification permission immediately after successful registration
+      // This is triggered by user action (clicking "Cadastrar" button)
+      await requestNotificationPermission();
       
       toast({ title: 'Sucesso', description: 'Cadastro realizado com sucesso!' });
       navigate('/');
