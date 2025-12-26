@@ -501,7 +501,11 @@ export function useNotifications() {
 
   // Re-subscribe to push (useful after re-opening app)
   const resubscribeToPush = useCallback(async () => {
-    console.log('[useNotifications] Resubscribe called, isNative:', isNative, 'permission:', permission, 'userId:', user?.id);
+    const browserPermission = !isNative && typeof window !== 'undefined' && 'Notification' in window
+      ? window.Notification.permission
+      : permission;
+
+    console.log('[useNotifications] Resubscribe called, isNative:', isNative, 'permission:', permission, 'browserPermission:', browserPermission, 'userId:', user?.id);
     
     if (isNative) {
       // For native, just request permission again which will re-register
@@ -511,7 +515,7 @@ export function useNotifications() {
       return;
     }
 
-    if (permission !== 'granted') {
+    if (browserPermission !== 'granted') {
       console.log('[useNotifications] Cannot resubscribe - permission not granted');
       return;
     }
