@@ -395,9 +395,11 @@ serve(async (req) => {
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[send-notifications] Error:', errorMessage);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('[send-notifications] Error:', { message: errorMessage, stack: errorStack });
+    // Return generic message to client, keep details in server logs
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: 'Erro ao enviar notificação. Tente novamente.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

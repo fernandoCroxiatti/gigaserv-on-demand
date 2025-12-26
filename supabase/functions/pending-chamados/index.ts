@@ -171,8 +171,10 @@ serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage, chamados: [] }), {
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logStep("ERROR", { message: errorMessage, stack: errorStack });
+    // Return generic message to client, keep details in server logs
+    return new Response(JSON.stringify({ error: "Erro ao buscar chamados. Tente novamente.", chamados: [] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
