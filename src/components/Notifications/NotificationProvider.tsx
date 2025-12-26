@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { NotificationPermissionModal } from './NotificationPermissionModal';
 import { NotificationDisabledBanner } from './NotificationDisabledBanner';
+import { useServiceWorkerAlertSync } from '@/hooks/useServiceWorkerAlertSync';
 
 interface NotificationProviderProps {
   children: React.ReactNode;
@@ -28,6 +29,9 @@ export function NotificationProvider({ children, activeProfile = 'client' }: Not
   const hasTriggeredRef = useRef(false);
   const hasResubscribedRef = useRef(false);
   const userIdRef = useRef<string | null>(null);
+  
+  // Hook to sync ride alerts between Service Worker and app (Uber-style continuous sound)
+  useServiceWorkerAlertSync();
 
   // Reset trigger when user changes (logout/login)
   useEffect(() => {

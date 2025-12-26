@@ -10,6 +10,7 @@ import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useServiceWorkerAlertSync } from '@/hooks/useServiceWorkerAlertSync';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
@@ -18,6 +19,7 @@ export function IncomingRequestCard() {
   const [isAccepting, setIsAccepting] = useState(false);
   const { checkProviderCanAccept } = useAntiFraud();
   const navigate = useNavigate();
+  const { notifyServiceWorkerChamadoHandled } = useServiceWorkerAlertSync();
 
   // Calculate distance from provider to client
   const distanceToClient = useMemo(() => {
@@ -67,6 +69,7 @@ export function IncomingRequestCard() {
   useEffect(() => {
     if (!incomingRequest) {
       stopRideAlertLoop();
+      notifyServiceWorkerChamadoHandled('expired');
       return;
     }
     
@@ -78,6 +81,7 @@ export function IncomingRequestCard() {
       setTimeLeft(prev => {
         if (prev <= 1) {
           stopRideAlertLoop();
+          notifyServiceWorkerChamadoHandled('expired');
           declineIncomingRequest();
           return 0;
         }
@@ -89,7 +93,7 @@ export function IncomingRequestCard() {
       clearInterval(interval);
       stopRideAlertLoop();
     };
-  }, [incomingRequest, declineIncomingRequest]);
+  }, [incomingRequest, declineIncomingRequest, notifyServiceWorkerChamadoHandled]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -109,6 +113,7 @@ export function IncomingRequestCard() {
       
       if (!canAccept) {
         stopRideAlertLoop();
+        notifyServiceWorkerChamadoHandled('declined');
         
         // Determine appropriate message based on block reason
         let message = 'Você não pode aceitar chamados no momento.';
@@ -144,10 +149,20 @@ export function IncomingRequestCard() {
         return;
       }
       
+      // Stop alert and notify SW before accepting
+      stopRideAlertLoop();
+      notifyServiceWorkerChamadoHandled('accepted');
       await acceptIncomingRequest();
     } finally {
       setIsAccepting(false);
     }
+  };
+  
+  // Handle decline
+  const handleDecline = () => {
+    stopRideAlertLoop();
+    notifyServiceWorkerChamadoHandled('declined');
+    declineIncomingRequest();
   };
 
   if (!incomingRequest) return null;
@@ -163,7 +178,7 @@ export function IncomingRequestCard() {
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto"
-        onClick={declineIncomingRequest}
+        onClick={handleDecline}
       />
 
       {/* Card - compact and premium */}
@@ -198,7 +213,7 @@ export function IncomingRequestCard() {
             </div>
           </div>
           <button 
-            onClick={declineIncomingRequest}
+            onClick={handleDecline}
             className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-secondary/80"
           >
             <X className="w-3.5 h-3.5" />
@@ -276,7 +291,7 @@ export function IncomingRequestCard() {
         <div className="p-3 pt-0 flex gap-2">
           <Button 
             variant="outline" 
-            onClick={declineIncomingRequest}
+            onClick={handleDecline}
             className="flex-1 h-11"
           >
             <X className="w-4 h-4" />
