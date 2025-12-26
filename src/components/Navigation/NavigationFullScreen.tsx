@@ -268,6 +268,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   }, [chamado.id]);
 
   // Subscribe to navigation updates (for syncing between client and provider)
+  // CRITICAL: Client must update route data when provider changes phase (especially guincho 2nd phase)
   useEffect(() => {
     const channel = supabase
       .channel(`navigation-${chamado.id}`)
@@ -285,16 +286,26 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           if (navigation_phase) {
             const normalizedPhase = normalizePhase(navigation_phase);
             if (normalizedPhase !== navigationPhase) {
+              console.log('[Navigation] Phase changed via realtime:', normalizedPhase);
               setNavigationPhase(normalizedPhase);
+              
+              // CRITICAL: When phase changes, clear old route data to show fresh route
               if (mode === 'client') {
+                // Clear old route until new one arrives
+                setRoutePolyline('');
+                setEta('');
+                setDistance('');
+                
                 toast.info(normalizedPhase === 'to_destination' 
-                  ? 'Prestador chegou ao veículo!' 
+                  ? 'Prestador chegou ao veículo! Iniciando transporte...' 
                   : 'Navegação iniciada');
               }
             }
           }
           
-          if (route_polyline && route_polyline !== routePolyline) {
+          // Update route data when available (will arrive shortly after phase change)
+          if (route_polyline) {
+            console.log('[Navigation] Route polyline received via realtime');
             setRoutePolyline(route_polyline);
           }
           
@@ -312,22 +323,38 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chamado.id, navigationPhase, routePolyline, mode]);
+  }, [chamado.id, navigationPhase, mode]);
 
   // Calculate route ONCE when phase changes (provider only)
+  // CRITICAL: For guincho, must recalculate when changing from to_client to to_destination
   useEffect(() => {
     if (mode !== 'provider') return;
     if (!providerLocation || !currentDestination) return;
     
     const routeKey = `${chamado.id}-${navigationPhase}`;
-    if (routeCalculatedRef.current === routeKey) return;
     
-    if (routePolyline && routeCalculatedRef.current.includes(chamado.id)) {
+    // Already calculated for this exact phase - skip
+    if (routeCalculatedRef.current === routeKey) {
+      console.log('[Navigation] Route already calculated for:', routeKey);
+      return;
+    }
+    
+    // IMPORTANT: Do NOT skip if phase changed - we need new route for new destination
+    // Only skip if we have a polyline AND it's for the SAME phase (not different phase)
+    const currentPhaseFromRef = routeCalculatedRef.current.split('-').pop();
+    if (routePolyline && currentPhaseFromRef === navigationPhase) {
+      console.log('[Navigation] Polyline exists for same phase, marking as calculated');
       routeCalculatedRef.current = routeKey;
       return;
     }
 
     const doCalculateRoute = async () => {
+      console.log('[Navigation] Calculating route for phase:', navigationPhase, {
+        hasDestination: !!currentDestination,
+        destinationAddress: currentDestination?.address,
+        isGoingoToClient: navigationPhase === 'to_client',
+      });
+      
       const result = await calculateRoute(
         providerLocation,
         currentDestination,
@@ -340,6 +367,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         setDistance(result.distanceText);
         setEta(result.durationText);
         routeCalculatedRef.current = routeKey;
+        console.log('[Navigation] Route calculated successfully for phase:', navigationPhase);
       }
     };
 
@@ -391,24 +419,62 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     setIsConfirming(true);
 
     try {
-      // Update database with new phase (using old format for backwards compatibility)
+      // CRITICAL: For guincho services, recalculate route from current provider location to final destination
+      const newDestination = chamado.destino;
+      
+      if (!newDestination) {
+        toast.error('Destino não configurado');
+        setIsConfirming(false);
+        return;
+      }
+
+      // Clear all route state BEFORE updating phase
+      clearRoute();
+      clearRouteCache();
+      routeCalculatedRef.current = '';
+      setRoutePolyline('');
+      setEta('');
+      setDistance('');
+      
+      // Update local phase FIRST to trigger proper calculation
+      setNavigationPhase('to_destination');
+      
+      // Update database with new phase
       await supabase
         .from('chamados')
         .update({
           provider_arrived_at_vehicle: true,
           navigation_phase: 'to_destination',
+          // Clear old route data so client gets fresh route
+          route_polyline: null,
+          route_distance_meters: null,
+          route_duration_seconds: null,
         })
         .eq('id', chamado.id);
 
-      clearRoute();
-      clearRouteCache();
-      routeCalculatedRef.current = '';
+      // Force immediate route recalculation with current GPS position
+      if (providerGPSLocation) {
+        console.log('[Navigation] Phase 2: Calculating route from current position to destination');
+        const result = await forceRecalculateRoute(
+          providerGPSLocation,
+          newDestination,
+          chamado.id,
+          'to_destination'
+        );
+        
+        if (result) {
+          setRoutePolyline(result.polyline);
+          setDistance(result.distanceText);
+          setEta(result.durationText);
+          routeCalculatedRef.current = `${chamado.id}-to_destination`;
+          console.log('[Navigation] Phase 2 route calculated:', {
+            distance: result.distanceText,
+            eta: result.durationText,
+          });
+        }
+      }
       
-      setNavigationPhase('to_destination');
-      setEta('');
-      setDistance('');
-      
-      toast.success('Chegada confirmada!');
+      toast.success('Chegada confirmada! Navegando para o destino final.');
     } catch (error) {
       console.error('[Navigation] Error confirming arrival:', error);
       toast.error('Erro ao confirmar chegada');
