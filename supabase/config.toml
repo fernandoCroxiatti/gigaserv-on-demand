@@ -41,3 +41,27 @@ verify_jwt = true
 
 [functions.check-payment-status]
 verify_jwt = true
+
+[functions.provider-heartbeat]
+verify_jwt = true
+
+[functions.online-providers]
+verify_jwt = true
+
+[functions.create-chamado]
+verify_jwt = true
+
+[functions.toggle-provider-online]
+verify_jwt = true
+
+[functions.pending-chamados]
+verify_jwt = true
+
+[functions.check-pending-fees]
+verify_jwt = true
+
+[functions.record-service-fee]
+verify_jwt = true
+
+[functions.notify-admin-payment]
+verify_jwt = true

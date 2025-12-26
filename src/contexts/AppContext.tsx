@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Database } from '@/integrations/supabase/types';
 import { isChamadoWithinRange } from '@/lib/distance';
 import { startRideAlertLoop, stopRideAlertLoop } from '@/lib/rideAlertSound';
+import { useChamadoQueue } from '@/hooks/useChamadoQueue';
 
 type DbChamado = Database['public']['Tables']['chamados']['Row'];
 type DbProfile = Database['public']['Tables']['profiles']['Row'];
@@ -388,107 +389,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [authUser, profile?.active_profile]);
 
-  // Listen for incoming requests (ONLY for registered providers who are online)
+  // ===== QUEUE-BASED CHAMADO SYSTEM =====
+  // The queue is the PRIMARY source of truth for pending chamados.
+  // Realtime is kept as a COMPLEMENT for instant notifications.
+  
+  const handleNewChamadoFromQueue = useCallback((newChamado: Chamado) => {
+    // Don't show if already showing same chamado
+    if (incomingRequest?.id === newChamado.id) {
+      return;
+    }
+    
+    console.log(`[ChamadoQueue] New chamado from queue: ${newChamado.id.substring(0, 8)}`);
+    setIncomingRequest(newChamado);
+    toast.info('Novo chamado disponível!', {
+      description: 'Um cliente está procurando atendimento.',
+    });
+  }, [incomingRequest]);
+
+  const { markAsDeclined: markChamadoDeclinedInQueue, forcePoll: forceQueuePoll } = useChamadoQueue({
+    userId: authUser?.id || null,
+    isOnline: providerData?.is_online === true,
+    isProvider: canAccessProviderFeatures && profile?.active_profile === 'provider',
+    hasActiveChamado: !!chamado,
+    currentIncomingRequest: incomingRequest,
+    onNewChamado: handleNewChamadoFromQueue,
+  });
+
+  // REALTIME as COMPLEMENT - only for instant updates, not as primary source
   useEffect(() => {
-    // CRITICAL: Only listen if user is a registered provider AND active as provider
     const shouldListen = authUser && 
                         canAccessProviderFeatures && 
                         profile?.active_profile === 'provider' && 
                         providerData?.is_online === true && 
                         !chamado;
     
-    console.log('[ChamadoListener] Evaluating listener conditions:', {
-      hasAuthUser: !!authUser,
-      canAccessProviderFeatures,
-      activeProfile: profile?.active_profile,
-      isOnline: providerData?.is_online,
-      hasChamado: !!chamado,
-      shouldListen
-    });
-    
     if (!shouldListen || !authUser || !providerData) {
-      console.log('[ChamadoListener] Listener NOT active - conditions not met');
       return;
     }
     
-    console.log('[ChamadoListener] Listener ACTIVE - provider is online and ready to receive chamados');
+    console.log('[RealtimeComplement] Subscribing to realtime updates (complement to queue)');
 
-    // Check for existing searching chamados when provider goes online
-    const checkExistingChamados = async () => {
-      console.log('[ChamadoListener] Checking for existing searching chamados...');
-      
-      const { data: searchingChamados, error } = await supabase
-        .from('chamados')
-        .select('*')
-        .eq('status', 'searching')
-        .is('prestador_id', null)
-        .neq('cliente_id', authUser.id); // Don't show own chamados
-
-      if (error) {
-        console.error('[ChamadoListener] Error checking existing chamados:', error);
-        return;
-      }
-
-      console.log(`[ChamadoListener] Found ${searchingChamados?.length || 0} searching chamados in database`);
-
-      if (searchingChamados && searchingChamados.length > 0) {
-        const services = providerData.services_offered || ['guincho'];
-        const radarRange = providerData.radar_range || 15;
-        const providerLat = providerData.current_lat ? Number(providerData.current_lat) : null;
-        const providerLng = providerData.current_lng ? Number(providerData.current_lng) : null;
-
-        console.log('[ChamadoListener] Provider config:', { services, radarRange, providerLat, providerLng });
-
-        for (const dbChamado of searchingChamados) {
-          const chamadoData = mapDbChamadoToChamado(dbChamado);
-          
-          // CRITICAL: Don't show own chamados (extra safety check)
-          if (dbChamado.cliente_id === authUser.id) {
-            console.log(`[ChamadoListener] Skipping chamado ${chamadoData.id}: is own chamado`);
-            continue;
-          }
-          
-          // Check if this provider has already declined this chamado
-          const declinedProviderIds = dbChamado.declined_provider_ids || [];
-          if (declinedProviderIds.includes(authUser.id)) {
-            console.log(`[ChamadoListener] Skipping chamado ${chamadoData.id}: provider already declined`);
-            continue;
-          }
-          
-          // Check if provider offers this service
-          if (!services.includes(chamadoData.tipoServico)) {
-            console.log(`[ChamadoListener] Skipping chamado ${chamadoData.id}: service ${chamadoData.tipoServico} not offered`);
-            continue;
-          }
-
-          // Check if chamado is within radar range
-          const isWithinRange = isChamadoWithinRange(
-            providerLat,
-            providerLng,
-            chamadoData.origem.lat,
-            chamadoData.origem.lng,
-            radarRange
-          );
-
-          console.log(`[ChamadoListener] Chamado ${chamadoData.id} within range: ${isWithinRange}`);
-
-          if (isWithinRange) {
-            console.log(`[ChamadoListener] ✅ Found chamado within range: ${chamadoData.id}`);
-            setIncomingRequest(chamadoData);
-            toast.info('Novo chamado disponível!', {
-              description: 'Um cliente está procurando atendimento.',
-            });
-            break; // Show one chamado at a time
-          }
-        }
-      }
-    };
-
-    checkExistingChamados();
-
-    // Also listen for UPDATE events (chamado returned to searching after provider cancel)
     const channel = supabase
-      .channel('incoming-chamados')
+      .channel('incoming-chamados-realtime')
       .on(
         'postgres_changes',
         {
@@ -499,18 +441,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         (payload) => {
           const dbChamado = payload.new as DbChamado;
-          const newChamado = mapDbChamadoToChamado(dbChamado);
           
-          // CRITICAL: Don't show own chamados
+          // Skip own chamados
           if (dbChamado.cliente_id === authUser.id) {
-            console.log(`[Chamados] New chamado ${newChamado.id}: is own chamado, skipping`);
             return;
           }
           
-          // Check if this provider has already declined this chamado
+          // Skip if already declined
           const declinedProviderIds = dbChamado.declined_provider_ids || [];
           if (declinedProviderIds.includes(authUser.id)) {
-            console.log(`[Chamados] New chamado ${newChamado.id}: provider already declined, skipping`);
+            return;
+          }
+          
+          // Check local cooldown
+          const declinedAt = recentlyDeclinedRef.current.get(dbChamado.id);
+          if (declinedAt && (Date.now() - declinedAt) < DECLINE_COOLDOWN_MS) {
             return;
           }
           
@@ -519,30 +464,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const providerLat = providerData.current_lat ? Number(providerData.current_lat) : null;
           const providerLng = providerData.current_lng ? Number(providerData.current_lng) : null;
 
-          // Check if provider offers this service
-          if (!services.includes(newChamado.tipoServico)) {
-            console.log(`[Chamados] New chamado ${newChamado.id}: service ${newChamado.tipoServico} not offered`);
+          if (!services.includes(dbChamado.tipo_servico)) {
             return;
           }
 
-          // Check if chamado is within radar range
           const isWithinRange = isChamadoWithinRange(
             providerLat,
             providerLng,
-            newChamado.origem.lat,
-            newChamado.origem.lng,
+            Number(dbChamado.origem_lat),
+            Number(dbChamado.origem_lng),
             radarRange
           );
 
-          if (isWithinRange) {
-            console.log(`[Chamados] New chamado within range: ${newChamado.id}`);
-            setIncomingRequest(newChamado);
-            // Sound is handled by IncomingRequestCard component
+          if (isWithinRange && !incomingRequest) {
+            console.log(`[RealtimeComplement] New chamado from realtime: ${dbChamado.id.substring(0, 8)}`);
+            setIncomingRequest(mapDbChamadoToChamado(dbChamado));
             toast.info('Novo chamado!', {
               description: 'Um cliente próximo precisa de ajuda.',
             });
-          } else {
-            console.log(`[Chamados] New chamado ${newChamado.id} is outside radar range`);
           }
         }
       )
@@ -556,96 +495,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const dbChamado = payload.new as DbChamado;
           
-          // COMPETITIVE: Clear incomingRequest if this chamado was taken by another provider
-          // or canceled by client
+          // Clear incomingRequest if chamado was taken by another provider
           if (incomingRequest && dbChamado.id === incomingRequest.id) {
             const wasAccepted = dbChamado.status !== 'searching' || dbChamado.prestador_id !== null;
             if (wasAccepted) {
-              console.log(`[Chamados] Chamado ${dbChamado.id} was accepted by another provider or status changed`);
+              console.log(`[RealtimeComplement] Chamado ${dbChamado.id.substring(0, 8)} was taken`);
               setIncomingRequest(null);
               stopRideAlertLoop();
-              return;
             }
-            
-            // If chamado is still searching but declined_provider_ids was updated (someone declined)
-            // and we are the one who declined, just ignore (don't re-show)
-            const declinedProviderIds = dbChamado.declined_provider_ids || [];
-            if (declinedProviderIds.includes(authUser.id)) {
-              console.log(`[Chamados] UPDATE on our incomingRequest but we already declined, ignoring`);
-              // Don't clear incomingRequest here - it was already cleared in declineIncomingRequest
-              return;
-            }
-          }
-          
-          // Only process UPDATE if it's for a chamado going TO searching status
-          // OR if declined_provider_ids changed (someone declined)
-          if (dbChamado.status !== 'searching' || dbChamado.prestador_id !== null) {
-            return;
-          }
-          
-          // CRITICAL: Don't show own chamados
-          if (dbChamado.cliente_id === authUser.id) {
-            console.log(`[Chamados] Updated chamado ${dbChamado.id}: is own chamado, skipping`);
-            return;
-          }
-          
-          // IMPORTANT: Check if this provider has already declined this chamado
-          // This prevents the loop where a provider declines and immediately gets the chamado back
-          const declinedProviderIds = dbChamado.declined_provider_ids || [];
-          if (declinedProviderIds.includes(authUser.id)) {
-            console.log(`[Chamados] Updated chamado ${dbChamado.id}: provider already declined (in DB), skipping`);
-            return;
-          }
-          
-          // Also check our local recently declined map (for race conditions and cooldown)
-          const declinedAt = recentlyDeclinedRef.current.get(dbChamado.id);
-          if (declinedAt) {
-            const elapsed = Date.now() - declinedAt;
-            if (elapsed < DECLINE_COOLDOWN_MS) {
-              const remaining = Math.ceil((DECLINE_COOLDOWN_MS - elapsed) / 1000);
-              console.log(`[Chamados] Updated chamado ${dbChamado.id}: still in cooldown (${remaining}s remaining), skipping`);
-              return;
-            } else {
-              // Cooldown expired, remove from map
-              recentlyDeclinedRef.current.delete(dbChamado.id);
-            }
-          }
-          
-          // Don't re-trigger for the same chamado we already have as incomingRequest
-          if (incomingRequest && incomingRequest.id === dbChamado.id) {
-            console.log(`[Chamados] Updated chamado ${dbChamado.id}: already showing as incomingRequest`);
-            return;
-          }
-          
-          const chamadoData = mapDbChamadoToChamado(dbChamado);
-          
-          const services = providerData.services_offered || ['guincho'];
-          const radarRange = providerData.radar_range || 15;
-          const providerLat = providerData.current_lat ? Number(providerData.current_lat) : null;
-          const providerLng = providerData.current_lng ? Number(providerData.current_lng) : null;
-
-          // Check if provider offers this service
-          if (!services.includes(chamadoData.tipoServico)) {
-            console.log(`[Chamados] Updated chamado ${chamadoData.id}: service ${chamadoData.tipoServico} not offered`);
-            return;
-          }
-
-          // Check if chamado is within radar range
-          const isWithinRange = isChamadoWithinRange(
-            providerLat,
-            providerLng,
-            chamadoData.origem.lat,
-            chamadoData.origem.lng,
-            radarRange
-          );
-
-          if (isWithinRange) {
-            console.log(`[Chamados] Updated chamado within range: ${chamadoData.id}`);
-            setIncomingRequest(chamadoData);
-            // Sound is handled by IncomingRequestCard component
-            toast.info('Chamado disponível novamente!', {
-              description: 'Um cliente precisa de ajuda.',
-            });
           }
         }
       )
@@ -1273,20 +1130,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const chamadoId = incomingRequest.id;
     
-    // IMMEDIATELY add to local recently declined map with timestamp to prevent race conditions
-    // The chamado will stay blocked for DECLINE_COOLDOWN_MS (10 seconds)
+    // Mark in queue system (local cooldown)
+    markChamadoDeclinedInQueue(chamadoId);
+    
+    // ALSO keep the local ref for realtime complement
     recentlyDeclinedRef.current.set(chamadoId, Date.now());
     
     // Schedule removal after cooldown period (10 seconds)
     setTimeout(() => {
       recentlyDeclinedRef.current.delete(chamadoId);
-      console.log(`[Chamado] Cooldown expired for chamado ${chamadoId}, can be re-offered now`);
+      console.log(`[Chamado] Cooldown expired for chamado ${chamadoId.substring(0, 8)}`);
     }, DECLINE_COOLDOWN_MS);
     
     // Clear the incoming request immediately
     setIncomingRequest(null);
 
-    // Record the decline in the chamado so client can track and expand radius
+    // Record the decline in the database
     try {
       const { data: currentChamado } = await supabase
         .from('chamados')
@@ -1304,12 +1163,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .eq('id', chamadoId);
       }
 
-      console.log(`[Chamado] Provider declined chamado ${chamadoId}, cooldown active for ${DECLINE_COOLDOWN_MS / 1000}s`);
+      console.log(`[Chamado] Provider declined chamado ${chamadoId.substring(0, 8)}`);
     } catch (err) {
       console.error('[Chamado] Error recording decline:', err);
     }
-    // Removed toast - UI state change is clear enough
-  }, [incomingRequest, authUser]);
+  }, [incomingRequest, authUser, markChamadoDeclinedInQueue]);
 
   const setChamadoStatus = useCallback((status: ChamadoStatus) => {
     setChamado(prev => prev ? { ...prev, status, updatedAt: new Date() } : null);
