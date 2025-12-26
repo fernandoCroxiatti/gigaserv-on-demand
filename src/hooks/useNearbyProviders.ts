@@ -22,7 +22,7 @@ interface UseNearbyProvidersOptions {
 
 const DEFAULT_RADIUS = 15; // km
 const REFRESH_INTERVAL = 10000; // 10 seconds - periodic refresh for cross-platform sync
-const STALE_PROVIDER_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes - providers without heartbeat
+const STALE_PROVIDER_THRESHOLD_MS = 15 * 1000; // 15 seconds - must match backend timeout
 
 export function useNearbyProviders({ 
   userLocation, 
@@ -51,56 +51,32 @@ export function useNearbyProviders({
     setLoading(true);
 
     try {
-      // First, let's check ALL providers to debug
-      const { data: allProviders } = await supabase
-        .from('provider_data')
-        .select('user_id, is_online, current_lat, current_lng')
-        .limit(20);
-      
-      console.log('[NearbyProviders] All providers in DB:', allProviders?.map(p => ({
-        id: p.user_id.substring(0, 8),
-        online: p.is_online,
-        hasLocation: !!(p.current_lat && p.current_lng)
-      })));
-
-      // Fetch online providers with valid location
-      const { data: providerData, error } = await supabase
-        .from('provider_data')
-        .select(`
-          user_id,
-          current_lat,
-          current_lng,
-          current_address,
-          rating,
-          total_services,
-          services_offered,
-          is_online,
-          updated_at
-        `)
-        .eq('is_online', true)
-        .not('current_lat', 'is', null)
-        .not('current_lng', 'is', null);
+      // SINGLE SOURCE OF TRUTH: always fetch from backend (no session/cache dependence)
+      const { data, error } = await supabase.functions.invoke('online-providers', {
+        body: {},
+      });
 
       if (error) {
-        console.error('[NearbyProviders] Error fetching providers:', error);
+        console.error('[NearbyProviders] Error fetching providers (backend):', error);
         setLoading(false);
         return;
       }
 
-      // Filter out stale providers (no heartbeat in last 5 minutes)
-      const now = new Date();
-      const activeProviders = providerData?.filter(p => {
+      const providerData = (data as any)?.providers as any[] | undefined;
+
+      console.log('[NearbyProviders] Providers received from backend:', {
+        count: providerData?.length || 0,
+        thresholdIso: (data as any)?.thresholdIso,
+      });
+
+      // Extra safety: filter out stale providers (should already be cleaned server-side)
+      const nowDate = new Date();
+      const activeProviders = (providerData || []).filter((p) => {
         if (!p.updated_at) return false;
         const lastUpdate = new Date(p.updated_at);
-        const ageMs = now.getTime() - lastUpdate.getTime();
-        const isActive = ageMs < STALE_PROVIDER_THRESHOLD_MS;
-        if (!isActive) {
-          console.log(`[NearbyProviders] Filtering stale provider ${p.user_id.substring(0, 8)} - last update ${Math.round(ageMs / 1000)}s ago`);
-        }
-        return isActive;
-      }) || [];
-
-      console.log(`[NearbyProviders] Found ${activeProviders.length} active online providers (from ${providerData?.length || 0} total)`);
+        const ageMs = nowDate.getTime() - lastUpdate.getTime();
+        return ageMs < STALE_PROVIDER_THRESHOLD_MS;
+      });
 
       if (activeProviders.length === 0) {
         console.log('[NearbyProviders] No active online providers with valid location');
@@ -109,18 +85,9 @@ export function useNearbyProviders({
         return;
       }
 
-      // Fetch profile names
-      const userIds = activeProviders.map(p => p.user_id);
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, name')
-        .in('user_id', userIds);
-
-      const profileMap = new Map(profiles?.map(p => [p.user_id, p.name]) || []);
-
-      // Filter by distance - NO platform filtering, purely geographic
+      // Map by distance
       const filteredProviders: NearbyProvider[] = [];
-      
+
       for (const provider of activeProviders) {
         if (!provider.current_lat || !provider.current_lng) continue;
 
@@ -135,7 +102,7 @@ export function useNearbyProviders({
           filteredProviders.push({
             id: provider.user_id,
             userId: provider.user_id,
-            name: profileMap.get(provider.user_id) || 'Prestador',
+            name: provider.profiles?.name || 'Prestador',
             location: {
               lat: Number(provider.current_lat),
               lng: Number(provider.current_lng),

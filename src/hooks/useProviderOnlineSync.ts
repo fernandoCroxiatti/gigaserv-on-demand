@@ -9,11 +9,11 @@ interface UseProviderOnlineSyncOptions {
   onReconnected?: () => void;
 }
 
-// Sync interval: every 60 seconds verify status is still correct in DB
-const SYNC_INTERVAL_MS = 60 * 1000;
+// Verify interval: every 10 seconds verify status is still correct in DB
+const SYNC_INTERVAL_MS = 10 * 1000;
 
-// Heartbeat: update timestamp to show provider is still active
-const HEARTBEAT_INTERVAL_MS = 30 * 1000;
+// Heartbeat: explicit ping every 8 seconds while ONLINE
+const HEARTBEAT_INTERVAL_MS = 8 * 1000;
 
 /**
  * Hook to ensure provider online status stays synchronized with database.
@@ -70,17 +70,21 @@ export function useProviderOnlineSync({
     }
   }, [userId, isOnline, hasLocation, onStatusLost]);
 
-  // Send heartbeat to keep updated_at fresh (proves provider is still active)
+  // Send heartbeat via backend (single source of truth)
   const sendHeartbeat = useCallback(async () => {
     if (!userId || !isOnline) return;
 
     try {
-      await supabase
-        .from('provider_data')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('user_id', userId);
-      
-      console.log('[OnlineSync] Heartbeat sent');
+      const { data, error } = await supabase.functions.invoke('provider-heartbeat', {
+        body: {},
+      });
+
+      if (error) {
+        console.warn('[OnlineSync] Heartbeat failed:', error);
+        return;
+      }
+
+      console.log('[OnlineSync] Heartbeat sent (backend)', data);
     } catch (err) {
       console.warn('[OnlineSync] Heartbeat failed:', err);
     }
