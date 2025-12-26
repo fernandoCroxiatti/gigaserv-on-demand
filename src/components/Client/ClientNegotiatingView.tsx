@@ -5,13 +5,16 @@ import { Button } from '../ui/button';
 import { Star, Send, ArrowRight, MessageCircle, Clock, Phone, Truck, Wallet, Navigation, Route, MapPin } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { useProviderInfo } from '@/hooks/useProviderInfo';
+import { useCancellationWithReason } from '@/hooks/useCancellationWithReason';
+import { CancellationReasonDialog } from '../CancellationReasonDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Switch } from '../ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateDistance } from '@/lib/distance';
+import { toast } from 'sonner';
 
 export function ClientNegotiatingView() {
-  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue } = useApp();
+  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, resetChamado } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
@@ -19,6 +22,21 @@ export function ClientNegotiatingView() {
 
   // Fetch complete provider info
   const providerInfo = useProviderInfo(chamado?.prestadorId);
+
+  // Cancellation with reason
+  const {
+    showReasonDialog,
+    cancelling,
+    openCancellationDialog,
+    closeCancellationDialog,
+    confirmCancellation,
+  } = useCancellationWithReason({
+    chamadoId: chamado?.id,
+    onCancelled: () => {
+      toast.info('Chamado cancelado');
+      resetChamado();
+    },
+  });
 
   // Calculate route distance
   const routeDistance = useMemo(() => {
@@ -373,10 +391,11 @@ export function ClientNegotiatingView() {
           <div className="px-4 pt-2 pb-4 flex gap-3">
             <Button 
               variant="ghost" 
-              onClick={cancelChamado} 
+              onClick={openCancellationDialog}
+              disabled={cancelling}
               className="flex-1 h-12 text-sm font-medium bg-secondary/80 hover:bg-secondary text-muted-foreground rounded-xl"
             >
-              Cancelar
+              {cancelling ? 'Cancelando...' : 'Cancelar'}
             </Button>
             <Button 
               onClick={handleConfirmAndPay} 
@@ -389,6 +408,14 @@ export function ClientNegotiatingView() {
           </div>
         </div>
       </div>
+
+      {/* Cancellation reason dialog */}
+      <CancellationReasonDialog
+        isOpen={showReasonDialog}
+        onClose={closeCancellationDialog}
+        onConfirm={confirmCancellation}
+        isProvider={false}
+      />
     </div>
   );
 }
