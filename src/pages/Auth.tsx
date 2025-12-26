@@ -93,18 +93,27 @@ export default function Auth() {
   };
 
   const requestNotificationPermission = async () => {
+    console.log('[Auth] Requesting notification permission...');
+    console.log('[Auth] Notification API available:', 'Notification' in window);
+    console.log('[Auth] Current permission:', typeof Notification !== 'undefined' ? Notification.permission : 'N/A');
+    
     // Only run in browser with Notification API support
     if (typeof window === 'undefined' || !('Notification' in window)) {
+      console.log('[Auth] Notification API not available');
       return;
     }
 
     // Only request if permission is "default" (never asked)
     if (Notification.permission === 'default') {
+      console.log('[Auth] Permission is default, requesting...');
       try {
-        await Notification.requestPermission();
+        const result = await Notification.requestPermission();
+        console.log('[Auth] Permission result:', result);
       } catch (error) {
-        console.error('Error requesting notification permission:', error);
+        console.error('[Auth] Error requesting notification permission:', error);
       }
+    } else {
+      console.log('[Auth] Permission already set to:', Notification.permission);
     }
   };
 
