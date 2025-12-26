@@ -112,6 +112,10 @@ export type Database = {
       }
       chamados: {
         Row: {
+          cancellation_category: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           cliente_id: string | null
           commission_amount: number | null
           commission_percentage: number | null
@@ -144,6 +148,7 @@ export type Database = {
           stripe_application_fee_amount: number | null
           stripe_payment_intent_id: string | null
           stripe_transfer_id: string | null
+          time_to_cancel_seconds: number | null
           tipo_servico: Database["public"]["Enums"]["service_type"]
           updated_at: string
           valor: number | null
@@ -151,6 +156,10 @@ export type Database = {
           vehicle_type: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Insert: {
+          cancellation_category?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           cliente_id?: string | null
           commission_amount?: number | null
           commission_percentage?: number | null
@@ -183,6 +192,7 @@ export type Database = {
           stripe_application_fee_amount?: number | null
           stripe_payment_intent_id?: string | null
           stripe_transfer_id?: string | null
+          time_to_cancel_seconds?: number | null
           tipo_servico: Database["public"]["Enums"]["service_type"]
           updated_at?: string
           valor?: number | null
@@ -190,6 +200,10 @@ export type Database = {
           vehicle_type?: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Update: {
+          cancellation_category?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           cliente_id?: string | null
           commission_amount?: number | null
           commission_percentage?: number | null
@@ -222,6 +236,7 @@ export type Database = {
           stripe_application_fee_amount?: number | null
           stripe_payment_intent_id?: string | null
           stripe_transfer_id?: string | null
+          time_to_cancel_seconds?: number | null
           tipo_servico?: Database["public"]["Enums"]["service_type"]
           updated_at?: string
           valor?: number | null
@@ -409,6 +424,10 @@ export type Database = {
           block_reason: string | null
           blocked_at: string | null
           blocked_by: string | null
+          client_cancellations_after_accept: number | null
+          client_completed_services: number | null
+          client_reliability_score: number | null
+          client_total_services: number | null
           cpf: string | null
           created_at: string
           email: string | null
@@ -430,6 +449,10 @@ export type Database = {
           block_reason?: string | null
           blocked_at?: string | null
           blocked_by?: string | null
+          client_cancellations_after_accept?: number | null
+          client_completed_services?: number | null
+          client_reliability_score?: number | null
+          client_total_services?: number | null
           cpf?: string | null
           created_at?: string
           email?: string | null
@@ -451,6 +474,10 @@ export type Database = {
           block_reason?: string | null
           blocked_at?: string | null
           blocked_by?: string | null
+          client_cancellations_after_accept?: number | null
+          client_completed_services?: number | null
+          client_reliability_score?: number | null
+          client_total_services?: number | null
           cpf?: string | null
           created_at?: string
           email?: string | null
@@ -471,6 +498,7 @@ export type Database = {
           block_reason: string | null
           blocked_at: string | null
           blocked_by: string | null
+          cancellations_after_accept: number | null
           created_at: string
           current_address: string | null
           current_lat: number | null
@@ -489,6 +517,7 @@ export type Database = {
           id: string
           is_blocked: boolean | null
           is_online: boolean | null
+          last_reliability_update: string | null
           max_debt_limit: number | null
           payout_enabled: boolean | null
           pending_fee_balance: number | null
@@ -502,6 +531,7 @@ export type Database = {
           radar_range: number | null
           rating: number | null
           registration_complete: boolean | null
+          reliability_score: number | null
           services_offered: Database["public"]["Enums"]["service_type"][] | null
           stripe_account_id: string | null
           stripe_charges_enabled: boolean | null
@@ -514,6 +544,8 @@ export type Database = {
           terms_accepted_at: string | null
           terms_accepted_version: string | null
           terms_version_required: string | null
+          total_accepted_services: number | null
+          total_completed_services: number | null
           total_services: number | null
           updated_at: string
           user_id: string
@@ -524,6 +556,7 @@ export type Database = {
           block_reason?: string | null
           blocked_at?: string | null
           blocked_by?: string | null
+          cancellations_after_accept?: number | null
           created_at?: string
           current_address?: string | null
           current_lat?: number | null
@@ -542,6 +575,7 @@ export type Database = {
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
+          last_reliability_update?: string | null
           max_debt_limit?: number | null
           payout_enabled?: boolean | null
           pending_fee_balance?: number | null
@@ -555,6 +589,7 @@ export type Database = {
           radar_range?: number | null
           rating?: number | null
           registration_complete?: boolean | null
+          reliability_score?: number | null
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
@@ -569,6 +604,8 @@ export type Database = {
           terms_accepted_at?: string | null
           terms_accepted_version?: string | null
           terms_version_required?: string | null
+          total_accepted_services?: number | null
+          total_completed_services?: number | null
           total_services?: number | null
           updated_at?: string
           user_id: string
@@ -579,6 +616,7 @@ export type Database = {
           block_reason?: string | null
           blocked_at?: string | null
           blocked_by?: string | null
+          cancellations_after_accept?: number | null
           created_at?: string
           current_address?: string | null
           current_lat?: number | null
@@ -597,6 +635,7 @@ export type Database = {
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
+          last_reliability_update?: string | null
           max_debt_limit?: number | null
           payout_enabled?: boolean | null
           pending_fee_balance?: number | null
@@ -610,6 +649,7 @@ export type Database = {
           radar_range?: number | null
           rating?: number | null
           registration_complete?: boolean | null
+          reliability_score?: number | null
           services_offered?:
             | Database["public"]["Enums"]["service_type"][]
             | null
@@ -624,6 +664,8 @@ export type Database = {
           terms_accepted_at?: string | null
           terms_accepted_version?: string | null
           terms_version_required?: string | null
+          total_accepted_services?: number | null
+          total_completed_services?: number | null
           total_services?: number | null
           updated_at?: string
           user_id?: string
@@ -789,6 +831,42 @@ export type Database = {
           },
         ]
       }
+      service_pairs: {
+        Row: {
+          cancelled_services: number | null
+          client_id: string
+          completed_services: number | null
+          created_at: string | null
+          flagged_for_review: boolean | null
+          id: string
+          last_service_at: string | null
+          provider_id: string
+          total_services: number | null
+        }
+        Insert: {
+          cancelled_services?: number | null
+          client_id: string
+          completed_services?: number | null
+          created_at?: string | null
+          flagged_for_review?: boolean | null
+          id?: string
+          last_service_at?: string | null
+          provider_id: string
+          total_services?: number | null
+        }
+        Update: {
+          cancelled_services?: number | null
+          client_id?: string
+          completed_services?: number | null
+          created_at?: string | null
+          flagged_for_review?: boolean | null
+          id?: string
+          last_service_at?: string | null
+          provider_id?: string
+          total_services?: number | null
+        }
+        Relationships: []
+      }
       settings_history: {
         Row: {
           changed_at: string
@@ -815,6 +893,62 @@ export type Database = {
           setting_key?: string
         }
         Relationships: []
+      }
+      suspicious_patterns: {
+        Row: {
+          action_taken: string | null
+          chamado_id: string | null
+          client_id: string | null
+          created_at: string | null
+          details: Json | null
+          id: string
+          pattern_type: string
+          provider_id: string | null
+          review_notes: string | null
+          reviewed: boolean | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          severity: string | null
+        }
+        Insert: {
+          action_taken?: string | null
+          chamado_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          pattern_type: string
+          provider_id?: string | null
+          review_notes?: string | null
+          reviewed?: boolean | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string | null
+        }
+        Update: {
+          action_taken?: string | null
+          chamado_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          pattern_type?: string
+          provider_id?: string | null
+          review_notes?: string | null
+          reviewed?: boolean | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suspicious_patterns_chamado_id_fkey"
+            columns: ["chamado_id"]
+            isOneToOne: false
+            referencedRelation: "chamados"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
