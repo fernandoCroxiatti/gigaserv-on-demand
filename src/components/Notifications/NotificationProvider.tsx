@@ -34,22 +34,32 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   }, [user?.id]);
 
   // Check for pending permission granted flag from Auth.tsx
+  // (Auth requests permission; here we only do SW/subscription setup AFTER grant.)
   useEffect(() => {
     if (!user?.id) return;
 
     try {
       const pending = localStorage.getItem('gigasos:notif_perm_granted_pending');
-      if (pending === '1') {
-        localStorage.removeItem('gigasos:notif_perm_granted_pending');
-        console.log('[NotificationProvider] Detected pending permission grant, registering push...');
-        
-        // Force registration even if hasResubscribedRef is set
-        hasResubscribedRef.current = false;
+      if (pending !== '1') return;
+
+      localStorage.removeItem('gigasos:notif_perm_granted_pending');
+
+      // If user granted permission outside the notifications hook,
+      // our internal `permission` state might still be stale.
+      if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
+        console.log('[NotificationProvider] Permission granted (pending). Ensuring push registration...');
+
+        hasResubscribedRef.current = true;
+        registerServiceWorker().then(() => {
+          setTimeout(() => {
+            resubscribeToPush();
+          }, 500);
+        });
       }
     } catch {
       // ignore storage errors
     }
-  }, [user?.id]);
+  }, [user?.id, registerServiceWorker, resubscribeToPush]);
 
   // Register service worker and resubscribe when permission is granted
   useEffect(() => {
