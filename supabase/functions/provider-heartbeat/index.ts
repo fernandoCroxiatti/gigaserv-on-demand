@@ -11,6 +11,25 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[PROVIDER-HEARTBEAT] ${step}${detailsStr}`);
 };
 
+// Input validation constants
+const MAX_ADDRESS_LENGTH = 500;
+
+// Validate coordinate bounds
+function isValidLatitude(lat: unknown): lat is number {
+  return typeof lat === 'number' && !isNaN(lat) && lat >= -90 && lat <= 90;
+}
+
+function isValidLongitude(lng: unknown): lng is number {
+  return typeof lng === 'number' && !isNaN(lng) && lng >= -180 && lng <= 180;
+}
+
+// Sanitize and truncate string
+function sanitizeAddress(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  return value.replace(/[<>]/g, '').substring(0, MAX_ADDRESS_LENGTH).trim();
+}
+
 type HeartbeatBody = {
   location?: {
     lat: number;
@@ -76,11 +95,20 @@ serve(async (req) => {
       updated_at: nowIso,
     };
 
-    if (typeof body.location?.lat === "number" && typeof body.location?.lng === "number") {
-      update.current_lat = body.location.lat;
-      update.current_lng = body.location.lng;
-      if (typeof body.location.address === "string") {
-        update.current_address = body.location.address;
+    // Validate and apply location data with coordinate bounds checking
+    if (body.location) {
+      if (isValidLatitude(body.location.lat) && isValidLongitude(body.location.lng)) {
+        update.current_lat = body.location.lat;
+        update.current_lng = body.location.lng;
+        const sanitizedAddress = sanitizeAddress(body.location.address);
+        if (sanitizedAddress) {
+          update.current_address = sanitizedAddress;
+        }
+      } else {
+        logStep("Invalid coordinates rejected", { 
+          lat: body.location.lat, 
+          lng: body.location.lng 
+        });
       }
     }
 

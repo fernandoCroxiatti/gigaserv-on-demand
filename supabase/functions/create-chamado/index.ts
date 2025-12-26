@@ -11,6 +11,32 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[CREATE-CHAMADO] ${step}${detailsStr}`);
 };
 
+// Input validation constants
+const MAX_ADDRESS_LENGTH = 500;
+const VALID_SERVICE_TYPES = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
+const VALID_VEHICLE_TYPES = [
+  'carro_passeio', 'carro_utilitario', 'pickup', 'van', 'moto',
+  'caminhao_toco', 'caminhao_34', 'truck', 'carreta', 'cavalinho',
+  'onibus', 'micro_onibus', 'outro'
+];
+
+// Validate coordinate bounds
+function isValidLatitude(lat: unknown): lat is number {
+  return typeof lat === 'number' && !isNaN(lat) && lat >= -90 && lat <= 90;
+}
+
+function isValidLongitude(lng: unknown): lng is number {
+  return typeof lng === 'number' && !isNaN(lng) && lng >= -180 && lng <= 180;
+}
+
+// Sanitize and truncate string
+function sanitizeString(value: unknown, maxLength: number): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  // Remove potentially dangerous characters and truncate
+  return value.replace(/[<>]/g, '').substring(0, maxLength).trim();
+}
+
 type CreateChamadoBody = {
   tipo_servico: string;
   origem_lat: number;
@@ -55,6 +81,57 @@ serve(async (req) => {
 
     const body = (await req.json()) as CreateChamadoBody;
 
+    // Validate required fields
+    if (!body.tipo_servico || !VALID_SERVICE_TYPES.includes(body.tipo_servico)) {
+      logStep("Invalid service type", { received: body.tipo_servico });
+      return new Response(JSON.stringify({ error: "Tipo de serviço inválido" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+
+    // Validate coordinates
+    if (!isValidLatitude(body.origem_lat) || !isValidLongitude(body.origem_lng)) {
+      logStep("Invalid origin coordinates", { lat: body.origem_lat, lng: body.origem_lng });
+      return new Response(JSON.stringify({ error: "Coordenadas de origem inválidas" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+
+    // Validate destination coordinates if provided
+    if (body.destino_lat !== null && body.destino_lat !== undefined) {
+      if (!isValidLatitude(body.destino_lat)) {
+        logStep("Invalid destination latitude", { lat: body.destino_lat });
+        return new Response(JSON.stringify({ error: "Latitude de destino inválida" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
+    }
+    if (body.destino_lng !== null && body.destino_lng !== undefined) {
+      if (!isValidLongitude(body.destino_lng)) {
+        logStep("Invalid destination longitude", { lng: body.destino_lng });
+        return new Response(JSON.stringify({ error: "Longitude de destino inválida" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
+    }
+
+    // Validate vehicle type if provided
+    if (body.vehicle_type && !VALID_VEHICLE_TYPES.includes(body.vehicle_type)) {
+      logStep("Invalid vehicle type", { received: body.vehicle_type });
+      return new Response(JSON.stringify({ error: "Tipo de veículo inválido" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+
+    // Sanitize addresses
+    const origemAddress = sanitizeString(body.origem_address, MAX_ADDRESS_LENGTH) || "";
+    const destinoAddress = sanitizeString(body.destino_address, MAX_ADDRESS_LENGTH);
+
     logStep("Creating chamado", {
       clienteId: user.id,
       tipoServico: body.tipo_servico,
@@ -69,10 +146,10 @@ serve(async (req) => {
       status: "searching",
       origem_lat: body.origem_lat,
       origem_lng: body.origem_lng,
-      origem_address: body.origem_address,
+      origem_address: origemAddress,
       destino_lat: body.destino_lat ?? null,
       destino_lng: body.destino_lng ?? null,
-      destino_address: body.destino_address ?? null,
+      destino_address: destinoAddress,
     };
 
     if (body.vehicle_type) {
