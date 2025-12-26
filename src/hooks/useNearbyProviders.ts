@@ -12,6 +12,7 @@ export interface NearbyProvider {
   rating: number;
   totalServices: number;
   services: ServiceType[];
+  updatedAt: number; // timestamp for TTL validation
 }
 
 interface UseNearbyProvidersOptions {
@@ -21,7 +22,7 @@ interface UseNearbyProvidersOptions {
 }
 
 const DEFAULT_RADIUS = 15; // km
-const REFRESH_INTERVAL = 10000; // 10 seconds - periodic refresh for cross-platform sync
+const REFRESH_INTERVAL = 5000; // 5 seconds - faster refresh for cross-platform sync
 const STALE_PROVIDER_THRESHOLD_MS = 15 * 1000; // 15 seconds - must match backend timeout
 
 export function useNearbyProviders({ 
@@ -33,64 +34,89 @@ export function useNearbyProviders({
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const visibilityHandlerRef = useRef<(() => void) | null>(null);
+  const cleanupIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch providers within radius - GLOBAL, no platform filtering
+  // Remove stale providers from local state (TTL cleanup)
+  const cleanupStaleProviders = useCallback(() => {
+    const now = Date.now();
+    setProviders(prev => {
+      const validProviders = prev.filter(p => {
+        const age = now - p.updatedAt;
+        const isValid = age < STALE_PROVIDER_THRESHOLD_MS;
+        if (!isValid) {
+          console.log(`[NearbyProviders] Removing stale provider ${p.name} (age: ${Math.round(age/1000)}s)`);
+        }
+        return isValid;
+      });
+      
+      if (validProviders.length !== prev.length) {
+        console.log(`[NearbyProviders] Cleaned up ${prev.length - validProviders.length} stale providers`);
+      }
+      
+      return validProviders;
+    });
+  }, []);
+
+  // Fetch providers - REPLACES entire list (no merge)
   const fetchProviders = useCallback(async () => {
     if (!userLocation || !enabled) {
       console.log('[NearbyProviders] Skipping fetch - no location or disabled');
+      setProviders([]); // Clear providers when disabled
       return;
     }
 
-    const now = Date.now();
-    console.log(`[NearbyProviders] Fetching online providers within ${radiusKm}km from:`, {
-      lat: userLocation.lat,
-      lng: userLocation.lng,
-      timestamp: new Date().toISOString()
-    });
+    console.log(`[NearbyProviders] Fetching online providers within ${radiusKm}km`);
     setLoading(true);
 
     try {
-      // SINGLE SOURCE OF TRUTH: always fetch from backend (no session/cache dependence)
       const { data, error } = await supabase.functions.invoke('online-providers', {
         body: {},
       });
 
       if (error) {
-        console.error('[NearbyProviders] Error fetching providers (backend):', error);
+        console.error('[NearbyProviders] Error fetching providers:', error);
         setLoading(false);
         return;
       }
 
       const providerData = (data as any)?.providers as any[] | undefined;
+      const now = Date.now();
 
-      console.log('[NearbyProviders] Providers received from backend:', {
+      console.log('[NearbyProviders] Providers received:', {
         count: providerData?.length || 0,
         thresholdIso: (data as any)?.thresholdIso,
       });
 
-      // Extra safety: filter out stale providers (should already be cleaned server-side)
-      const nowDate = new Date();
-      const activeProviders = (providerData || []).filter((p) => {
-        if (!p.updated_at) return false;
-        const lastUpdate = new Date(p.updated_at);
-        const ageMs = nowDate.getTime() - lastUpdate.getTime();
-        return ageMs < STALE_PROVIDER_THRESHOLD_MS;
-      });
-
-      if (activeProviders.length === 0) {
-        console.log('[NearbyProviders] No active online providers with valid location');
-        setProviders([]);
+      if (!providerData || providerData.length === 0) {
+        console.log('[NearbyProviders] No active online providers');
+        setProviders([]); // Clear all - no providers online
         setLoading(false);
         return;
       }
 
-      // Map by distance
-      const filteredProviders: NearbyProvider[] = [];
+      // Filter by TTL and distance - STRICT validation
+      const validProviders: NearbyProvider[] = [];
 
-      for (const provider of activeProviders) {
-        if (!provider.current_lat || !provider.current_lng) continue;
+      for (const provider of providerData) {
+        // Validate location
+        if (!provider.current_lat || !provider.current_lng) {
+          continue;
+        }
 
+        // Validate TTL (15s threshold)
+        if (!provider.updated_at) {
+          continue;
+        }
+        
+        const lastUpdate = new Date(provider.updated_at).getTime();
+        const age = now - lastUpdate;
+        
+        if (age >= STALE_PROVIDER_THRESHOLD_MS) {
+          console.log(`[NearbyProviders] Skipping stale provider (age: ${Math.round(age/1000)}s)`);
+          continue;
+        }
+
+        // Calculate distance
         const distance = calculateDistance(
           userLocation.lat,
           userLocation.lng,
@@ -98,28 +124,33 @@ export function useNearbyProviders({
           Number(provider.current_lng)
         );
 
-        if (distance <= radiusKm) {
-          filteredProviders.push({
-            id: provider.user_id,
-            userId: provider.user_id,
-            name: provider.profiles?.name || 'Prestador',
-            location: {
-              lat: Number(provider.current_lat),
-              lng: Number(provider.current_lng),
-              address: provider.current_address || 'Localização',
-            },
-            distance,
-            rating: Number(provider.rating) || 5.0,
-            totalServices: provider.total_services || 0,
-            services: (provider.services_offered as ServiceType[]) || ['guincho'],
-          });
+        // Filter by radius
+        if (distance > radiusKm) {
+          continue;
         }
+
+        validProviders.push({
+          id: provider.user_id,
+          userId: provider.user_id,
+          name: provider.profiles?.name || 'Prestador',
+          location: {
+            lat: Number(provider.current_lat),
+            lng: Number(provider.current_lng),
+            address: provider.current_address || 'Localização',
+          },
+          distance,
+          rating: Number(provider.rating) || 5.0,
+          totalServices: provider.total_services || 0,
+          services: (provider.services_offered as ServiceType[]) || ['guincho'],
+          updatedAt: lastUpdate,
+        });
       }
 
-      // Sort by distance
-      filteredProviders.sort((a, b) => a.distance - b.distance);
-      setProviders(filteredProviders);
-      console.log(`[NearbyProviders] ✅ ${filteredProviders.length} providers within range (global, cross-platform)`);
+      // Sort by distance and REPLACE entire list
+      validProviders.sort((a, b) => a.distance - b.distance);
+      setProviders(validProviders);
+      
+      console.log(`[NearbyProviders] ✅ ${validProviders.length} valid providers within ${radiusKm}km`);
     } catch (error) {
       console.error('[NearbyProviders] Error:', error);
     } finally {
@@ -135,7 +166,7 @@ export function useNearbyProviders({
     }
   }, [enabled, userLocation, fetchProviders]);
 
-  // Subscribe to real-time updates with cross-platform support
+  // Main effect - setup polling and real-time
   useEffect(() => {
     if (!userLocation || !enabled) {
       // Cleanup when disabled
@@ -143,21 +174,31 @@ export function useNearbyProviders({
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
       }
+      if (cleanupIntervalRef.current) {
+        clearInterval(cleanupIntervalRef.current);
+        cleanupIntervalRef.current = null;
+      }
+      setProviders([]); // Clear providers when disabled
       return;
     }
 
     // Initial fetch
     fetchProviders();
 
-    // Periodic refresh to catch cross-platform updates that realtime might miss
+    // Periodic refresh - PRIMARY source of truth (every 5 seconds)
     refreshIntervalRef.current = setInterval(() => {
-      console.log('[NearbyProviders] Periodic refresh for cross-platform sync');
+      console.log('[NearbyProviders] Periodic refresh');
       fetchProviders();
     }, REFRESH_INTERVAL);
 
-    // Real-time subscription for immediate updates
+    // TTL cleanup - runs more frequently to catch stale providers quickly
+    cleanupIntervalRef.current = setInterval(() => {
+      cleanupStaleProviders();
+    }, 2000); // Every 2 seconds
+
+    // Real-time subscription - COMPLEMENT only (for instant updates)
     const channel = supabase
-      .channel(`nearby-providers-${Date.now()}`) // Unique channel name to avoid conflicts
+      .channel(`nearby-providers-${Date.now()}`)
       .on(
         'postgres_changes',
         {
@@ -166,17 +207,43 @@ export function useNearbyProviders({
           table: 'provider_data',
         },
         async (payload) => {
-          console.log('[NearbyProviders] Real-time update:', payload.eventType, 'from global DB');
+          console.log('[NearbyProviders] Real-time update:', payload.eventType);
           
           const data = payload.new as any;
+          const now = Date.now();
           
+          // Handle DELETE or offline status
           if (payload.eventType === 'DELETE' || !data?.is_online) {
-            setProviders(prev => prev.filter(p => p.userId !== data?.user_id));
+            setProviders(prev => {
+              const filtered = prev.filter(p => p.userId !== data?.user_id);
+              if (filtered.length !== prev.length) {
+                console.log(`[NearbyProviders] Provider went offline, removed from map`);
+              }
+              return filtered;
+            });
             return;
           }
 
-          if (!data.current_lat || !data.current_lng) return;
+          // Validate location
+          if (!data.current_lat || !data.current_lng) {
+            return;
+          }
 
+          // Validate TTL
+          if (!data.updated_at) {
+            return;
+          }
+          
+          const lastUpdate = new Date(data.updated_at).getTime();
+          const age = now - lastUpdate;
+          
+          if (age >= STALE_PROVIDER_THRESHOLD_MS) {
+            // Remove stale provider if exists
+            setProviders(prev => prev.filter(p => p.userId !== data.user_id));
+            return;
+          }
+
+          // Calculate distance
           const distance = calculateDistance(
             userLocation.lat,
             userLocation.lng,
@@ -184,6 +251,7 @@ export function useNearbyProviders({
             Number(data.current_lng)
           );
 
+          // Filter by radius
           if (distance > radiusKm) {
             setProviders(prev => prev.filter(p => p.userId !== data.user_id));
             return;
@@ -209,6 +277,7 @@ export function useNearbyProviders({
             rating: Number(data.rating) || 5.0,
             totalServices: data.total_services || 0,
             services: (data.services_offered as ServiceType[]) || ['guincho'],
+            updatedAt: lastUpdate,
           };
 
           setProviders(prev => {
@@ -238,22 +307,18 @@ export function useNearbyProviders({
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
       }
-    };
-  }, [userLocation, radiusKm, enabled, fetchProviders]);
-
-  // Visibility change handler for background/foreground transitions
-  useEffect(() => {
-    if (visibilityHandlerRef.current) {
-      document.removeEventListener('visibilitychange', visibilityHandlerRef.current);
-    }
-    
-    visibilityHandlerRef.current = handleVisibilityChange;
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      if (visibilityHandlerRef.current) {
-        document.removeEventListener('visibilitychange', visibilityHandlerRef.current);
+      if (cleanupIntervalRef.current) {
+        clearInterval(cleanupIntervalRef.current);
+        cleanupIntervalRef.current = null;
       }
+    };
+  }, [userLocation, radiusKm, enabled, fetchProviders, cleanupStaleProviders]);
+
+  // Visibility change handler
+  useEffect(() => {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [handleVisibilityChange]);
 
