@@ -21,7 +21,8 @@ interface UseNearbyProvidersOptions {
 }
 
 const DEFAULT_RADIUS = 15; // km
-const REFRESH_INTERVAL = 5000; // 5 seconds
+const REFRESH_INTERVAL = 10000; // 10 seconds - periodic refresh for cross-platform sync
+const STALE_PROVIDER_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes - providers without heartbeat
 
 export function useNearbyProviders({ 
   userLocation, 
@@ -31,17 +32,21 @@ export function useNearbyProviders({
   const [providers, setProviders] = useState<NearbyProvider[]>([]);
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const visibilityHandlerRef = useRef<(() => void) | null>(null);
 
-  // Fetch providers within radius
+  // Fetch providers within radius - GLOBAL, no platform filtering
   const fetchProviders = useCallback(async () => {
     if (!userLocation || !enabled) {
       console.log('[NearbyProviders] Skipping fetch - no location or disabled');
       return;
     }
 
+    const now = Date.now();
     console.log(`[NearbyProviders] Fetching online providers within ${radiusKm}km from:`, {
       lat: userLocation.lat,
-      lng: userLocation.lng
+      lng: userLocation.lng,
+      timestamp: new Date().toISOString()
     });
     setLoading(true);
 
@@ -82,17 +87,30 @@ export function useNearbyProviders({
         return;
       }
 
-      console.log(`[NearbyProviders] Found ${providerData?.length || 0} online providers with location`);
+      // Filter out stale providers (no heartbeat in last 5 minutes)
+      const now = new Date();
+      const activeProviders = providerData?.filter(p => {
+        if (!p.updated_at) return false;
+        const lastUpdate = new Date(p.updated_at);
+        const ageMs = now.getTime() - lastUpdate.getTime();
+        const isActive = ageMs < STALE_PROVIDER_THRESHOLD_MS;
+        if (!isActive) {
+          console.log(`[NearbyProviders] Filtering stale provider ${p.user_id.substring(0, 8)} - last update ${Math.round(ageMs / 1000)}s ago`);
+        }
+        return isActive;
+      }) || [];
 
-      if (!providerData || providerData.length === 0) {
-        console.log('[NearbyProviders] No online providers with valid location');
+      console.log(`[NearbyProviders] Found ${activeProviders.length} active online providers (from ${providerData?.length || 0} total)`);
+
+      if (activeProviders.length === 0) {
+        console.log('[NearbyProviders] No active online providers with valid location');
         setProviders([]);
         setLoading(false);
         return;
       }
 
       // Fetch profile names
-      const userIds = providerData.map(p => p.user_id);
+      const userIds = activeProviders.map(p => p.user_id);
       const { data: profiles } = await supabase
         .from('profiles')
         .select('user_id, name')
@@ -100,10 +118,10 @@ export function useNearbyProviders({
 
       const profileMap = new Map(profiles?.map(p => [p.user_id, p.name]) || []);
 
-      // Filter by distance
+      // Filter by distance - NO platform filtering, purely geographic
       const filteredProviders: NearbyProvider[] = [];
       
-      for (const provider of providerData) {
+      for (const provider of activeProviders) {
         if (!provider.current_lat || !provider.current_lng) continue;
 
         const distance = calculateDistance(
@@ -134,7 +152,7 @@ export function useNearbyProviders({
       // Sort by distance
       filteredProviders.sort((a, b) => a.distance - b.distance);
       setProviders(filteredProviders);
-      console.log(`[NearbyProviders] Found ${filteredProviders.length} providers`);
+      console.log(`[NearbyProviders] ✅ ${filteredProviders.length} providers within range (global, cross-platform)`);
     } catch (error) {
       console.error('[NearbyProviders] Error:', error);
     } finally {
@@ -142,16 +160,37 @@ export function useNearbyProviders({
     }
   }, [userLocation, radiusKm, enabled]);
 
-  // Subscribe to real-time updates
+  // Handle visibility change - force refresh when app becomes visible
+  const handleVisibilityChange = useCallback(() => {
+    if (document.visibilityState === 'visible' && enabled && userLocation) {
+      console.log('[NearbyProviders] App became visible, forcing refresh...');
+      fetchProviders();
+    }
+  }, [enabled, userLocation, fetchProviders]);
+
+  // Subscribe to real-time updates with cross-platform support
   useEffect(() => {
-    if (!userLocation || !enabled) return;
+    if (!userLocation || !enabled) {
+      // Cleanup when disabled
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+      return;
+    }
 
     // Initial fetch
     fetchProviders();
 
-    // Real-time subscription
+    // Periodic refresh to catch cross-platform updates that realtime might miss
+    refreshIntervalRef.current = setInterval(() => {
+      console.log('[NearbyProviders] Periodic refresh for cross-platform sync');
+      fetchProviders();
+    }, REFRESH_INTERVAL);
+
+    // Real-time subscription for immediate updates
     const channel = supabase
-      .channel('nearby-providers-realtime')
+      .channel(`nearby-providers-${Date.now()}`) // Unique channel name to avoid conflicts
       .on(
         'postgres_changes',
         {
@@ -160,7 +199,7 @@ export function useNearbyProviders({
           table: 'provider_data',
         },
         async (payload) => {
-          console.log('[NearbyProviders] Real-time update:', payload.eventType);
+          console.log('[NearbyProviders] Real-time update:', payload.eventType, 'from global DB');
           
           const data = payload.new as any;
           
@@ -217,7 +256,9 @@ export function useNearbyProviders({
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[NearbyProviders] Realtime subscription status:', status);
+      });
 
     channelRef.current = channel;
 
@@ -226,8 +267,28 @@ export function useNearbyProviders({
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
     };
   }, [userLocation, radiusKm, enabled, fetchProviders]);
+
+  // Visibility change handler for background/foreground transitions
+  useEffect(() => {
+    if (visibilityHandlerRef.current) {
+      document.removeEventListener('visibilitychange', visibilityHandlerRef.current);
+    }
+    
+    visibilityHandlerRef.current = handleVisibilityChange;
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (visibilityHandlerRef.current) {
+        document.removeEventListener('visibilitychange', visibilityHandlerRef.current);
+      }
+    };
+  }, [handleVisibilityChange]);
 
   return {
     providers,
