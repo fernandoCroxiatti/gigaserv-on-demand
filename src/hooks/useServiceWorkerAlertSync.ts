@@ -1,10 +1,13 @@
 import { useEffect, useCallback } from 'react';
 import { startRideAlertLoop, stopRideAlertLoop } from '@/lib/rideAlertSound';
+import { playNotificationSound } from '@/lib/notificationSound';
 
 /**
  * Hook to synchronize ride alert sound between Service Worker push notifications
  * and the app. This enables Uber-style continuous sound that works even when
  * the app is in background (via SW) and seamlessly transitions to in-app sound.
+ * 
+ * Also handles single alert sounds for client notifications (provider_accepted).
  */
 export function useServiceWorkerAlertSync() {
   // Handle messages from Service Worker
@@ -17,8 +20,14 @@ export function useServiceWorkerAlertSync() {
       switch (action) {
         case 'START_ALERT':
         case 'CONTINUE_ALERT':
-          // Start/continue the alert sound loop
+          // Start/continue the alert sound loop (provider chamado)
           startRideAlertLoop();
+          break;
+
+        case 'SINGLE_ALERT':
+          // Play single alert sound (client provider_accepted)
+          // This uses the simple notification sound, not the loop
+          playNotificationSound();
           break;
 
         case 'STOP_ALERT':

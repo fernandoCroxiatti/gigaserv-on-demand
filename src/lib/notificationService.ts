@@ -20,19 +20,29 @@ export async function sendChamadoNotification(
       return;
     }
 
+    // Determine notification type for proper handling in SW
+    const notificationType = isProvider 
+      ? `chamado_${eventType}`
+      : `client_${eventType}`;
+
     // Send via edge function
     await supabase.functions.invoke('send-notifications', {
       body: {
         action: 'event',
         userId,
-        notificationType: `chamado_${eventType}`,
+        notificationType,
         title: notification.title,
         messageBody: notification.body,
-        data: chamadoId ? { chamadoId, url: '/' } : undefined
+        data: { 
+          chamadoId, 
+          url: '/',
+          priority: notification.priority || 'normal',
+          tag: notification.tag || 'chamado'
+        }
       }
     });
 
-    console.log(`[Notifications] Sent ${eventType} notification to user ${userId}`);
+    console.log(`[Notifications] Sent ${eventType} notification to user ${userId} (priority: ${notification.priority || 'normal'})`);
   } catch (error) {
     console.error('[Notifications] Error sending notification:', error);
   }

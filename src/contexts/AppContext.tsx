@@ -18,6 +18,7 @@ import { Database } from '@/integrations/supabase/types';
 import { isChamadoWithinRange } from '@/lib/distance';
 import { startRideAlertLoop, stopRideAlertLoop } from '@/lib/rideAlertSound';
 import { useChamadoQueue } from '@/hooks/useChamadoQueue';
+import { sendChamadoNotification } from '@/lib/notificationService';
 
 type DbChamado = Database['public']['Tables']['chamados']['Row'];
 type DbProfile = Database['public']['Tables']['profiles']['Row'];
@@ -254,7 +255,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             
             // Notify based on new status and user role
             if (profile?.active_profile === 'client') {
-              if (newStatus === 'accepted') {
+              // Provider accepted the chamado (status changes to negotiating)
+              if (newStatus === 'negotiating' && oldStatus === 'searching') {
+                toast.success('Um prestador aceitou seu chamado!');
+                // Send push notification to client with alert sound
+                if (authUser?.id) {
+                  sendChamadoNotification(authUser.id, 'provider_accepted', false, chamado.id);
+                }
+              } else if (newStatus === 'accepted') {
                 toast.success('Um prestador aceitou seu chamado!');
               } else if (newStatus === 'in_service') {
                 toast.success('Pagamento aprovado! Serviço iniciado.');
