@@ -696,32 +696,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const insertData: any = {
-        cliente_id: authUser.id,
-        tipo_servico: tipoServico,
-        status: 'searching',
-        origem_lat: origem.lat,
-        origem_lng: origem.lng,
-        origem_address: origem.address,
-        destino_lat: needsDestination && destino ? destino.lat : null,
-        destino_lng: needsDestination && destino ? destino.lng : null,
-        destino_address: needsDestination && destino ? destino.address : null,
-      };
+      console.log('[CreateChamado] Creating chamado via backend...');
       
-      if (vehicleType) {
-        insertData.vehicle_type = vehicleType;
-      }
-
-      const { data, error } = await supabase
-        .from('chamados')
-        .insert(insertData)
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('create-chamado', {
+        body: {
+          tipo_servico: tipoServico,
+          origem_lat: origem.lat,
+          origem_lng: origem.lng,
+          origem_address: origem.address,
+          destino_lat: needsDestination && destino ? destino.lat : null,
+          destino_lng: needsDestination && destino ? destino.lng : null,
+          destino_address: needsDestination && destino ? destino.address : null,
+          vehicle_type: vehicleType || null,
+        },
+      });
 
       if (error) throw error;
 
-      setChamado(mapDbChamadoToChamado(data));
-      // Removed noisy toast - user can see the searching state in UI
+      const chamadoData = (data as any)?.chamado;
+      if (!chamadoData) throw new Error('Chamado not returned from backend');
+
+      console.log('[CreateChamado] Chamado created:', { 
+        id: chamadoData.id, 
+        eligibleProviders: (data as any)?.eligibleProvidersCount 
+      });
+
+      setChamado(mapDbChamadoToChamado(chamadoData));
     } catch (error) {
       console.error('Error creating chamado:', error);
       toast.error('Erro ao criar chamado');
@@ -1155,46 +1155,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const newStatus = !providerData.is_online;
       
-      console.log('[ToggleOnline] Toggling provider status:', { 
+      console.log('[ToggleOnline] Toggling provider status via backend:', { 
         currentStatus: providerData.is_online, 
         newStatus,
         userId: authUser.id,
         hasLocation: !!(providerData.current_lat && providerData.current_lng)
       });
       
-      // CRITICAL: When going online, ensure active_profile is set to 'provider' FIRST
-      // This is required for the chamado listener to work correctly
-      if (newStatus) {
-        // Update profile first so listener activates
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ active_profile: 'provider' })
-          .eq('user_id', authUser.id);
-        
-        if (profileError) {
-          console.error('[ToggleOnline] Error updating profile:', profileError);
-        } else {
-          // Update local state immediately
-          setProfile(prev => prev ? { ...prev, active_profile: 'provider' } : null);
-          console.log('[ToggleOnline] Profile updated to provider');
-        }
-      }
-      
-      // Update provider online status
-      const { error } = await supabase
-        .from('provider_data')
-        .update({ 
-          is_online: newStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', authUser.id);
+      const { data, error } = await supabase.functions.invoke('toggle-provider-online', {
+        body: {
+          online: newStatus,
+          location: providerData.current_lat && providerData.current_lng ? {
+            lat: Number(providerData.current_lat),
+            lng: Number(providerData.current_lng),
+            address: providerData.current_address || undefined,
+          } : undefined,
+        },
+      });
 
       if (error) throw error;
 
       // Update local state immediately
+      if (newStatus) {
+        setProfile(prev => prev ? { ...prev, active_profile: 'provider' } : null);
+      }
       setProviderData(prev => prev ? { ...prev, is_online: newStatus } : null);
       
-      console.log('[ToggleOnline] Provider is now:', newStatus ? 'ONLINE' : 'OFFLINE');
+      console.log('[ToggleOnline] Provider is now:', newStatus ? 'ONLINE' : 'OFFLINE', data);
       toast.success(newStatus ? 'Você está online! Aguardando chamados...' : 'Você está offline');
     } catch (error) {
       console.error('[ToggleOnline] Error toggling online status:', error);
