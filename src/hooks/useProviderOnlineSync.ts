@@ -12,13 +12,29 @@ interface UseProviderOnlineSyncOptions {
 // Verify interval: every 10 seconds verify status is still correct in DB
 const SYNC_INTERVAL_MS = 10 * 1000;
 
-// Heartbeat: explicit ping every 8 seconds while ONLINE
-const HEARTBEAT_INTERVAL_MS = 8 * 1000;
+// Heartbeat with location: every 10 seconds while ONLINE
+const HEARTBEAT_INTERVAL_MS = 10 * 1000;
+
+// Minimum distance change (meters) to trigger immediate location update
+const MIN_DISTANCE_CHANGE_METERS = 50;
+
+/**
+ * Calculate distance between two coordinates in meters (Haversine formula)
+ */
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 /**
  * Hook to ensure provider online status stays synchronized with database.
- * Prevents \"ghost providers\" that appear online but are actually disconnected.
- * Also handles reconnection when app returns from background.
+ * Sends GPS location with every heartbeat to keep provider position updated.
  */
 export function useProviderOnlineSync({
   userId,
@@ -30,7 +46,101 @@ export function useProviderOnlineSync({
   const lastKnownOnlineRef = useRef(isOnline);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const lastSentLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const visibilityHandlerRef = useRef<(() => void) | null>(null);
+
+  // Get current GPS position
+  const getCurrentPosition = useCallback((): Promise<{ lat: number; lng: number } | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        console.warn('[OnlineSync] Geolocation not available');
+        resolve(null);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn('[OnlineSync] Geolocation error:', error.message);
+          resolve(null);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 5000
+        }
+      );
+    });
+  }, []);
+
+  // Send heartbeat with GPS location to backend
+  const sendHeartbeatWithLocation = useCallback(async () => {
+    if (!userId || !isOnline) return;
+
+    try {
+      const location = await getCurrentPosition();
+      
+      const body: { location?: { lat: number; lng: number } } = {};
+      if (location) {
+        body.location = location;
+        lastSentLocationRef.current = location;
+        console.log('[OnlineSync] Sending heartbeat with location:', location);
+      } else {
+        console.log('[OnlineSync] Sending heartbeat without location (GPS unavailable)');
+      }
+
+      const { data, error } = await supabase.functions.invoke('provider-heartbeat', {
+        body,
+      });
+
+      if (error) {
+        console.warn('[OnlineSync] Heartbeat failed:', error);
+        return;
+      }
+
+      console.log('[OnlineSync] Heartbeat sent successfully', data);
+    } catch (err) {
+      console.warn('[OnlineSync] Heartbeat failed:', err);
+    }
+  }, [userId, isOnline, getCurrentPosition]);
+
+  // Send immediate location update if position changed significantly
+  const sendImmediateLocationUpdate = useCallback(async (lat: number, lng: number) => {
+    if (!userId || !isOnline) return;
+
+    // Check if position changed significantly
+    if (lastSentLocationRef.current) {
+      const distance = calculateDistance(
+        lastSentLocationRef.current.lat,
+        lastSentLocationRef.current.lng,
+        lat,
+        lng
+      );
+      if (distance < MIN_DISTANCE_CHANGE_METERS) {
+        return; // Not enough movement
+      }
+    }
+
+    try {
+      console.log('[OnlineSync] Significant movement detected, sending immediate update');
+      
+      const { error } = await supabase.functions.invoke('provider-heartbeat', {
+        body: { location: { lat, lng } },
+      });
+
+      if (!error) {
+        lastSentLocationRef.current = { lat, lng };
+      }
+    } catch (err) {
+      console.warn('[OnlineSync] Immediate location update failed:', err);
+    }
+  }, [userId, isOnline]);
 
   // Verify that DB status matches local state
   const verifyStatus = useCallback(async () => {
@@ -48,54 +158,34 @@ export function useProviderOnlineSync({
         return;
       }
 
-      // If DB says we're offline but we think we're online, something is wrong
       if (data && !data.is_online && isOnline) {
-        console.warn('[OnlineSync] Status mismatch detected! DB says offline, local says online');
+        console.warn('[OnlineSync] Status mismatch! DB says offline, local says online');
         onStatusLost?.();
       }
 
-      // If we're online but have no location, we're invisible to clients
       if (data && data.is_online && (!data.current_lat || !data.current_lng)) {
         console.warn('[OnlineSync] Online but missing location - invisible to clients!');
+        // Force send location immediately
+        sendHeartbeatWithLocation();
       }
 
       console.log('[OnlineSync] Status verified:', {
         dbOnline: data?.is_online,
-        localOnline: isOnline,
-        hasDbLocation: !!(data?.current_lat && data?.current_lng),
-        hasLocalLocation: hasLocation
+        dbLocation: data?.current_lat && data?.current_lng ? `${data.current_lat},${data.current_lng}` : 'none',
+        updatedAt: data?.updated_at
       });
     } catch (err) {
       console.error('[OnlineSync] Verification failed:', err);
     }
-  }, [userId, isOnline, hasLocation, onStatusLost]);
-
-  // Send heartbeat via backend (single source of truth)
-  const sendHeartbeat = useCallback(async () => {
-    if (!userId || !isOnline) return;
-
-    try {
-      const { data, error } = await supabase.functions.invoke('provider-heartbeat', {
-        body: {},
-      });
-
-      if (error) {
-        console.warn('[OnlineSync] Heartbeat failed:', error);
-        return;
-      }
-
-      console.log('[OnlineSync] Heartbeat sent (backend)', data);
-    } catch (err) {
-      console.warn('[OnlineSync] Heartbeat failed:', err);
-    }
-  }, [userId, isOnline]);
+  }, [userId, isOnline, onStatusLost, sendHeartbeatWithLocation]);
 
   // Handle visibility change (app coming back from background)
   const handleVisibilityChange = useCallback(() => {
     if (document.visibilityState === 'visible' && isOnline && userId) {
-      console.log('[OnlineSync] App became visible, verifying status...');
+      console.log('[OnlineSync] App became visible, sending immediate heartbeat with location...');
       
-      // Immediate verification
+      // Immediate heartbeat with fresh location
+      sendHeartbeatWithLocation();
       verifyStatus();
       
       // Re-establish real-time connection
@@ -108,11 +198,44 @@ export function useProviderOnlineSync({
         }
       });
     }
-  }, [isOnline, userId, verifyStatus, onReconnected]);
+  }, [isOnline, userId, verifyStatus, sendHeartbeatWithLocation, onReconnected]);
+
+  // Start continuous GPS watch when online
+  useEffect(() => {
+    if (!userId || !isOnline || !navigator.geolocation) {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      return;
+    }
+
+    console.log('[OnlineSync] Starting GPS watch for provider');
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        sendImmediateLocationUpdate(position.coords.latitude, position.coords.longitude);
+      },
+      (error) => {
+        console.warn('[OnlineSync] GPS watch error:', error.message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 5000
+      }
+    );
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, [userId, isOnline, sendImmediateLocationUpdate]);
 
   // Start/stop sync based on online status
   useEffect(() => {
-    // Clean up existing intervals
     if (syncIntervalRef.current) {
       clearInterval(syncIntervalRef.current);
       syncIntervalRef.current = null;
@@ -123,38 +246,34 @@ export function useProviderOnlineSync({
     }
 
     if (!userId || !isOnline) {
+      lastSentLocationRef.current = null;
       return;
     }
 
-    console.log('[OnlineSync] Starting sync for online provider');
+    console.log('[OnlineSync] Starting sync with location for online provider');
 
-    // Initial verification
+    // Send initial heartbeat with location immediately
+    sendHeartbeatWithLocation();
     verifyStatus();
 
     // Periodic verification
     syncIntervalRef.current = setInterval(verifyStatus, SYNC_INTERVAL_MS);
 
-    // Heartbeat to prove we're active
-    heartbeatIntervalRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+    // Periodic heartbeat with location
+    heartbeatIntervalRef.current = setInterval(sendHeartbeatWithLocation, HEARTBEAT_INTERVAL_MS);
 
     return () => {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-      }
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-      }
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
     };
-  }, [userId, isOnline, verifyStatus, sendHeartbeat]);
+  }, [userId, isOnline, verifyStatus, sendHeartbeatWithLocation]);
 
   // Handle visibility changes
   useEffect(() => {
-    // Remove old handler if exists
     if (visibilityHandlerRef.current) {
       document.removeEventListener('visibilitychange', visibilityHandlerRef.current);
     }
 
-    // Add new handler
     visibilityHandlerRef.current = handleVisibilityChange;
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
@@ -170,11 +289,16 @@ export function useProviderOnlineSync({
     if (lastKnownOnlineRef.current !== isOnline) {
       console.log('[OnlineSync] Online state changed:', lastKnownOnlineRef.current, '->', isOnline);
       lastKnownOnlineRef.current = isOnline;
+      
+      // Clear last sent location when going offline
+      if (!isOnline) {
+        lastSentLocationRef.current = null;
+      }
     }
   }, [isOnline]);
 
   return {
     verifyStatus,
-    sendHeartbeat
+    sendHeartbeat: sendHeartbeatWithLocation
   };
 }
