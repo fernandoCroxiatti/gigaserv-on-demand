@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
@@ -16,6 +16,7 @@ import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
 import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { FinancialAlertBanner } from './FinancialAlertBanner';
 import { useAuth } from '@/hooks/useAuth';
+import { useProviderOnlineSync } from '@/hooks/useProviderOnlineSync';
 
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
@@ -64,6 +65,28 @@ export function ProviderIdleView() {
   const radarRange = user?.providerData?.radarRange || 15;
   const currentServices = (providerData?.services_offered as ServiceType[]) || ['guincho'];
   const isRegistrationComplete = providerData?.registration_complete === true;
+  const hasValidLocation = !!(providerData?.current_lat && providerData?.current_lng);
+
+  // Provider online sync - prevents ghost providers and handles reconnection
+  const handleStatusLost = useCallback(() => {
+    console.warn('[ProviderIdle] Status lost! Re-syncing...');
+    toast.warning('Conexão perdida. Reconectando...');
+  }, []);
+
+  const handleReconnected = useCallback(() => {
+    console.log('[ProviderIdle] Reconnected successfully');
+    if (isOnline) {
+      toast.success('Conexão restabelecida!');
+    }
+  }, [isOnline]);
+
+  useProviderOnlineSync({
+    userId: authUser?.id || null,
+    isOnline,
+    hasLocation: hasValidLocation,
+    onStatusLost: handleStatusLost,
+    onReconnected: handleReconnected
+  });
 
   useEffect(() => {
     const checkStripeStatus = async () => {
@@ -121,6 +144,24 @@ export function ProviderIdleView() {
   };
 
   const proceedWithToggleOnline = async () => {
+    // Ensure we have a valid location before going online
+    if (!location) {
+      console.log('[ProviderIdle] No location yet, waiting...');
+      toast.info('Obtendo sua localização...');
+      // Wait a bit for location
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+    // Update location in DB first if we have it
+    if (location) {
+      console.log('[ProviderIdle] Updating location before going online:', location);
+      await updateProviderLocation({ 
+        lat: location.lat, 
+        lng: location.lng, 
+        address: location.address 
+      });
+    }
+    
     // Ask for notification permission when going online
     if (shouldAskPermission && !hasAskedNotifRef.current) {
       hasAskedNotifRef.current = true;
@@ -128,6 +169,8 @@ export function ProviderIdleView() {
     }
     
     await toggleProviderOnline();
+    
+    console.log('[ProviderIdle] Toggle online complete');
   };
 
   const handleToggleOnline = async () => {

@@ -34,13 +34,31 @@ export function useNearbyProviders({
 
   // Fetch providers within radius
   const fetchProviders = useCallback(async () => {
-    if (!userLocation || !enabled) return;
+    if (!userLocation || !enabled) {
+      console.log('[NearbyProviders] Skipping fetch - no location or disabled');
+      return;
+    }
 
-    console.log(`[NearbyProviders] Fetching providers within ${radiusKm}km`);
+    console.log(`[NearbyProviders] Fetching online providers within ${radiusKm}km from:`, {
+      lat: userLocation.lat,
+      lng: userLocation.lng
+    });
     setLoading(true);
 
     try {
-      // Fetch online providers
+      // First, let's check ALL providers to debug
+      const { data: allProviders } = await supabase
+        .from('provider_data')
+        .select('user_id, is_online, current_lat, current_lng')
+        .limit(20);
+      
+      console.log('[NearbyProviders] All providers in DB:', allProviders?.map(p => ({
+        id: p.user_id.substring(0, 8),
+        online: p.is_online,
+        hasLocation: !!(p.current_lat && p.current_lng)
+      })));
+
+      // Fetch online providers with valid location
       const { data: providerData, error } = await supabase
         .from('provider_data')
         .select(`
@@ -51,20 +69,23 @@ export function useNearbyProviders({
           rating,
           total_services,
           services_offered,
-          is_online
+          is_online,
+          updated_at
         `)
         .eq('is_online', true)
         .not('current_lat', 'is', null)
         .not('current_lng', 'is', null);
 
       if (error) {
-        console.error('[NearbyProviders] Error:', error);
+        console.error('[NearbyProviders] Error fetching providers:', error);
         setLoading(false);
         return;
       }
 
+      console.log(`[NearbyProviders] Found ${providerData?.length || 0} online providers with location`);
+
       if (!providerData || providerData.length === 0) {
-        console.log('[NearbyProviders] No online providers');
+        console.log('[NearbyProviders] No online providers with valid location');
         setProviders([]);
         setLoading(false);
         return;

@@ -391,11 +391,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Listen for incoming requests (ONLY for registered providers who are online)
   useEffect(() => {
     // CRITICAL: Only listen if user is a registered provider AND active as provider
-    if (!authUser || !canAccessProviderFeatures || profile?.active_profile !== 'provider' || !providerData?.is_online || chamado) return;
+    const shouldListen = authUser && 
+                        canAccessProviderFeatures && 
+                        profile?.active_profile === 'provider' && 
+                        providerData?.is_online === true && 
+                        !chamado;
+    
+    console.log('[ChamadoListener] Evaluating listener conditions:', {
+      hasAuthUser: !!authUser,
+      canAccessProviderFeatures,
+      activeProfile: profile?.active_profile,
+      isOnline: providerData?.is_online,
+      hasChamado: !!chamado,
+      shouldListen
+    });
+    
+    if (!shouldListen || !authUser || !providerData) {
+      console.log('[ChamadoListener] Listener NOT active - conditions not met');
+      return;
+    }
+    
+    console.log('[ChamadoListener] Listener ACTIVE - provider is online and ready to receive chamados');
 
     // Check for existing searching chamados when provider goes online
     const checkExistingChamados = async () => {
-      console.log('[Chamados] Checking for existing searching chamados...');
+      console.log('[ChamadoListener] Checking for existing searching chamados...');
       
       const { data: searchingChamados, error } = await supabase
         .from('chamados')
@@ -405,9 +425,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .neq('cliente_id', authUser.id); // Don't show own chamados
 
       if (error) {
-        console.error('[Chamados] Error checking existing chamados:', error);
+        console.error('[ChamadoListener] Error checking existing chamados:', error);
         return;
       }
+
+      console.log(`[ChamadoListener] Found ${searchingChamados?.length || 0} searching chamados in database`);
 
       if (searchingChamados && searchingChamados.length > 0) {
         const services = providerData.services_offered || ['guincho'];
@@ -415,27 +437,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const providerLat = providerData.current_lat ? Number(providerData.current_lat) : null;
         const providerLng = providerData.current_lng ? Number(providerData.current_lng) : null;
 
-        console.log(`[Chamados] Found ${searchingChamados.length} searching chamados, checking distance...`);
+        console.log('[ChamadoListener] Provider config:', { services, radarRange, providerLat, providerLng });
 
         for (const dbChamado of searchingChamados) {
           const chamadoData = mapDbChamadoToChamado(dbChamado);
           
           // CRITICAL: Don't show own chamados (extra safety check)
           if (dbChamado.cliente_id === authUser.id) {
-            console.log(`[Chamados] Skipping chamado ${chamadoData.id}: is own chamado`);
+            console.log(`[ChamadoListener] Skipping chamado ${chamadoData.id}: is own chamado`);
             continue;
           }
           
           // Check if this provider has already declined this chamado
           const declinedProviderIds = dbChamado.declined_provider_ids || [];
           if (declinedProviderIds.includes(authUser.id)) {
-            console.log(`[Chamados] Skipping chamado ${chamadoData.id}: provider already declined`);
+            console.log(`[ChamadoListener] Skipping chamado ${chamadoData.id}: provider already declined`);
             continue;
           }
           
           // Check if provider offers this service
           if (!services.includes(chamadoData.tipoServico)) {
-            console.log(`[Chamados] Skipping chamado ${chamadoData.id}: service ${chamadoData.tipoServico} not offered`);
+            console.log(`[ChamadoListener] Skipping chamado ${chamadoData.id}: service ${chamadoData.tipoServico} not offered`);
             continue;
           }
 
@@ -448,10 +470,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             radarRange
           );
 
+          console.log(`[ChamadoListener] Chamado ${chamadoData.id} within range: ${isWithinRange}`);
+
           if (isWithinRange) {
-            console.log(`[Chamados] Found chamado within range: ${chamadoData.id}`);
+            console.log(`[ChamadoListener] ✅ Found chamado within range: ${chamadoData.id}`);
             setIncomingRequest(chamadoData);
-            // Sound is handled by IncomingRequestCard component
             toast.info('Novo chamado disponível!', {
               description: 'Um cliente está procurando atendimento.',
             });
@@ -1132,31 +1155,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const newStatus = !providerData.is_online;
       
-      // Update provider online status
-      const { error } = await supabase
-        .from('provider_data')
-        .update({ is_online: newStatus })
-        .eq('user_id', authUser.id);
-
-      if (error) throw error;
-
-      // CRITICAL: When going online, ensure active_profile is set to 'provider'
+      console.log('[ToggleOnline] Toggling provider status:', { 
+        currentStatus: providerData.is_online, 
+        newStatus,
+        userId: authUser.id,
+        hasLocation: !!(providerData.current_lat && providerData.current_lng)
+      });
+      
+      // CRITICAL: When going online, ensure active_profile is set to 'provider' FIRST
       // This is required for the chamado listener to work correctly
       if (newStatus) {
+        // Update profile first so listener activates
         const { error: profileError } = await supabase
           .from('profiles')
           .update({ active_profile: 'provider' })
           .eq('user_id', authUser.id);
         
-        if (!profileError) {
+        if (profileError) {
+          console.error('[ToggleOnline] Error updating profile:', profileError);
+        } else {
+          // Update local state immediately
           setProfile(prev => prev ? { ...prev, active_profile: 'provider' } : null);
+          console.log('[ToggleOnline] Profile updated to provider');
         }
       }
+      
+      // Update provider online status
+      const { error } = await supabase
+        .from('provider_data')
+        .update({ 
+          is_online: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', authUser.id);
 
+      if (error) throw error;
+
+      // Update local state immediately
       setProviderData(prev => prev ? { ...prev, is_online: newStatus } : null);
-      toast.success(newStatus ? 'Você está online!' : 'Você está offline');
+      
+      console.log('[ToggleOnline] Provider is now:', newStatus ? 'ONLINE' : 'OFFLINE');
+      toast.success(newStatus ? 'Você está online! Aguardando chamados...' : 'Você está offline');
     } catch (error) {
-      console.error('Error toggling online status:', error);
+      console.error('[ToggleOnline] Error toggling online status:', error);
       toast.error('Erro ao alterar status');
     }
   }, [authUser, providerData, canAccessProviderFeatures]);
