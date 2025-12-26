@@ -69,6 +69,25 @@ export function ForgotPasswordModal({ open, onOpenChange, isProvider = false }: 
 
       if (error) throw error;
 
+      // Check if blocked by 6-month rule
+      if (data?.error && data?.blocked_until) {
+        toast({ 
+          title: 'Limite atingido', 
+          description: data.error, 
+          variant: 'destructive' 
+        });
+        return;
+      }
+
+      if (data?.error) {
+        toast({ 
+          title: 'Erro', 
+          description: data.error, 
+          variant: 'destructive' 
+        });
+        return;
+      }
+
       toast({ 
         title: 'Código enviado', 
         description: 'Se o número estiver cadastrado, você receberá um SMS' 
@@ -163,7 +182,7 @@ export function ForgotPasswordModal({ open, onOpenChange, isProvider = false }: 
             {step === 'phone' && 'Digite seu telefone cadastrado para receber um código SMS'}
             {step === 'otp' && 'Digite o código de 6 dígitos enviado para seu celular'}
             {step === 'password' && 'Defina sua nova senha'}
-            {step === 'success' && 'Sua senha foi alterada com sucesso'}
+            {step === 'success' && 'Sua senha foi alterada com sucesso. Nova recuperação disponível após 6 meses.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -171,6 +190,12 @@ export function ForgotPasswordModal({ open, onOpenChange, isProvider = false }: 
           {/* Step: Phone */}
           {step === 'phone' && (
             <>
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  ⚠️ A recuperação de senha pode ser solicitada apenas 1 vez a cada 6 meses.
+                </p>
+              </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="reset-phone">Telefone</Label>
                 <div className="relative">

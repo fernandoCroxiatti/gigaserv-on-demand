@@ -11,6 +11,9 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 3;
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 
+// 6 months in milliseconds
+const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+
 function checkRateLimit(identifier: string): boolean {
   const now = Date.now();
   const record = rateLimitMap.get(identifier);
@@ -26,6 +29,14 @@ function checkRateLimit(identifier: string): boolean {
   
   record.count++;
   return true;
+}
+
+function formatDateBR(date: Date): string {
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -79,7 +90,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Check if phone exists in profiles (but don't reveal this to user)
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, user_id")
+      .select("id, user_id, password_recovery_last_at, password_recovery_count")
       .eq("phone", cleanPhone)
       .limit(1)
       .single();
@@ -94,6 +105,24 @@ const handler = async (req: Request): Promise<Response> => {
         }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
+    }
+
+    // Check 6-month recovery limit
+    if (profile.password_recovery_last_at) {
+      const lastRecovery = new Date(profile.password_recovery_last_at);
+      const nextAllowedDate = new Date(lastRecovery.getTime() + SIX_MONTHS_MS);
+      const now = new Date();
+
+      if (now < nextAllowedDate) {
+        console.log(`User ${profile.user_id} blocked from recovery until ${nextAllowedDate.toISOString()}`);
+        return new Response(
+          JSON.stringify({ 
+            error: `Você já utilizou a recuperação de senha recentemente. Tente novamente após ${formatDateBR(nextAllowedDate)}.`,
+            blocked_until: nextAllowedDate.toISOString()
+          }),
+          { status: 429, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
     }
 
     // Get Twilio credentials

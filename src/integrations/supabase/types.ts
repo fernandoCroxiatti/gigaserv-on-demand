@@ -415,6 +415,8 @@ export type Database = {
           id: string
           is_blocked: boolean | null
           name: string
+          password_recovery_count: number | null
+          password_recovery_last_at: string | null
           perfil_principal: string
           phone: string | null
           updated_at: string
@@ -434,6 +436,8 @@ export type Database = {
           id?: string
           is_blocked?: boolean | null
           name: string
+          password_recovery_count?: number | null
+          password_recovery_last_at?: string | null
           perfil_principal?: string
           phone?: string | null
           updated_at?: string
@@ -453,6 +457,8 @@ export type Database = {
           id?: string
           is_blocked?: boolean | null
           name?: string
+          password_recovery_count?: number | null
+          password_recovery_last_at?: string | null
           perfil_principal?: string
           phone?: string | null
           updated_at?: string

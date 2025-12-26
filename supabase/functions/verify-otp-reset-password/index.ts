@@ -123,7 +123,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Get user_id from phone
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("user_id")
+      .select("user_id, password_recovery_count")
       .eq("phone", cleanPhone)
       .limit(1)
       .single();
@@ -141,6 +141,30 @@ const handler = async (req: Request): Promise<Response> => {
       profile.user_id,
       { password: newPassword }
     );
+
+    if (updateError) {
+      console.error("Error updating password:", updateError);
+      return new Response(
+        JSON.stringify({ error: "Erro ao atualizar senha. Tente novamente." }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Update password recovery tracking
+    const { error: trackingError } = await supabase
+      .from("profiles")
+      .update({
+        password_recovery_last_at: new Date().toISOString(),
+        password_recovery_count: (profile.password_recovery_count || 0) + 1
+      })
+      .eq("phone", cleanPhone);
+
+    if (trackingError) {
+      console.error("Error updating recovery tracking:", trackingError);
+      // Don't fail the request, password was already updated
+    }
+
+    console.log(`Password updated successfully for user_id: ${profile.user_id}`);
 
     if (updateError) {
       console.error("Error updating password:", updateError);
