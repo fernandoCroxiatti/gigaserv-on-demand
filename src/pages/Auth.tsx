@@ -8,6 +8,12 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
 import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
 import { ForgotPasswordModal } from '@/components/Auth/ForgotPasswordModal';
+import {
+  canRequestNotificationsInThisContext,
+  hasAskedNotificationPermission,
+  markAskedNotificationPermission,
+} from '@/lib/notificationPermissionLogin';
+import { requestNotificationPermissionFromLogin } from '@/lib/notificationPermissionRequester';
 type ProfileType = 'client' | 'provider';
 type AuthStep = 'select' | 'login' | 'register';
 
@@ -92,29 +98,42 @@ export default function Auth() {
     }
   };
 
-  const requestNotificationPermission = async () => {
-    console.log('[Auth] Requesting notification permission...');
-    console.log('[Auth] Notification API available:', 'Notification' in window);
-    console.log('[Auth] Current permission:', typeof Notification !== 'undefined' ? Notification.permission : 'N/A');
-    
-    // Only run in browser with Notification API support
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.log('[Auth] Notification API not available');
+  const scheduleNotificationPermissionRequest = (userId: string) => {
+    // Web-only: permission prompts usually cannot run in iframes (preview)
+    if (!canRequestNotificationsInThisContext()) return;
+
+    // Only request if browser permission is "default" (never asked)
+    if (Notification.permission !== 'default') return;
+
+    // Only once per user/device
+    if (hasAskedNotificationPermission(userId)) return;
+
+    const run = async () => {
+      try {
+        // Ensure we never prompt again for this user on this device
+        markAskedNotificationPermission(userId);
+        await requestNotificationPermissionFromLogin();
+      } catch {
+        // ignore
+      }
+    };
+
+    // Best effort: if a transient user activation still exists, request immediately.
+    const ua = (navigator as any).userActivation;
+    if (ua?.isActive) {
+      void run();
       return;
     }
 
-    // Only request if permission is "default" (never asked)
-    if (Notification.permission === 'default') {
-      console.log('[Auth] Permission is default, requesting...');
-      try {
-        const result = await Notification.requestPermission();
-        console.log('[Auth] Permission result:', result);
-      } catch (error) {
-        console.error('[Auth] Error requesting notification permission:', error);
-      }
-    } else {
-      console.log('[Auth] Permission already set to:', Notification.permission);
-    }
+    // Reliable fallback: request on the *first* user interaction after login.
+    const handler = () => {
+      window.removeEventListener('pointerdown', handler, true);
+      window.removeEventListener('keydown', handler, true);
+      void run();
+    };
+
+    window.addEventListener('pointerdown', handler, true);
+    window.addEventListener('keydown', handler, true);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -127,7 +146,7 @@ export default function Auth() {
     setLoading(true);
     try {
       const email = getEmailFromPhone(phone);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
       if (error) {
         if (error.message.includes('Invalid login')) {
@@ -137,10 +156,12 @@ export default function Auth() {
         }
         return;
       }
-      
-      // Request notification permission immediately after successful login
-      // This is triggered by user action (clicking "Entrar" button)
-      await requestNotificationPermission();
+
+      // Permission request is triggered ONLY after successful login
+      // and only when browser permission is still "default".
+      if (data.user?.id) {
+        scheduleNotificationPermissionRequest(data.user.id);
+      }
       
       toast({ title: 'Sucesso', description: 'Login realizado com sucesso!' });
       navigate('/');
@@ -239,9 +260,11 @@ export default function Auth() {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      // Request notification permission immediately after successful registration
-      // This is triggered by user action (clicking "Cadastrar" button)
-      await requestNotificationPermission();
+      // Permission request is triggered ONLY after successful registration
+      // and only when browser permission is still "default".
+      if (data.user?.id) {
+        scheduleNotificationPermissionRequest(data.user.id);
+      }
       
       toast({ title: 'Sucesso', description: 'Cadastro realizado com sucesso!' });
       navigate('/');

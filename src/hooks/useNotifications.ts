@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { spaNavigate } from '@/lib/spaNavigation';
+import { setNotificationPermissionRequester } from '@/lib/notificationPermissionRequester';
 import { 
   isNativeApp, 
   isPushAvailable, 
@@ -398,6 +399,12 @@ export function useNotifications() {
       return false;
     }
   }, [isNative, user?.id, registerServiceWorker, subscribeToPush, savePushSubscription]);
+
+  // Expose requester to login flow (no UI, one place to request permission)
+  useEffect(() => {
+    setNotificationPermissionRequester(requestPermission);
+    return () => setNotificationPermissionRequester(null);
+  }, [requestPermission]);
 
   // Show permission modal (triggered at right moment)
   const triggerPermissionFlow = useCallback(() => {

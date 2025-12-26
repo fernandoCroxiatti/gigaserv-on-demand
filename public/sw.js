@@ -286,7 +286,6 @@ self.addEventListener('push', (event) => {
     // Play single alert sound via client (NOT loop)
     notifyClientsToPlaySound('SINGLE_ALERT');
   }
-  }
 
   console.log('[SW] Showing notification:', data.title, options);
   
