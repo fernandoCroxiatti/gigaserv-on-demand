@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -13,19 +13,20 @@ import {
   X,
   FileCode,
   Bell,
-  Receipt
+  Receipt,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useHighSeverityAlerts } from '@/hooks/useHighSeverityAlerts';
 
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/settings', icon: Settings, label: 'Configurações' },
   { to: '/admin/finances', icon: Receipt, label: 'Financeiro' },
   { to: '/admin/antifraud', icon: Shield, label: 'Antifraude' },
-  { to: '/admin/suspicious', icon: Users, label: 'Padrões Suspeitos' },
+  { to: '/admin/suspicious', icon: AlertTriangle, label: 'Padrões Suspeitos' },
   { to: '/admin/notifications', icon: Bell, label: 'Notificações' },
   { to: '/admin/reports', icon: FileText, label: 'Relatórios' },
   { to: '/admin/providers', icon: UserCheck, label: 'Prestadores' },
@@ -38,6 +39,9 @@ export function AdminLayout() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Enable high severity alerts listener for admins
+  useHighSeverityAlerts();
 
   const handleLogout = async () => {
     await signOut();
