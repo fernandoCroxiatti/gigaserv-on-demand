@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
 import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
-
+import { ForgotPasswordModal } from '@/components/Auth/ForgotPasswordModal';
 type ProfileType = 'client' | 'provider';
 type AuthStep = 'select' | 'login' | 'register';
 
@@ -58,6 +58,7 @@ export default function Auth() {
   const [cpf, setCpf] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [selectedServices, setSelectedServices] = useState<ServiceType[]>(['guincho']);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const toggleService = (service: ServiceType) => {
     setSelectedServices(prev => 
@@ -394,6 +395,16 @@ export default function Auth() {
                     </div>
                   </div>
 
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(true)}
+                      className={`text-xs ${isProvider ? 'text-blue-500' : 'text-primary'} hover:underline`}
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+
                   <Button
                     type="submit"
                     disabled={loading}
@@ -403,6 +414,12 @@ export default function Auth() {
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Entrar'}
                   </Button>
                 </form>
+
+                <ForgotPasswordModal 
+                  open={showForgotPassword} 
+                  onOpenChange={setShowForgotPassword}
+                  isProvider={isProvider}
+                />
 
                 <p className="text-center text-xs text-muted-foreground">
                   Não tem conta?{' '}
