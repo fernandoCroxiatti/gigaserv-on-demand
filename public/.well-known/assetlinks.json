@@ -3,8 +3,10 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.Lovable.gigaserv",
-      "sha256_cert_fingerprints": ["PUT_SHA256_HERE"]
+      "package_name": "com.lovable.gigaserv",
+      "sha256_cert_fingerprints": [
+        "32:2B:71:7E:56:C6:4C:E9:B0:70:A6:16:65:33:A1:9E:50:90:AC:35:AE:94:33:18:39:14:DB:3E:B9:B3:B9:57"
+      ]
     }
   }
 ]
