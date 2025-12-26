@@ -6,6 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// UUID v4 format validation
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidUUID(id: unknown): id is string {
+  return typeof id === 'string' && UUID_REGEX.test(id);
+}
+
 interface RecordFeeRequest {
   chamado_id: string;
 }
@@ -23,9 +30,19 @@ serve(async (req) => {
 
     const { chamado_id }: RecordFeeRequest = await req.json();
 
+    // Validate chamado_id is present
     if (!chamado_id) {
       return new Response(
         JSON.stringify({ error: "chamado_id is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate chamado_id format (UUID)
+    if (!isValidUUID(chamado_id)) {
+      console.error("Invalid chamado_id format:", chamado_id);
+      return new Response(
+        JSON.stringify({ error: "Formato de chamado_id inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

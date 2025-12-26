@@ -327,16 +327,66 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = body.action || 'scheduled';
 
+    // Input validation constants
+    const MAX_TITLE_LENGTH = 100;
+    const MAX_BODY_LENGTH = 500;
+    const VALID_ACTIONS = ['scheduled', 'manual', 'event'];
+    const VALID_TARGET_TYPES = ['providers', 'clients', 'all'];
+
+    // Validate action
+    if (!VALID_ACTIONS.includes(action)) {
+      console.log('[send-notifications] Invalid action:', action);
+      return new Response(
+        JSON.stringify({ error: 'Ação inválida' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log('[send-notifications] Action:', action);
 
     if (action === 'scheduled') {
       await sendScheduledNotifications(supabase);
     } else if (action === 'manual') {
       const { targetType, message } = body;
-      await sendManualNotifications(supabase, targetType, message);
+      
+      // Validate targetType
+      if (!targetType || !VALID_TARGET_TYPES.includes(targetType)) {
+        return new Response(
+          JSON.stringify({ error: 'Tipo de destinatário inválido' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Validate and sanitize message
+      if (!message || typeof message.title !== 'string' || typeof message.body !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'Título e corpo da mensagem são obrigatórios' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const sanitizedMessage = {
+        title: message.title.substring(0, MAX_TITLE_LENGTH).trim(),
+        body: message.body.substring(0, MAX_BODY_LENGTH).trim(),
+      };
+      
+      await sendManualNotifications(supabase, targetType, sanitizedMessage);
     } else if (action === 'event') {
       const { userId, notificationType, title, messageBody, data } = body;
-      await sendEventNotification(supabase, userId, notificationType, title, messageBody, data);
+      
+      // Validate required fields
+      if (!userId || typeof userId !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'userId é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Sanitize title and body
+      const sanitizedTitle = typeof title === 'string' ? title.substring(0, MAX_TITLE_LENGTH).trim() : 'Notificação';
+      const sanitizedBody = typeof messageBody === 'string' ? messageBody.substring(0, MAX_BODY_LENGTH).trim() : '';
+      
+      await sendEventNotification(supabase, userId, notificationType || 'generic', sanitizedTitle, sanitizedBody, data);
     }
 
     return new Response(
