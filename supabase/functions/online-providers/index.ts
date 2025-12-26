@@ -76,8 +76,8 @@ serve(async (req) => {
       }
     }
 
-    // 2) Fetch active online providers from the central backend (single source of truth)
-    const { data, error } = await supabaseClient
+    // 2) Fetch active online providers from provider_data (single source of truth)
+    const { data: providerData, error: providerError } = await supabaseClient
       .from("provider_data")
       .select(
         `
@@ -90,8 +90,7 @@ serve(async (req) => {
         services_offered,
         radar_range,
         is_online,
-        updated_at,
-        profiles!inner(name, avatar_url, perfil_principal)
+        updated_at
       `,
       )
       .eq("is_online", true)
@@ -99,15 +98,48 @@ serve(async (req) => {
       .not("current_lat", "is", null)
       .not("current_lng", "is", null);
 
-    if (error) {
-      logStep("ERROR fetching providers", { message: error.message });
-      return new Response(JSON.stringify({ error: error.message }), {
+    if (providerError) {
+      logStep("ERROR fetching providers", { message: providerError.message });
+      return new Response(JSON.stringify({ error: providerError.message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
       });
     }
 
-    const providers = (data || []).filter((p: any) => p.profiles?.perfil_principal === "provider");
+    if (!providerData || providerData.length === 0) {
+      logStep("No online providers found", { thresholdIso });
+      return new Response(JSON.stringify({ providers: [], thresholdIso }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // 3) Fetch profiles for online providers (separate query to avoid join issues)
+    const userIds = providerData.map((p) => p.user_id);
+    const { data: profilesData, error: profilesError } = await supabaseClient
+      .from("profiles")
+      .select("user_id, name, avatar_url, perfil_principal")
+      .in("user_id", userIds);
+
+    if (profilesError) {
+      logStep("WARN fetching profiles", { message: profilesError.message });
+    }
+
+    // Create a map for fast lookup
+    const profilesMap = new Map(
+      (profilesData || []).map((p) => [p.user_id, p])
+    );
+
+    // 4) Combine data and filter only providers
+    const providers = providerData
+      .map((p) => {
+        const profile = profilesMap.get(p.user_id);
+        return {
+          ...p,
+          profiles: profile || null,
+        };
+      })
+      .filter((p) => p.profiles?.perfil_principal === "provider");
 
     logStep("Providers returned", {
       requester: user.id,
