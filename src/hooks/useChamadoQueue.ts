@@ -58,6 +58,14 @@ function mapDbChamadoToChamado(db: DbChamado): Chamado {
   };
 }
 
+/**
+ * QUEUE-BASED CHAMADO SYSTEM
+ * 
+ * Uses the backend queue as the SINGLE SOURCE OF TRUTH.
+ * NO realtime subscriptions for discovering chamados.
+ * Polling every 5 seconds for consistent cross-platform behavior.
+ * Complete state reset on mount and visibility change.
+ */
 export function useChamadoQueue({
   userId,
   isOnline,
@@ -72,6 +80,17 @@ export function useChamadoQueue({
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const declinedChamadosRef = useRef<Map<string, number>>(new Map());
+  const isMountedRef = useRef(true);
+  const pollInProgressRef = useRef(false);
+
+  // RESET - Clear all local state
+  const resetState = useCallback(() => {
+    console.log('[ChamadoQueue] RESET - Clearing all state');
+    setQueueSize(0);
+    setLastPollTime(null);
+    pollInProgressRef.current = false;
+    // Keep declined chamados to prevent immediate re-offer
+  }, []);
 
   // Mark a chamado as declined (local cooldown)
   const markAsDeclined = useCallback((chamadoId: string) => {
@@ -92,6 +111,20 @@ export function useChamadoQueue({
     return true;
   }, []);
 
+  // Clean up old cooldowns
+  const cleanupCooldowns = useCallback(() => {
+    const now = Date.now();
+    const toDelete: string[] = [];
+    
+    declinedChamadosRef.current.forEach((timestamp, id) => {
+      if (now - timestamp >= DECLINE_COOLDOWN_MS) {
+        toDelete.push(id);
+      }
+    });
+    
+    toDelete.forEach(id => declinedChamadosRef.current.delete(id));
+  }, []);
+
   // Poll the queue for pending chamados
   const pollQueue = useCallback(async () => {
     if (!userId || !isOnline || !isProvider || hasActiveChamado) {
@@ -103,12 +136,29 @@ export function useChamadoQueue({
       return;
     }
 
+    // Prevent concurrent polls
+    if (pollInProgressRef.current) {
+      console.log('[ChamadoQueue] Poll already in progress, skipping');
+      return;
+    }
+
+    pollInProgressRef.current = true;
+    const pollId = Date.now();
+
     try {
-      console.log(`[ChamadoQueue] Polling queue...`);
+      console.log(`[ChamadoQueue] Poll #${pollId} - Starting...`);
+      
+      // Clean up old cooldowns
+      cleanupCooldowns();
       
       const { data: session } = await supabase.auth.getSession();
       if (!session.session) {
-        console.log(`[ChamadoQueue] No session, skipping poll`);
+        console.log(`[ChamadoQueue] Poll #${pollId} - No session, skipping`);
+        return;
+      }
+
+      if (!isMountedRef.current) {
+        console.log(`[ChamadoQueue] Poll #${pollId} - Component unmounted, discarding`);
         return;
       }
 
@@ -118,49 +168,129 @@ export function useChamadoQueue({
         },
       });
 
+      if (!isMountedRef.current) {
+        console.log(`[ChamadoQueue] Poll #${pollId} - Component unmounted after fetch, discarding`);
+        return;
+      }
+
       if (response.error) {
-        console.error(`[ChamadoQueue] Error polling queue:`, response.error);
+        console.error(`[ChamadoQueue] Poll #${pollId} - Error:`, response.error);
+        // On error, reset queue size to avoid stale data
+        setQueueSize(0);
         return;
       }
 
       const { firstChamado, queueSize: size } = response.data || {};
+      
+      console.log(`[ChamadoQueue] Poll #${pollId} - Queue size: ${size || 0}`);
       setQueueSize(size || 0);
       setLastPollTime(new Date());
 
       if (firstChamado && !isInCooldown(firstChamado.id)) {
-        console.log(`[ChamadoQueue] Found pending chamado:`, firstChamado.id.substring(0, 8));
+        console.log(`[ChamadoQueue] Poll #${pollId} - Found pending chamado: ${firstChamado.id.substring(0, 8)}`);
         const chamado = mapDbChamadoToChamado(firstChamado);
         onNewChamado(chamado);
       } else if (size > 0) {
-        console.log(`[ChamadoQueue] ${size} chamados in queue but all in cooldown or already showing`);
+        console.log(`[ChamadoQueue] Poll #${pollId} - ${size} chamados in queue but all in cooldown`);
       }
     } catch (error) {
-      console.error(`[ChamadoQueue] Poll error:`, error);
+      console.error(`[ChamadoQueue] Poll #${pollId} - Exception:`, error);
+      setQueueSize(0);
+    } finally {
+      pollInProgressRef.current = false;
     }
-  }, [userId, isOnline, isProvider, hasActiveChamado, currentIncomingRequest, isInCooldown, onNewChamado]);
+  }, [userId, isOnline, isProvider, hasActiveChamado, currentIncomingRequest, isInCooldown, onNewChamado, cleanupCooldowns]);
 
   // Force poll (for visibility change, reconnection, etc.)
   const forcePoll = useCallback(() => {
-    console.log(`[ChamadoQueue] Force poll triggered`);
+    console.log('[ChamadoQueue] Force poll triggered');
     pollQueue();
   }, [pollQueue]);
 
+  // Handle visibility change - FORCE RESET + REFETCH
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[ChamadoQueue] App became visible - RESETTING and refetching');
+        resetState();
+        // Small delay to ensure state is cleared
+        setTimeout(() => {
+          if (isMountedRef.current && isPolling) {
+            pollQueue();
+          }
+        }, 100);
+      } else {
+        console.log('[ChamadoQueue] App going to background - clearing queue size');
+        setQueueSize(0);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [resetState, pollQueue, isPolling]);
+
+  // Handle online/offline events
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[ChamadoQueue] Network came online - resetting and refetching');
+      resetState();
+      setTimeout(() => {
+        if (isMountedRef.current && isPolling) {
+          pollQueue();
+        }
+      }, 100);
+    };
+
+    const handleOffline = () => {
+      console.log('[ChamadoQueue] Network offline - clearing state');
+      setQueueSize(0);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [resetState, pollQueue, isPolling]);
+
   // Start/stop polling based on conditions
   useEffect(() => {
+    isMountedRef.current = true;
     const shouldPoll = userId && isOnline && isProvider && !hasActiveChamado;
 
     if (shouldPoll) {
       console.log(`[ChamadoQueue] Starting queue polling (every ${QUEUE_POLL_INTERVAL_MS / 1000}s)`);
       setIsPolling(true);
       
-      // Initial poll
-      pollQueue();
+      // RESET on start
+      resetState();
+      
+      // Initial poll after reset
+      const initialPollTimeout = setTimeout(() => {
+        if (isMountedRef.current) {
+          pollQueue();
+        }
+      }, 100);
       
       // Set up interval
-      pollIntervalRef.current = setInterval(pollQueue, QUEUE_POLL_INTERVAL_MS);
+      pollIntervalRef.current = setInterval(() => {
+        if (isMountedRef.current) {
+          pollQueue();
+        }
+      }, QUEUE_POLL_INTERVAL_MS);
+
+      return () => {
+        clearTimeout(initialPollTimeout);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      };
     } else {
-      console.log(`[ChamadoQueue] Stopping queue polling`);
+      console.log('[ChamadoQueue] Stopping queue polling');
       setIsPolling(false);
+      setQueueSize(0);
       
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
@@ -169,38 +299,13 @@ export function useChamadoQueue({
     }
 
     return () => {
+      isMountedRef.current = false;
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
     };
-  }, [userId, isOnline, isProvider, hasActiveChamado, pollQueue]);
-
-  // Handle visibility change - force poll when app comes to foreground
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isPolling) {
-        console.log(`[ChamadoQueue] App became visible, forcing poll`);
-        forcePoll();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isPolling, forcePoll]);
-
-  // Handle online/offline events
-  useEffect(() => {
-    const handleOnline = () => {
-      if (isPolling) {
-        console.log(`[ChamadoQueue] Network came online, forcing poll`);
-        forcePoll();
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [isPolling, forcePoll]);
+  }, [userId, isOnline, isProvider, hasActiveChamado, pollQueue, resetState]);
 
   return {
     isPolling,
@@ -208,5 +313,6 @@ export function useChamadoQueue({
     queueSize,
     markAsDeclined,
     forcePoll,
+    reset: resetState,
   };
 }

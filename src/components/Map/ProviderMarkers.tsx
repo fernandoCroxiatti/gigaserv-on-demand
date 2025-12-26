@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import { Marker } from '@react-google-maps/api';
 import { ServiceType } from '@/types/chamado';
 
@@ -67,9 +67,43 @@ function createProviderIcon(service: ServiceType): google.maps.Symbol {
   };
 }
 
+/**
+ * PROVIDER MARKERS
+ * 
+ * DESTRUCTIVE RENDERING: Each render completely rebuilds markers.
+ * Uses provider array as single source of truth.
+ * No local state persistence between renders.
+ */
+
 export function ProviderMarkers({ providers, animate = true }: ProviderMarkersProps) {
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
   const previousPositionsRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
+  const currentProviderIdsRef = useRef<Set<string>>(new Set());
+
+  // Cleanup function to remove stale markers
+  const cleanupStaleMarkers = useCallback((currentIds: Set<string>) => {
+    const toRemove: string[] = [];
+    markersRef.current.forEach((marker, id) => {
+      if (!currentIds.has(id)) {
+        toRemove.push(id);
+      }
+    });
+    
+    toRemove.forEach(id => {
+      console.log(`[ProviderMarkers] Removing stale marker: ${id.substring(0, 8)}`);
+      markersRef.current.delete(id);
+      previousPositionsRef.current.delete(id);
+    });
+  }, []);
+
+  // DESTRUCTIVE: Update current provider IDs and cleanup on each render
+  useEffect(() => {
+    const newIds = new Set(providers.map(p => p.id));
+    cleanupStaleMarkers(newIds);
+    currentProviderIdsRef.current = newIds;
+    
+    console.log(`[ProviderMarkers] Rendering ${providers.length} markers`);
+  }, [providers, cleanupStaleMarkers]);
 
   // Animate marker movement
   useEffect(() => {
@@ -93,16 +127,15 @@ export function ProviderMarkers({ providers, animate = true }: ProviderMarkersPr
   }, [providers, animate]);
 
   // Smooth animation between positions
-  const animateMarker = (
+  const animateMarker = useCallback((
     marker: google.maps.Marker,
     start: { lat: number; lng: number },
     end: { lat: number; lng: number }
   ) => {
     const frames = 30;
-    const duration = 500; // ms
     let frame = 0;
 
-    const animate = () => {
+    const doAnimate = () => {
       frame++;
       const progress = frame / frames;
       const easeProgress = easeInOutQuad(progress);
@@ -113,12 +146,12 @@ export function ProviderMarkers({ providers, animate = true }: ProviderMarkersPr
       marker.setPosition({ lat, lng });
 
       if (frame < frames) {
-        requestAnimationFrame(animate);
+        requestAnimationFrame(doAnimate);
       }
     };
 
-    requestAnimationFrame(animate);
-  };
+    requestAnimationFrame(doAnimate);
+  }, []);
 
   // Easing function for smooth animation
   const easeInOutQuad = (t: number): number => {
@@ -133,6 +166,16 @@ export function ProviderMarkers({ providers, animate = true }: ProviderMarkersPr
         iconCache.set(service, createProviderIcon(service));
       }
       return iconCache.get(service)!;
+    };
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('[ProviderMarkers] Unmount - clearing all markers');
+      markersRef.current.clear();
+      previousPositionsRef.current.clear();
+      currentProviderIdsRef.current.clear();
     };
   }, []);
 
