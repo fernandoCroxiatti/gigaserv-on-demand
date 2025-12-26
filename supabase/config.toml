@@ -65,3 +65,9 @@ verify_jwt = true
 
 [functions.notify-admin-payment]
 verify_jwt = true
+
+[functions.send-password-reset-otp]
+verify_jwt = false
+
+[functions.verify-otp-reset-password]
+verify_jwt = false
