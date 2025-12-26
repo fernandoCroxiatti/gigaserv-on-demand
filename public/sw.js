@@ -12,6 +12,70 @@ const STATIC_ASSETS = [
   '/manifest.json'
 ];
 
+// =====================================================
+// UBER-STYLE CONTINUOUS ALERT SOUND SYSTEM
+// =====================================================
+let alertInterval = null;
+let isAlertPlaying = false;
+
+// Sound configuration for urgent alert
+const ALERT_CONFIG = {
+  LOOP_INTERVAL_MS: 2000,
+  BEEP_DURATION: 0.12,
+  BEEP_GAP: 0.08,
+  FREQUENCY_1: 1200,
+  FREQUENCY_2: 1400,
+  VOLUME: 0.8
+};
+
+// Start continuous alert sound loop
+function startAlertLoop() {
+  if (isAlertPlaying) return;
+  
+  console.log('[SW] Starting Uber-style continuous alert...');
+  isAlertPlaying = true;
+  
+  // Notify clients to start sound (since SW can't use AudioContext directly)
+  notifyClientsToPlaySound('START_ALERT');
+  
+  // Set up loop to keep notifying
+  alertInterval = setInterval(() => {
+    if (isAlertPlaying) {
+      notifyClientsToPlaySound('CONTINUE_ALERT');
+    }
+  }, ALERT_CONFIG.LOOP_INTERVAL_MS);
+}
+
+// Stop alert loop
+function stopAlertLoop() {
+  console.log('[SW] Stopping alert loop...');
+  isAlertPlaying = false;
+  
+  if (alertInterval) {
+    clearInterval(alertInterval);
+    alertInterval = null;
+  }
+  
+  notifyClientsToPlaySound('STOP_ALERT');
+}
+
+// Notify all clients to play/stop sound
+async function notifyClientsToPlaySound(action) {
+  const allClients = await self.clients.matchAll({ 
+    type: 'window', 
+    includeUncontrolled: true 
+  });
+  
+  allClients.forEach(client => {
+    client.postMessage({
+      type: 'RIDE_ALERT_SOUND',
+      action: action,
+      timestamp: Date.now()
+    });
+  });
+}
+// =====================================================
+
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing service worker v3...');
@@ -136,7 +200,8 @@ self.addEventListener('push', (event) => {
     tag: 'default',
     requireInteraction: false,
     data: {},
-    vibrate: [200, 100, 200]
+    vibrate: [200, 100, 200],
+    priority: 'default'
   };
   
   if (event.data) {
@@ -154,6 +219,14 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  // Check if this is a HIGH PRIORITY chamado notification
+  const isChamadoNotification = 
+    data.priority === 'high' || 
+    data.tag?.includes('chamado') ||
+    data.tag?.includes('new_chamado') ||
+    data.data?.notificationType?.includes('chamado') ||
+    data.data?.notificationType?.includes('new_chamado');
+
   const options = {
     body: data.body,
     icon: data.icon || '/icon-192.png',
@@ -166,11 +239,25 @@ self.addEventListener('push', (event) => {
     silent: false
   };
 
-  // High priority notifications (chamados)
-  if (data.priority === 'high' || data.tag?.includes('chamado')) {
+  // HIGH PRIORITY CHAMADO NOTIFICATIONS - Uber style!
+  if (isChamadoNotification) {
+    console.log('[SW] HIGH PRIORITY CHAMADO - Starting continuous alert!');
+    
+    // Override options for maximum urgency
     options.requireInteraction = true;
-    options.vibrate = [300, 100, 300, 100, 300];
+    options.tag = 'chamado-urgent-' + Date.now(); // Unique tag for each chamado
     options.renotify = true;
+    options.vibrate = [500, 200, 500, 200, 500, 200, 500]; // Long intense vibration pattern
+    options.silent = false;
+    
+    // Add action buttons
+    options.actions = [
+      { action: 'accept', title: '✓ Aceitar' },
+      { action: 'decline', title: '✕ Recusar' }
+    ];
+    
+    // Start the continuous alert loop
+    startAlertLoop();
   }
 
   console.log('[SW] Showing notification:', data.title, options);
@@ -184,6 +271,9 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked:', event);
   
+  // ALWAYS stop the alert when user interacts
+  stopAlertLoop();
+  
   event.notification.close();
   
   const notificationData = event.notification.data || {};
@@ -191,10 +281,21 @@ self.addEventListener('notificationclick', (event) => {
   
   if (event.action) {
     console.log('[SW] Action clicked:', event.action);
-    if (event.action === 'view') {
+    
+    if (event.action === 'accept') {
+      // User accepted the chamado
       urlToOpen = notificationData.url || '/';
-    } else if (event.action === 'dismiss') {
-      return;
+      notifyClientsToPlaySound('USER_ACCEPTED');
+    } else if (event.action === 'decline' || event.action === 'dismiss') {
+      // User declined
+      notifyClientsToPlaySound('USER_DECLINED');
+      
+      // Still navigate to app for decline
+      if (event.action === 'dismiss') {
+        return;
+      }
+    } else if (event.action === 'view') {
+      urlToOpen = notificationData.url || '/';
     }
   }
   
@@ -212,7 +313,8 @@ self.addEventListener('notificationclick', (event) => {
             client.postMessage({
               type: 'NOTIFICATION_CLICKED',
               data: notificationData,
-              url: urlToOpen
+              url: urlToOpen,
+              action: event.action
             });
             
             if ('navigate' in client) {
@@ -230,9 +332,15 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Notification close event
+// Notification close event - STOP ALERT when dismissed
 self.addEventListener('notificationclose', (event) => {
   console.log('[SW] Notification closed:', event.notification.tag);
+  
+  // Stop alert when notification is dismissed
+  if (event.notification.tag?.includes('chamado')) {
+    stopAlertLoop();
+    notifyClientsToPlaySound('NOTIFICATION_DISMISSED');
+  }
 });
 
 // Push subscription change event
@@ -268,7 +376,7 @@ async function syncNotificationClicks() {
   console.log('[SW] Syncing notification clicks...');
 }
 
-// Message handler for manual cache updates
+// Message handler for manual cache updates and ALERT CONTROL
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
@@ -278,5 +386,17 @@ self.addEventListener('message', (event) => {
     caches.keys().then((names) => {
       names.forEach((name) => caches.delete(name));
     });
+  }
+  
+  // Allow clients to stop the alert manually
+  if (event.data && event.data.type === 'STOP_CHAMADO_ALERT') {
+    console.log('[SW] Received STOP_CHAMADO_ALERT from client');
+    stopAlertLoop();
+  }
+  
+  // Allow clients to confirm they handled the chamado
+  if (event.data && event.data.type === 'CHAMADO_HANDLED') {
+    console.log('[SW] Chamado handled by client:', event.data.action);
+    stopAlertLoop();
   }
 });

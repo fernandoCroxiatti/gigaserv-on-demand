@@ -628,20 +628,39 @@ async function sendPushToUser(
 
   const deepLinkUrl = getDeepLinkUrl(notificationType, data);
 
+  // Determine if this is a HIGH PRIORITY chamado notification
+  const isChamadoNotification = 
+    notificationType.includes('chamado') || 
+    notificationType.includes('new_chamado') ||
+    notificationType.includes('chamado_received');
+
   const payload = {
     title,
     body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: notificationType,
+    tag: isChamadoNotification ? `chamado-urgent-${Date.now()}` : notificationType,
+    priority: isChamadoNotification ? 'high' : 'default',
     data: {
       ...(data || {}),
       url: deepLinkUrl,
       notificationType,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      priority: isChamadoNotification ? 'high' : 'default'
     },
-    requireInteraction: notificationType.includes('chamado') || notificationType.includes('new_chamado'),
-    vibrate: notificationType.includes('chamado') ? [300, 100, 300] : [200, 100, 200]
+    requireInteraction: isChamadoNotification,
+    renotify: isChamadoNotification,
+    vibrate: isChamadoNotification 
+      ? [500, 200, 500, 200, 500, 200, 500] // Long intense pattern for chamados
+      : [200, 100, 200],
+    // Add action buttons for chamado notifications
+    actions: isChamadoNotification 
+      ? [
+          { action: 'accept', title: '✓ Aceitar' },
+          { action: 'decline', title: '✕ Recusar' }
+        ]
+      : [],
+    silent: false
   };
 
   let anySent = false;
@@ -650,6 +669,10 @@ async function sendPushToUser(
     if (sent) anySent = true;
   }
 
-  console.log('[send-notifications] Push sent to user:', userId, { title, anySent });
+  console.log('[send-notifications] Push sent to user:', userId, { 
+    title, 
+    anySent, 
+    priority: isChamadoNotification ? 'HIGH' : 'normal' 
+  });
   return anySent;
 }
