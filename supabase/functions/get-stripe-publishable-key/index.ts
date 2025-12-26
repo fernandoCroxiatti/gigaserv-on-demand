@@ -33,7 +33,10 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), {
+    const stack = error instanceof Error ? error.stack : undefined;
+    console.error("[get-stripe-publishable-key] Error:", { message, stack });
+    // Return generic message to client, keep details in server logs
+    return new Response(JSON.stringify({ error: "Erro ao obter configuração. Tente novamente." }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

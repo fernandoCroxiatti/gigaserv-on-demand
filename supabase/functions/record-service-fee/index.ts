@@ -251,10 +251,12 @@ serve(async (req) => {
     );
 
   } catch (error: unknown) {
-    console.error("Error in record-service-fee:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error in record-service-fee:", { message: errorMessage, stack: errorStack });
+    // Return generic message to client, keep details in server logs
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "Erro ao registrar taxa. Tente novamente." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
