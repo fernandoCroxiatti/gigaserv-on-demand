@@ -12,7 +12,7 @@ export interface NearbyProvider {
   rating: number;
   totalServices: number;
   services: ServiceType[];
-  updatedAt: number; // timestamp for TTL validation
+  updatedAt: number;
 }
 
 interface UseNearbyProvidersOptions {
@@ -22,9 +22,18 @@ interface UseNearbyProvidersOptions {
 }
 
 const DEFAULT_RADIUS = 15; // km
-const REFRESH_INTERVAL = 5000; // 5 seconds - faster refresh for cross-platform sync
+const REFRESH_INTERVAL = 5000; // 5 seconds
 const STALE_PROVIDER_THRESHOLD_MS = 15 * 1000; // 15 seconds - must match backend timeout
 
+/**
+ * DESTRUCTIVE RENDERING PATTERN
+ * 
+ * This hook uses the backend as the SINGLE SOURCE OF TRUTH.
+ * Every refresh COMPLETELY REPLACES the provider list.
+ * NO realtime subscriptions - only polling.
+ * NO incremental updates - full replacement.
+ * NO local cache - always fresh from backend.
+ */
 export function useNearbyProviders({ 
   userLocation, 
   radiusKm = DEFAULT_RADIUS,
@@ -32,82 +41,86 @@ export function useNearbyProviders({
 }: UseNearbyProvidersOptions) {
   const [providers, setProviders] = useState<NearbyProvider[]>([]);
   const [loading, setLoading] = useState(false);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const cleanupIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchInProgressRef = useRef(false);
 
-  // Remove stale providers from local state (TTL cleanup)
-  const cleanupStaleProviders = useCallback(() => {
-    const now = Date.now();
-    setProviders(prev => {
-      const validProviders = prev.filter(p => {
-        const age = now - p.updatedAt;
-        const isValid = age < STALE_PROVIDER_THRESHOLD_MS;
-        if (!isValid) {
-          console.log(`[NearbyProviders] Removing stale provider ${p.name} (age: ${Math.round(age/1000)}s)`);
-        }
-        return isValid;
-      });
-      
-      if (validProviders.length !== prev.length) {
-        console.log(`[NearbyProviders] Cleaned up ${prev.length - validProviders.length} stale providers`);
-      }
-      
-      return validProviders;
-    });
+  // TOTAL STATE RESET - called on mount and visibility change
+  const resetState = useCallback(() => {
+    console.log('[NearbyProviders] RESET - Clearing all state');
+    setProviders([]);
+    setLastFetchTime(0);
+    fetchInProgressRef.current = false;
   }, []);
 
-  // Fetch providers - REPLACES entire list (no merge)
+  // Fetch providers - DESTRUCTIVE: REPLACES entire list
   const fetchProviders = useCallback(async () => {
     if (!userLocation || !enabled) {
-      console.log('[NearbyProviders] Skipping fetch - no location or disabled');
-      setProviders([]); // Clear providers when disabled
+      console.log('[NearbyProviders] Fetch skipped - disabled or no location');
+      setProviders([]);
       return;
     }
 
-    console.log(`[NearbyProviders] Fetching online providers within ${radiusKm}km`);
-    setLoading(true);
+    // Prevent concurrent fetches
+    if (fetchInProgressRef.current) {
+      console.log('[NearbyProviders] Fetch already in progress, skipping');
+      return;
+    }
+
+    fetchInProgressRef.current = true;
+    const fetchId = Date.now();
+    console.log(`[NearbyProviders] Fetch #${fetchId} - Starting...`);
 
     try {
+      setLoading(true);
+
       const { data, error } = await supabase.functions.invoke('online-providers', {
         body: {},
       });
 
+      // Check if component still mounted
+      if (!isMountedRef.current) {
+        console.log(`[NearbyProviders] Fetch #${fetchId} - Component unmounted, discarding`);
+        return;
+      }
+
       if (error) {
-        console.error('[NearbyProviders] Error fetching providers:', error);
-        setLoading(false);
+        console.error(`[NearbyProviders] Fetch #${fetchId} - Error:`, error);
+        // On error, clear providers to avoid stale data
+        setProviders([]);
         return;
       }
 
       const providerData = (data as any)?.providers as any[] | undefined;
       const now = Date.now();
 
-      console.log('[NearbyProviders] Providers received:', {
-        count: providerData?.length || 0,
-        thresholdIso: (data as any)?.thresholdIso,
-      });
+      console.log(`[NearbyProviders] Fetch #${fetchId} - Received ${providerData?.length || 0} raw providers`);
 
       if (!providerData || providerData.length === 0) {
-        console.log('[NearbyProviders] No active online providers');
-        setProviders([]); // Clear all - no providers online
-        setLoading(false);
+        console.log(`[NearbyProviders] Fetch #${fetchId} - No providers, clearing list`);
+        setProviders([]); // DESTRUCTIVE: Clear all
+        setLastFetchTime(now);
         return;
       }
 
-      // Filter by TTL and distance - STRICT validation
+      // Build new provider list from scratch - NO merging
       const validProviders: NearbyProvider[] = [];
 
       for (const provider of providerData) {
-        // Validate location
+        // STRICT validation - skip invalid entries
         if (!provider.current_lat || !provider.current_lng) {
+          console.log(`[NearbyProviders] Skipping provider - no location`);
           continue;
         }
 
-        // Validate TTL (15s threshold)
         if (!provider.updated_at) {
+          console.log(`[NearbyProviders] Skipping provider - no updated_at`);
           continue;
         }
-        
+
+        // TTL validation - 15 second threshold
         const lastUpdate = new Date(provider.updated_at).getTime();
         const age = now - lastUpdate;
         
@@ -116,7 +129,7 @@ export function useNearbyProviders({
           continue;
         }
 
-        // Calculate distance
+        // Distance validation
         const distance = calculateDistance(
           userLocation.lat,
           userLocation.lng,
@@ -124,7 +137,6 @@ export function useNearbyProviders({
           Number(provider.current_lng)
         );
 
-        // Filter by radius
         if (distance > radiusKm) {
           continue;
         }
@@ -146,185 +158,125 @@ export function useNearbyProviders({
         });
       }
 
-      // Sort by distance and REPLACE entire list
+      // Sort by distance
       validProviders.sort((a, b) => a.distance - b.distance);
+
+      // DESTRUCTIVE: Replace entire list atomically
+      console.log(`[NearbyProviders] Fetch #${fetchId} - Setting ${validProviders.length} valid providers`);
       setProviders(validProviders);
-      
-      console.log(`[NearbyProviders] ✅ ${validProviders.length} valid providers within ${radiusKm}km`);
+      setLastFetchTime(now);
+
     } catch (error) {
-      console.error('[NearbyProviders] Error:', error);
+      console.error(`[NearbyProviders] Fetch #${fetchId} - Exception:`, error);
+      // On exception, clear to avoid stale data
+      setProviders([]);
     } finally {
       setLoading(false);
+      fetchInProgressRef.current = false;
     }
   }, [userLocation, radiusKm, enabled]);
 
-  // Handle visibility change - force refresh when app becomes visible
-  const handleVisibilityChange = useCallback(() => {
-    if (document.visibilityState === 'visible' && enabled && userLocation) {
-      console.log('[NearbyProviders] App became visible, forcing refresh...');
-      fetchProviders();
-    }
-  }, [enabled, userLocation, fetchProviders]);
-
-  // Main effect - setup polling and real-time
+  // Handle visibility change - FORCE RESET + REFETCH
   useEffect(() => {
-    if (!userLocation || !enabled) {
-      // Cleanup when disabled
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
-      if (cleanupIntervalRef.current) {
-        clearInterval(cleanupIntervalRef.current);
-        cleanupIntervalRef.current = null;
-      }
-      setProviders([]); // Clear providers when disabled
-      return;
-    }
-
-    // Initial fetch
-    fetchProviders();
-
-    // Periodic refresh - PRIMARY source of truth (every 5 seconds)
-    refreshIntervalRef.current = setInterval(() => {
-      console.log('[NearbyProviders] Periodic refresh');
-      fetchProviders();
-    }, REFRESH_INTERVAL);
-
-    // TTL cleanup - runs more frequently to catch stale providers quickly
-    cleanupIntervalRef.current = setInterval(() => {
-      cleanupStaleProviders();
-    }, 2000); // Every 2 seconds
-
-    // Real-time subscription - COMPLEMENT only (for instant updates)
-    const channel = supabase
-      .channel(`nearby-providers-${Date.now()}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'provider_data',
-        },
-        async (payload) => {
-          console.log('[NearbyProviders] Real-time update:', payload.eventType);
-          
-          const data = payload.new as any;
-          const now = Date.now();
-          
-          // Handle DELETE or offline status
-          if (payload.eventType === 'DELETE' || !data?.is_online) {
-            setProviders(prev => {
-              const filtered = prev.filter(p => p.userId !== data?.user_id);
-              if (filtered.length !== prev.length) {
-                console.log(`[NearbyProviders] Provider went offline, removed from map`);
-              }
-              return filtered;
-            });
-            return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[NearbyProviders] App became visible - RESETTING and refetching');
+        resetState();
+        // Small delay to ensure state is cleared
+        setTimeout(() => {
+          if (isMountedRef.current && enabled && userLocation) {
+            fetchProviders();
           }
-
-          // Validate location
-          if (!data.current_lat || !data.current_lng) {
-            return;
-          }
-
-          // Validate TTL
-          if (!data.updated_at) {
-            return;
-          }
-          
-          const lastUpdate = new Date(data.updated_at).getTime();
-          const age = now - lastUpdate;
-          
-          if (age >= STALE_PROVIDER_THRESHOLD_MS) {
-            // Remove stale provider if exists
-            setProviders(prev => prev.filter(p => p.userId !== data.user_id));
-            return;
-          }
-
-          // Calculate distance
-          const distance = calculateDistance(
-            userLocation.lat,
-            userLocation.lng,
-            Number(data.current_lat),
-            Number(data.current_lng)
-          );
-
-          // Filter by radius
-          if (distance > radiusKm) {
-            setProviders(prev => prev.filter(p => p.userId !== data.user_id));
-            return;
-          }
-
-          // Get provider name
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('name')
-            .eq('user_id', data.user_id)
-            .single();
-
-          const updatedProvider: NearbyProvider = {
-            id: data.user_id,
-            userId: data.user_id,
-            name: profile?.name || 'Prestador',
-            location: {
-              lat: Number(data.current_lat),
-              lng: Number(data.current_lng),
-              address: data.current_address || 'Localização',
-            },
-            distance,
-            rating: Number(data.rating) || 5.0,
-            totalServices: data.total_services || 0,
-            services: (data.services_offered as ServiceType[]) || ['guincho'],
-            updatedAt: lastUpdate,
-          };
-
-          setProviders(prev => {
-            const existing = prev.findIndex(p => p.userId === data.user_id);
-            if (existing >= 0) {
-              const updated = [...prev];
-              updated[existing] = updatedProvider;
-              return updated.sort((a, b) => a.distance - b.distance);
-            } else {
-              return [...prev, updatedProvider].sort((a, b) => a.distance - b.distance);
-            }
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('[NearbyProviders] Realtime subscription status:', status);
-      });
-
-    channelRef.current = channel;
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
-      if (cleanupIntervalRef.current) {
-        clearInterval(cleanupIntervalRef.current);
-        cleanupIntervalRef.current = null;
+        }, 100);
+      } else {
+        // When going to background, clear state to prevent stale data on return
+        console.log('[NearbyProviders] App going to background - clearing state');
+        setProviders([]);
       }
     };
-  }, [userLocation, radiusKm, enabled, fetchProviders, cleanupStaleProviders]);
 
-  // Visibility change handler
-  useEffect(() => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [handleVisibilityChange]);
+  }, [resetState, fetchProviders, enabled, userLocation]);
+
+  // Handle online/offline network events
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[NearbyProviders] Network online - refetching');
+      resetState();
+      setTimeout(() => {
+        if (isMountedRef.current && enabled && userLocation) {
+          fetchProviders();
+        }
+      }, 100);
+    };
+
+    const handleOffline = () => {
+      console.log('[NearbyProviders] Network offline - clearing state');
+      setProviders([]);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [resetState, fetchProviders, enabled, userLocation]);
+
+  // Main effect - setup polling (NO REALTIME)
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    if (!userLocation || !enabled) {
+      console.log('[NearbyProviders] Disabled or no location - clearing');
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+      setProviders([]);
+      return;
+    }
+
+    console.log('[NearbyProviders] Mounting - RESET and initial fetch');
+    
+    // RESET on mount
+    resetState();
+
+    // Initial fetch after reset
+    const initialFetchTimeout = setTimeout(() => {
+      if (isMountedRef.current) {
+        fetchProviders();
+      }
+    }, 100);
+
+    // Setup polling interval - PRIMARY source of truth
+    refreshIntervalRef.current = setInterval(() => {
+      if (isMountedRef.current) {
+        console.log('[NearbyProviders] Polling tick');
+        fetchProviders();
+      }
+    }, REFRESH_INTERVAL);
+
+    return () => {
+      console.log('[NearbyProviders] Unmounting - cleanup');
+      isMountedRef.current = false;
+      clearTimeout(initialFetchTimeout);
+      
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    };
+  }, [userLocation?.lat, userLocation?.lng, radiusKm, enabled, fetchProviders, resetState]);
 
   return {
     providers,
     loading,
+    lastFetchTime,
     refresh: fetchProviders,
+    reset: resetState,
   };
 }

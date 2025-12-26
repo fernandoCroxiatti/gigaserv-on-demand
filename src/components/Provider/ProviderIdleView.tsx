@@ -20,6 +20,15 @@ import { useProviderOnlineSync } from '@/hooks/useProviderOnlineSync';
 
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
+/**
+ * PROVIDER IDLE VIEW
+ * 
+ * Cross-platform consistent rendering.
+ * Resets state on mount and visibility change.
+ * Uses backend as single source of truth.
+ */
+
+
 export function ProviderIdleView() {
   const { user, toggleProviderOnline, setProviderRadarRange, setProviderServices, updateProviderLocation, providerData } = useApp();
   const { user: authUser } = useAuth();

@@ -61,11 +61,21 @@ export function ClientIdleView() {
 
   const searchLocation = useMemo(() => origem || userLocation, [origem, userLocation]);
   
-  const { providers: nearbyProviders, loading: providersLoading } = useNearbyProviders({
+  const { providers: nearbyProviders, loading: providersLoading, reset: resetProviders } = useNearbyProviders({
     userLocation: searchLocation,
     radiusKm: NEARBY_RADIUS_KM,
     enabled: !!searchLocation,
   });
+
+  // RESET on mount - ensure clean state for cross-platform consistency
+  useEffect(() => {
+    console.log('[ClientIdleView] Mount - resetting providers');
+    resetProviders();
+    
+    return () => {
+      console.log('[ClientIdleView] Unmount');
+    };
+  }, [resetProviders]);
 
   const mapProviders: MapProvider[] = useMemo(() => {
     return nearbyProviders.map(p => ({
