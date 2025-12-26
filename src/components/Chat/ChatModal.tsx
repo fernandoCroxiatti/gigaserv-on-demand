@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { X, Send, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ExternalContactWarning, detectExternalContactTerms } from './ExternalContactWarning';
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export function ChatModal({ isOpen, onClose, otherPartyName, mode }: ChatModalPr
   const { chatMessages, sendChatMessage, profile, chamado } = useApp();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [showExternalWarning, setShowExternalWarning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -31,8 +33,21 @@ export function ChatModal({ isOpen, onClose, otherPartyName, mode }: ChatModalPr
     }
   }, [isOpen]);
 
+  // Check for external contact patterns in messages (without reading content - just pattern detection)
+  useEffect(() => {
+    const hasExternalPattern = chatMessages.some(msg => detectExternalContactTerms(msg.message));
+    if (hasExternalPattern && !showExternalWarning) {
+      setShowExternalWarning(true);
+    }
+  }, [chatMessages, showExternalWarning]);
+
   const handleSend = async () => {
     if (!message.trim() || sending) return;
+
+    // Check if current message contains external contact terms
+    if (detectExternalContactTerms(message) && !showExternalWarning) {
+      setShowExternalWarning(true);
+    }
 
     setSending(true);
     try {
@@ -86,6 +101,11 @@ export function ChatModal({ isOpen, onClose, otherPartyName, mode }: ChatModalPr
           </div>
         </div>
       </div>
+
+      {/* Educational warning - shown when external contact terms detected */}
+      {showExternalWarning && (
+        <ExternalContactWarning className="mx-4 mt-3" />
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

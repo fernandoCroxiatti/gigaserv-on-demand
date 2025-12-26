@@ -3,15 +3,33 @@ import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { SearchingIndicator } from './SearchingIndicator';
 import { useProgressiveSearch } from '@/hooks/useProgressiveSearch';
+import { useCancellationWithReason } from '@/hooks/useCancellationWithReason';
+import { CancellationReasonDialog } from '../CancellationReasonDialog';
 import { Button } from '../ui/button';
 import { X, MapPin, Navigation } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export function ClientSearchingView() {
-  const { chamado, cancelChamado } = useApp();
+  const { chamado, cancelChamado, resetChamado } = useApp();
   const previousDeclinedRef = useRef<string[]>([]);
   const [declinedProviderIdsFromDb, setDeclinedProviderIdsFromDb] = useState<string[]>([]);
+
+  // Cancellation with reason
+  const {
+    showReasonDialog,
+    cancelling,
+    openCancellationDialog,
+    closeCancellationDialog,
+    confirmCancellation,
+  } = useCancellationWithReason({
+    chamadoId: chamado?.id,
+    onCancelled: () => {
+      toast.info('Chamado cancelado');
+      resetChamado();
+    },
+  });
 
   // Load initial declined providers from DB when chamado changes
   useEffect(() => {
@@ -213,14 +231,23 @@ export function ClientSearchingView() {
           {/* Cancel button - wider */}
           <Button 
             variant="outline" 
-            onClick={cancelChamado}
+            onClick={openCancellationDialog}
+            disabled={cancelling}
             className="w-full h-11"
           >
             <X className="w-4 h-4" />
-            Cancelar busca
+            {cancelling ? 'Cancelando...' : 'Cancelar busca'}
           </Button>
         </div>
       </div>
+
+      {/* Cancellation reason dialog */}
+      <CancellationReasonDialog
+        isOpen={showReasonDialog}
+        onClose={closeCancellationDialog}
+        onConfirm={confirmCancellation}
+        isProvider={false}
+      />
     </div>
   );
 }

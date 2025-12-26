@@ -31,6 +31,7 @@ import AdminNotifications from "./pages/admin/Notifications";
 import StripeAuditReport from "./pages/StripeAuditReport";
 import ProviderFinances from "./pages/admin/ProviderFinances";
 import AdminAntiFraud from "./pages/admin/AntiFraud";
+import AdminSuspiciousPatterns from "./pages/admin/SuspiciousPatterns";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 
@@ -203,6 +204,7 @@ function AppRoutes() {
         <Route path="chamados" element={<AdminChamados />} />
         <Route path="finances" element={<ProviderFinances />} />
         <Route path="antifraud" element={<AdminAntiFraud />} />
+        <Route path="suspicious" element={<AdminSuspiciousPatterns />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

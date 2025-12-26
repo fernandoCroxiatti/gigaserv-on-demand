@@ -248,26 +248,50 @@ export default function TermsOfUse() {
             <li>Renuncia a qualquer alegação de desconhecimento das regras aqui estabelecidas.</li>
           </ul>
 
-          <h2 className="text-lg font-semibold mt-6">12. Propriedade Intelectual</h2>
+          <h2 className="text-lg font-semibold mt-6">12. Conclusão de Serviços pela Plataforma</h2>
+          <p>
+            A GIGA S.O.S incentiva que todos os serviços sejam concluídos dentro da plataforma, 
+            visando garantir a segurança de ambas as partes e a qualidade do atendimento.
+          </p>
+          <h3 className="text-base font-medium mt-4">12.1 Benefícios da Conclusão pela Plataforma</h3>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Histórico completo de serviços para consulta</li>
+            <li>Suporte e mediação em caso de disputas</li>
+            <li>Avaliações e reputação para melhoria contínua</li>
+            <li>Comprovantes e registros para fins fiscais</li>
+          </ul>
+          <h3 className="text-base font-medium mt-4">12.2 Serviços Fora da Plataforma</h3>
+          <p>
+            Após o aceite de um serviço, a conclusão fora da plataforma pode resultar em 
+            restrições conforme análise do histórico, visando a integridade do ecossistema. 
+            A GIGA S.O.S monitora padrões de comportamento e pode aplicar medidas proporcionais 
+            após análise administrativa, sempre garantindo o direito de contestação via suporte.
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Nota: Serviços realizados fora do aplicativo não contam com suporte, histórico ou 
+            garantias oferecidas pela plataforma.
+          </p>
+
+          <h2 className="text-lg font-semibold mt-6">13. Propriedade Intelectual</h2>
           <p>
             Todo o conteúdo do aplicativo, incluindo marca, design e código, é propriedade 
             da GIGA S.O.S e está protegido por leis de propriedade intelectual.
           </p>
 
-          <h2 className="text-lg font-semibold mt-6">13. Alterações nos Termos</h2>
+          <h2 className="text-lg font-semibold mt-6">14. Alterações nos Termos</h2>
           <p>
             Podemos modificar estes termos a qualquer momento. Alterações significativas 
             serão comunicadas através do aplicativo. O uso continuado após alterações 
             constitui aceitação dos novos termos.
           </p>
 
-          <h2 className="text-lg font-semibold mt-6">14. Legislação Aplicável</h2>
+          <h2 className="text-lg font-semibold mt-6">15. Legislação Aplicável</h2>
           <p>
             Estes termos são regidos pelas leis do Brasil. Disputas serão resolvidas 
             no foro da comarca de São Paulo/SP.
           </p>
 
-          <h2 className="text-lg font-semibold mt-6">15. Contato</h2>
+          <h2 className="text-lg font-semibold mt-6">16. Contato</h2>
           <p>
             Para dúvidas sobre estes termos:
           </p>
