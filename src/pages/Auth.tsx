@@ -13,7 +13,7 @@ import {
   hasAskedNotificationPermission,
   markAskedNotificationPermission,
 } from '@/lib/notificationPermissionLogin';
-import { requestNotificationPermissionFromLogin } from '@/lib/notificationPermissionRequester';
+// requestNotificationPermissionFromLogin não é mais utilizado - removido o import
 type ProfileType = 'client' | 'provider';
 type AuthStep = 'select' | 'login' | 'register';
 
@@ -98,42 +98,49 @@ export default function Auth() {
     }
   };
 
-  const scheduleNotificationPermissionRequest = (userId: string) => {
+  /**
+   * Solicita permissão de notificação diretamente após login/cadastro bem-sucedido.
+   * Funciona imediatamente pois estamos no contexto de um gesto do usuário (submit do form).
+   */
+  const requestNotificationPermissionAfterAuth = async (userId: string) => {
     // Web-only: permission prompts usually cannot run in iframes (preview)
-    if (!canRequestNotificationsInThisContext()) return;
-
-    // Only request if browser permission is "default" (never asked)
-    if (Notification.permission !== 'default') return;
-
-    // Only once per user/device
-    if (hasAskedNotificationPermission(userId)) return;
-
-    const run = async () => {
-      try {
-        // Ensure we never prompt again for this user on this device
-        markAskedNotificationPermission(userId);
-        await requestNotificationPermissionFromLogin();
-      } catch {
-        // ignore
-      }
-    };
-
-    // Best effort: if a transient user activation still exists, request immediately.
-    const ua = (navigator as any).userActivation;
-    if (ua?.isActive) {
-      void run();
+    if (!canRequestNotificationsInThisContext()) {
+      console.log('[Auth] Notification request blocked: not top-level context');
       return;
     }
 
-    // Reliable fallback: request on the *first* user interaction after login.
-    const handler = () => {
-      window.removeEventListener('pointerdown', handler, true);
-      window.removeEventListener('keydown', handler, true);
-      void run();
-    };
+    // Only request if browser permission is "default" (never asked)
+    if (typeof Notification === 'undefined' || Notification.permission !== 'default') {
+      console.log('[Auth] Notification permission already:', Notification?.permission);
+      return;
+    }
 
-    window.addEventListener('pointerdown', handler, true);
-    window.addEventListener('keydown', handler, true);
+    // Only once per user/device
+    if (hasAskedNotificationPermission(userId)) {
+      console.log('[Auth] Already asked notification permission for this user');
+      return;
+    }
+
+    try {
+      console.log('[Auth] Requesting notification permission...');
+      // Mark as asked BEFORE requesting to prevent duplicates
+      markAskedNotificationPermission(userId);
+      
+      // Request permission directly - this works because we're still in user gesture context
+      const result = await Notification.requestPermission();
+      console.log('[Auth] Notification permission result:', result);
+      
+      // Store the result in localStorage so NotificationProvider can pick it up
+      if (result === 'granted') {
+        try {
+          localStorage.setItem('gigasos:notif_perm_granted_pending', '1');
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err) {
+      console.error('[Auth] Error requesting notification permission:', err);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -160,7 +167,7 @@ export default function Auth() {
       // Permission request is triggered ONLY after successful login
       // and only when browser permission is still "default".
       if (data.user?.id) {
-        scheduleNotificationPermissionRequest(data.user.id);
+        requestNotificationPermissionAfterAuth(data.user.id);
       }
       
       toast({ title: 'Sucesso', description: 'Login realizado com sucesso!' });
@@ -263,7 +270,7 @@ export default function Auth() {
       // Permission request is triggered ONLY after successful registration
       // and only when browser permission is still "default".
       if (data.user?.id) {
-        scheduleNotificationPermissionRequest(data.user.id);
+        requestNotificationPermissionAfterAuth(data.user.id);
       }
       
       toast({ title: 'Sucesso', description: 'Cadastro realizado com sucesso!' });

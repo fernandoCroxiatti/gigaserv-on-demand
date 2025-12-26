@@ -12,6 +12,7 @@ interface NotificationProviderProps {
  * Notifications runtime:
  * - NEVER requests permission automatically (permission is requested explicitly from the login flow)
  * - When permission is granted, it ensures SW registration + push resubscription
+ * - Detects if Auth.tsx granted permission and picks up push registration
  * - No visual UI (no banner/modal) to keep app UX neutral
  */
 export function NotificationProvider({ children }: NotificationProviderProps) {
@@ -29,6 +30,24 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     if (user?.id !== userIdRef.current) {
       hasResubscribedRef.current = false;
       userIdRef.current = user?.id || null;
+    }
+  }, [user?.id]);
+
+  // Check for pending permission granted flag from Auth.tsx
+  useEffect(() => {
+    if (!user?.id) return;
+
+    try {
+      const pending = localStorage.getItem('gigasos:notif_perm_granted_pending');
+      if (pending === '1') {
+        localStorage.removeItem('gigasos:notif_perm_granted_pending');
+        console.log('[NotificationProvider] Detected pending permission grant, registering push...');
+        
+        // Force registration even if hasResubscribedRef is set
+        hasResubscribedRef.current = false;
+      }
+    } catch {
+      // ignore storage errors
     }
   }, [user?.id]);
 
