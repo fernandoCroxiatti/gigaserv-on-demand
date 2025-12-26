@@ -219,13 +219,22 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  // Check if this is a HIGH PRIORITY chamado notification
-  const isChamadoNotification = 
-    data.priority === 'high' || 
-    data.tag?.includes('chamado') ||
-    data.tag?.includes('new_chamado') ||
-    data.data?.notificationType?.includes('chamado') ||
-    data.data?.notificationType?.includes('new_chamado');
+  // Determine notification type and sound behavior
+  // Provider chamado = continuous loop sound (soundType: 'loop')
+  // Client provider_accepted = single alert sound (soundType: 'single')
+  const soundType = data.soundType || data.data?.soundType || 'single';
+  const isHighPriority = data.priority === 'high' || data.data?.priority === 'high';
+  
+  // Check if this is a provider chamado notification (needs loop sound)
+  const isProviderChamadoNotification = 
+    soundType === 'loop' ||
+    (data.data?.notificationType?.includes('new_chamado') && !data.data?.notificationType?.includes('client_')) ||
+    (data.data?.notificationType?.includes('chamado_received'));
+  
+  // Check if this is a client provider_accepted notification (needs single sound)
+  const isClientProviderAccepted = 
+    data.data?.notificationType?.includes('client_provider_accepted') ||
+    data.data?.notificationType?.includes('provider_accepted');
 
   const options = {
     body: data.body,
@@ -239,9 +248,9 @@ self.addEventListener('push', (event) => {
     silent: false
   };
 
-  // HIGH PRIORITY CHAMADO NOTIFICATIONS - Uber style!
-  if (isChamadoNotification) {
-    console.log('[SW] HIGH PRIORITY CHAMADO - Starting continuous alert!');
+  // HIGH PRIORITY PROVIDER CHAMADO NOTIFICATIONS - Uber style continuous loop!
+  if (isProviderChamadoNotification) {
+    console.log('[SW] PROVIDER CHAMADO - Starting continuous alert loop!');
     
     // Override options for maximum urgency
     options.requireInteraction = true;
@@ -250,14 +259,33 @@ self.addEventListener('push', (event) => {
     options.vibrate = [500, 200, 500, 200, 500, 200, 500]; // Long intense vibration pattern
     options.silent = false;
     
-    // Add action buttons
+    // Add action buttons for provider
     options.actions = [
       { action: 'accept', title: '✓ Aceitar' },
       { action: 'decline', title: '✕ Recusar' }
     ];
     
-    // Start the continuous alert loop
+    // Start the continuous alert loop (provider)
     startAlertLoop();
+  }
+  // CLIENT PROVIDER_ACCEPTED - Single alert sound, no loop
+  else if (isClientProviderAccepted || isHighPriority) {
+    console.log('[SW] CLIENT NOTIFICATION - Single alert sound (no loop)');
+    
+    options.requireInteraction = true;
+    options.tag = 'client-alert-' + Date.now();
+    options.renotify = true;
+    options.vibrate = [300, 100, 300]; // Short alert pattern
+    options.silent = false;
+    
+    // Add view action for client
+    if (isClientProviderAccepted) {
+      options.actions = [{ action: 'view', title: 'Ver' }];
+    }
+    
+    // Play single alert sound via client (NOT loop)
+    notifyClientsToPlaySound('SINGLE_ALERT');
+  }
   }
 
   console.log('[SW] Showing notification:', data.title, options);

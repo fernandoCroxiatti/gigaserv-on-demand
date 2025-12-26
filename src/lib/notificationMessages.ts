@@ -73,27 +73,39 @@ export const PROVIDER_EVENT_MESSAGES = {
 export const CLIENT_STATUS_MESSAGES = {
   chamado_received: {
     title: 'Pedido recebido',
-    body: 'Seu pedido foi recebido com sucesso.'
+    body: 'Seu pedido foi recebido com sucesso.',
+    priority: 'normal',
+    tag: 'chamado-status'
   },
   searching_provider: {
     title: 'Procurando prestador',
-    body: 'Estamos procurando um prestador próximo.'
+    body: 'Estamos procurando um prestador próximo.',
+    priority: 'normal',
+    tag: 'chamado-status'
   },
   provider_accepted: {
-    title: 'Prestador a caminho',
-    body: 'Seu atendimento está a caminho.'
+    title: '🚗 Prestador a caminho!',
+    body: 'Um prestador aceitou seu chamado e está indo até você.',
+    priority: 'high',  // HIGH PRIORITY - alert sound for client
+    tag: 'chamado-provider-accepted'
   },
   provider_arrived: {
     title: 'Prestador chegou',
-    body: 'O prestador chegou ao local.'
+    body: 'O prestador chegou ao local.',
+    priority: 'high',
+    tag: 'chamado-status'
   },
   service_started: {
     title: 'Serviço iniciado',
-    body: 'O serviço está sendo realizado.'
+    body: 'O serviço está sendo realizado.',
+    priority: 'normal',
+    tag: 'chamado-status'
   },
   service_completed: {
     title: 'Serviço concluído',
-    body: 'O serviço foi finalizado. Avalie sua experiência.'
+    body: 'O serviço foi finalizado. Avalie sua experiência.',
+    priority: 'high',
+    tag: 'chamado-status'
   }
 };
 

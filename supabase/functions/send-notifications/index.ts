@@ -628,38 +628,57 @@ async function sendPushToUser(
 
   const deepLinkUrl = getDeepLinkUrl(notificationType, data);
 
-  // Determine if this is a HIGH PRIORITY chamado notification
-  const isChamadoNotification = 
-    notificationType.includes('chamado') || 
+  // Determine notification priority based on type
+  // PROVIDER chamado notifications = continuous loop sound (Uber-style)
+  // CLIENT provider_accepted notifications = single alert sound
+  const isProviderChamadoNotification = 
     notificationType.includes('new_chamado') ||
-    notificationType.includes('chamado_received');
+    notificationType.includes('chamado_received') ||
+    (notificationType.includes('chamado') && !notificationType.includes('client_'));
+  
+  const isClientProviderAccepted = 
+    notificationType.includes('client_provider_accepted') ||
+    notificationType.includes('provider_accepted');
+  
+  // Check if data includes high priority flag
+  const isHighPriorityFromData = data?.priority === 'high';
+  
+  // Determine final priority
+  const isHighPriority = isProviderChamadoNotification || isClientProviderAccepted || isHighPriorityFromData;
 
   const payload = {
     title,
     body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: isChamadoNotification ? `chamado-urgent-${Date.now()}` : notificationType,
-    priority: isChamadoNotification ? 'high' : 'default',
+    tag: isHighPriority ? `${notificationType}-${Date.now()}` : notificationType,
+    priority: isHighPriority ? 'high' : 'default',
+    // Flag to control sound behavior in Service Worker
+    soundType: isProviderChamadoNotification ? 'loop' : 'single',
     data: {
       ...(data || {}),
       url: deepLinkUrl,
       notificationType,
       timestamp: Date.now(),
-      priority: isChamadoNotification ? 'high' : 'default'
+      priority: isHighPriority ? 'high' : 'default',
+      soundType: isProviderChamadoNotification ? 'loop' : 'single'
     },
-    requireInteraction: isChamadoNotification,
-    renotify: isChamadoNotification,
-    vibrate: isChamadoNotification 
-      ? [500, 200, 500, 200, 500, 200, 500] // Long intense pattern for chamados
-      : [200, 100, 200],
-    // Add action buttons for chamado notifications
-    actions: isChamadoNotification 
+    requireInteraction: isHighPriority,
+    renotify: isHighPriority,
+    vibrate: isProviderChamadoNotification 
+      ? [500, 200, 500, 200, 500, 200, 500] // Long intense pattern for provider chamados (loop)
+      : isClientProviderAccepted 
+        ? [300, 100, 300] // Short alert pattern for client (single sound)
+        : [200, 100, 200], // Default
+    // Add action buttons only for provider chamado notifications
+    actions: isProviderChamadoNotification 
       ? [
           { action: 'accept', title: '✓ Aceitar' },
           { action: 'decline', title: '✕ Recusar' }
         ]
-      : [],
+      : isClientProviderAccepted
+        ? [{ action: 'view', title: 'Ver' }]
+        : [],
     silent: false
   };
 
@@ -672,7 +691,8 @@ async function sendPushToUser(
   console.log('[send-notifications] Push sent to user:', userId, { 
     title, 
     anySent, 
-    priority: isChamadoNotification ? 'HIGH' : 'normal' 
+    priority: isHighPriority ? 'HIGH' : 'normal',
+    soundType: isProviderChamadoNotification ? 'loop' : 'single'
   });
   return anySent;
 }
