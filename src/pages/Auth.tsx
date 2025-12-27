@@ -8,8 +8,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
 import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
 import { ForgotPasswordModal } from '@/components/Auth/ForgotPasswordModal';
-import { useNotifications } from '@/hooks/useNotifications';
-import { canRequestNotificationsInThisContext } from '@/lib/notificationPermissionLogin';
+import { requestOneSignalPermission, oneSignalLogin } from '@/lib/oneSignal';
 
 type ProfileType = 'client' | 'provider';
 type AuthStep = 'select' | 'login' | 'register';
@@ -50,8 +49,7 @@ function formatCPF(value: string): string {
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { registerServiceWorker, resubscribeToPush } = useNotifications();
-  const notificationPermissionPromiseRef = useRef<Promise<NotificationPermission> | null>(null);
+  const permissionPromiseRef = useRef<Promise<boolean> | null>(null);
 
   const [step, setStep] = useState<AuthStep>('select');
   const [profileType, setProfileType] = useState<ProfileType>('client');
@@ -99,21 +97,14 @@ export default function Auth() {
   };
 
   /**
-   * TWA/Play Store: o popup de permissão precisa ser chamado IMEDIATAMENTE no gesto do usuário
-   * (antes de qualquer await). Por isso, iniciamos aqui e guardamos a Promise.
+   * Request OneSignal permission - no native browser popup needed for OneSignal
+   * OneSignal handles this internally with proper TWA/PWA support
    */
   const startNotificationPermissionRequest = () => {
-    if (!canRequestNotificationsInThisContext()) return null;
-    if (typeof window === 'undefined' || !('Notification' in window)) return null;
-    if (window.Notification.permission !== 'default') return null;
-
-    try {
-      const p = window.Notification.requestPermission();
-      notificationPermissionPromiseRef.current = p;
-      return p;
-    } catch {
-      return null;
-    }
+    // Start the OneSignal permission request promise
+    const promise = requestOneSignalPermission();
+    permissionPromiseRef.current = promise;
+    return promise;
   };
 
   const handleLoginClick = async () => {
@@ -122,7 +113,7 @@ export default function Auth() {
       return;
     }
 
-    // OBRIGATÓRIO: antes de qualquer await/fetch/login/navegação
+    // Start permission request before any await
     startNotificationPermissionRequest();
 
     setLoading(true);
@@ -139,22 +130,15 @@ export default function Auth() {
         return;
       }
 
-      // Após login: aguardamos a Promise (se existiu) e, se granted, registramos push subscription
-      const permissionResult = notificationPermissionPromiseRef.current
-        ? await notificationPermissionPromiseRef.current
-        : (typeof window !== 'undefined' && 'Notification' in window ? window.Notification.permission : 'default');
-
-      notificationPermissionPromiseRef.current = null;
-
-      if (permissionResult === 'granted') {
-        try {
-          localStorage.setItem('gigasos:notif_perm_granted_pending', '1');
-        } catch {
-          // ignore
-        }
-
-        await registerServiceWorker();
-        await resubscribeToPush();
+      // Wait for permission promise and login to OneSignal with user ID
+      if (data.user) {
+        await oneSignalLogin(data.user.id);
+        
+        // Await permission result (already started above)
+        const granted = await permissionPromiseRef.current;
+        permissionPromiseRef.current = null;
+        
+        console.log('[Auth] OneSignal permission result:', granted);
       }
       
       toast({ title: 'Sucesso', description: 'Login realizado com sucesso!' });
@@ -260,24 +244,15 @@ export default function Auth() {
 
       if (data.user) {
         await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      
-      // Após cadastro: aguardamos a Promise e registramos push se granted
-      const permissionResult = notificationPermissionPromiseRef.current
-        ? await notificationPermissionPromiseRef.current
-        : (typeof window !== 'undefined' && 'Notification' in window ? window.Notification.permission : 'default');
-
-      notificationPermissionPromiseRef.current = null;
-
-      if (permissionResult === 'granted') {
-        try {
-          localStorage.setItem('gigasos:notif_perm_granted_pending', '1');
-        } catch {
-          // ignore
-        }
-
-        await registerServiceWorker();
-        await resubscribeToPush();
+        
+        // Login to OneSignal with user ID
+        await oneSignalLogin(data.user.id);
+        
+        // Await permission result (already started above)
+        const granted = await permissionPromiseRef.current;
+        permissionPromiseRef.current = null;
+        
+        console.log('[Auth] OneSignal permission result after register:', granted);
       }
       
       toast({ title: 'Sucesso', description: 'Cadastro realizado com sucesso!' });

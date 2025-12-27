@@ -16,9 +16,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Database } from '@/integrations/supabase/types';
 import { isChamadoWithinRange } from '@/lib/distance';
-import { startRideAlertLoop, stopRideAlertLoop } from '@/lib/rideAlertSound';
 import { useChamadoQueue } from '@/hooks/useChamadoQueue';
-import { sendChamadoNotification } from '@/lib/notificationService';
+import { sendChamadaNotification, sendClientNotification, cancelChamadaNotification } from '@/lib/oneSignalNotify';
 
 type DbChamado = Database['public']['Tables']['chamados']['Row'];
 type DbProfile = Database['public']['Tables']['profiles']['Row'];
@@ -258,9 +257,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
               // Provider accepted the chamado (status changes to negotiating)
               if (newStatus === 'negotiating' && oldStatus === 'searching') {
                 toast.success('Um prestador aceitou seu chamado!');
-                // Send push notification to client with alert sound
+                // Send push notification to client via OneSignal
                 if (authUser?.id) {
-                  sendChamadoNotification(authUser.id, 'provider_accepted', false, chamado.id);
+                  sendClientNotification(
+                    authUser.id,
+                    'Prestador encontrado!',
+                    'Um prestador aceitou seu chamado.',
+                    { chamadoId: chamado.id, url: `/?chamado=${chamado.id}` }
+                  );
                 }
               } else if (newStatus === 'accepted') {
                 toast.success('Um prestador aceitou seu chamado!');
