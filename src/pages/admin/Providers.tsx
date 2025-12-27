@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,15 +16,22 @@ import {
   Phone,
   Mail,
   User,
-  Truck
+  Truck,
+  Calendar
 } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +42,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { ChevronsUpDown, Check } from 'lucide-react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export default function AdminProviders() {
   const { user } = useAuth();
@@ -42,6 +53,27 @@ export default function AdminProviders() {
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Sort providers alphabetically and filter by search query
+  const sortedAndFilteredProviders = useMemo(() => {
+    const sorted = [...providers].sort((a, b) => {
+      const nameA = (a.profile?.name || '').toLowerCase();
+      const nameB = (b.profile?.name || '').toLowerCase();
+      return nameA.localeCompare(nameB, 'pt-BR');
+    });
+
+    if (!searchQuery.trim()) return sorted;
+
+    const query = searchQuery.toLowerCase().trim();
+    return sorted.filter(provider => {
+      const name = (provider.profile?.name || '').toLowerCase();
+      const phone = (provider.profile?.phone || '').toLowerCase();
+      const email = (provider.profile?.email || '').toLowerCase();
+      return name.includes(query) || phone.includes(query) || email.includes(query);
+    });
+  }, [providers, searchQuery]);
 
   const selectedProvider = providers.find(p => p.user_id === selectedProviderId);
 
@@ -146,34 +178,82 @@ export default function AdminProviders() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Select 
-            value={selectedProviderId || ""} 
-            onValueChange={(value) => setSelectedProviderId(value || null)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione um prestador..." />
-            </SelectTrigger>
-            <SelectContent className="bg-background border border-border z-50">
-              {providers.map((p) => (
-                <SelectItem key={p.user_id} value={p.user_id}>
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className="w-full justify-between"
+              >
+                {selectedProvider ? (
                   <div className="flex items-center gap-2">
                     <Truck className="w-4 h-4" />
-                    <span>{p.profile?.name || 'Sem nome'}</span>
-                    {p.is_online ? (
+                    <span>{selectedProvider.profile?.name || 'Sem nome'}</span>
+                    {selectedProvider.is_online ? (
                       <Badge className="bg-status-finished text-white ml-2 text-xs">Online</Badge>
-                    ) : p.is_blocked ? (
+                    ) : selectedProvider.is_blocked ? (
                       <Badge variant="destructive" className="ml-2 text-xs">Bloqueado</Badge>
                     ) : (
                       <Badge variant="secondary" className="ml-2 text-xs">Offline</Badge>
                     )}
                   </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                ) : (
+                  <span className="text-muted-foreground">Selecione um prestador...</span>
+                )}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0 bg-background border border-border z-50" align="start">
+              <Command shouldFilter={false}>
+                <CommandInput 
+                  placeholder="Buscar por nome, telefone..." 
+                  value={searchQuery}
+                  onValueChange={setSearchQuery}
+                />
+                <CommandList>
+                  <CommandEmpty>Nenhum prestador encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    {sortedAndFilteredProviders.map((provider) => (
+                      <CommandItem
+                        key={provider.user_id}
+                        value={provider.user_id}
+                        onSelect={() => {
+                          setSelectedProviderId(provider.user_id);
+                          setOpen(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedProviderId === provider.user_id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <div className="flex items-center gap-2 flex-1">
+                          <Truck className="w-4 h-4" />
+                          <span>{provider.profile?.name || 'Sem nome'}</span>
+                          {provider.profile?.phone && (
+                            <span className="text-muted-foreground text-xs">({provider.profile.phone})</span>
+                          )}
+                          {provider.is_online ? (
+                            <Badge className="bg-status-finished text-white ml-auto text-xs">Online</Badge>
+                          ) : provider.is_blocked ? (
+                            <Badge variant="destructive" className="ml-auto text-xs">Bloqueado</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="ml-auto text-xs">Offline</Badge>
+                          )}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
           {/* Selected Provider Details */}
-          {selectedProvider && (
+          {selectedProvider ? (
             <div className="border border-border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">{selectedProvider.profile?.name || 'Sem nome'}</h3>
@@ -197,6 +277,10 @@ export default function AdminProviders() {
                   <div className="flex items-center gap-2 text-sm">
                     <Phone className="w-4 h-4 text-muted-foreground" />
                     <span>{selectedProvider.profile?.phone || 'Não informado'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <span>Cadastro: {selectedProvider.created_at ? format(new Date(selectedProvider.created_at), "dd/MM/yyyy", { locale: ptBR }) : 'Não informado'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Star className="w-4 h-4 text-status-searching fill-status-searching" />
@@ -263,9 +347,7 @@ export default function AdminProviders() {
                 </Button>
               </div>
             </div>
-          )}
-
-          {!selectedProvider && (
+          ) : (
             <div className="text-center text-muted-foreground py-8">
               Selecione um prestador para ver os detalhes
             </div>

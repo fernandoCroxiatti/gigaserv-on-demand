@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,15 +14,23 @@ import {
   Mail,
   DollarSign,
   Car,
-  User
+  User,
+  Search,
+  Calendar
 } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +41,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { ChevronsUpDown, Check } from 'lucide-react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -44,6 +56,27 @@ export default function AdminClients() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; client?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Sort clients alphabetically and filter by search query
+  const sortedAndFilteredClients = useMemo(() => {
+    const sorted = [...clients].sort((a, b) => {
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB, 'pt-BR');
+    });
+
+    if (!searchQuery.trim()) return sorted;
+
+    const query = searchQuery.toLowerCase().trim();
+    return sorted.filter(client => {
+      const name = (client.name || '').toLowerCase();
+      const phone = (client.phone || '').toLowerCase();
+      const email = (client.email || '').toLowerCase();
+      return name.includes(query) || phone.includes(query) || email.includes(query);
+    });
+  }, [clients, searchQuery]);
 
   const selectedClient = clients.find(c => c.user_id === selectedClientId);
 
@@ -127,30 +160,74 @@ export default function AdminClients() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Select 
-            value={selectedClientId || ""} 
-            onValueChange={(value) => setSelectedClientId(value || null)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione um cliente..." />
-            </SelectTrigger>
-            <SelectContent className="bg-background border border-border z-50">
-              {clients.map((c) => (
-                <SelectItem key={c.user_id} value={c.user_id}>
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className="w-full justify-between"
+              >
+                {selectedClient ? (
                   <div className="flex items-center gap-2">
                     <User className="w-4 h-4" />
-                    <span>{c.name || 'Sem nome'}</span>
-                    {c.is_blocked && (
+                    <span>{selectedClient.name || 'Sem nome'}</span>
+                    {selectedClient.is_blocked && (
                       <Badge variant="destructive" className="ml-2 text-xs">Bloqueado</Badge>
                     )}
                   </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                ) : (
+                  <span className="text-muted-foreground">Selecione um cliente...</span>
+                )}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0 bg-background border border-border z-50" align="start">
+              <Command shouldFilter={false}>
+                <CommandInput 
+                  placeholder="Buscar por nome, telefone..." 
+                  value={searchQuery}
+                  onValueChange={setSearchQuery}
+                />
+                <CommandList>
+                  <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    {sortedAndFilteredClients.map((client) => (
+                      <CommandItem
+                        key={client.user_id}
+                        value={client.user_id}
+                        onSelect={() => {
+                          setSelectedClientId(client.user_id);
+                          setOpen(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedClientId === client.user_id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <div className="flex items-center gap-2 flex-1">
+                          <User className="w-4 h-4" />
+                          <span>{client.name || 'Sem nome'}</span>
+                          {client.phone && (
+                            <span className="text-muted-foreground text-xs">({client.phone})</span>
+                          )}
+                          {client.is_blocked && (
+                            <Badge variant="destructive" className="ml-auto text-xs">Bloqueado</Badge>
+                          )}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
           {/* Selected Client Details */}
-          {selectedClient && (
+          {selectedClient ? (
             <div className="border border-border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">{selectedClient.name || 'Sem nome'}</h3>
@@ -170,6 +247,10 @@ export default function AdminClients() {
                   <div className="flex items-center gap-2 text-sm">
                     <Phone className="w-4 h-4 text-muted-foreground" />
                     <span>{selectedClient.phone || 'Não informado'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <span>Cadastro: {selectedClient.created_at ? format(new Date(selectedClient.created_at), "dd/MM/yyyy", { locale: ptBR }) : 'Não informado'}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -213,9 +294,7 @@ export default function AdminClients() {
                 )}
               </div>
             </div>
-          )}
-
-          {!selectedClient && (
+          ) : (
             <div className="text-center text-muted-foreground py-8">
               Selecione um cliente para ver os detalhes
             </div>
