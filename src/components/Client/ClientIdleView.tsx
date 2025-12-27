@@ -4,7 +4,7 @@ import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyProviders } from '@/hooks/useNearbyProviders';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { Button } from '../ui/button';
 import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
@@ -12,7 +12,7 @@ import { VehicleType } from '@/types/vehicleTypes';
 import { VehicleTypeSelector } from './VehicleTypeSelector';
 import { LocationPermissionModal } from '../Permissions/LocationPermissionModal';
 import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
-import { NotificationPermissionModal } from '../Notifications/NotificationPermissionModal';
+import { NotificationCTA } from '../Notifications/NotificationCTA';
 
 const NEARBY_RADIUS_KM = 15;
 
@@ -30,13 +30,13 @@ export function ClientIdleView() {
     needsPermission: locationNeedsPermission
   } = useGeolocation({ watch: false, autoRequest: false });
   
+  // Notificações - usando novo hook com fluxo correto
   const {
-    shouldAskPermission: shouldAskNotifPermission,
+    permission: notifPermission,
+    shouldShowCTA: shouldShowNotifCTA,
     requestPermission: requestNotifPermission,
-    showPermissionModal: showNotifModal,
-    handlePermissionConfirm: handleNotifConfirm,
-    handlePermissionDecline: handleNotifDecline,
-  } = useNotifications();
+    dismissCTA: dismissNotifCTA,
+  } = useNotificationPermission('client');
   
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
   const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType>('carro_passeio');
@@ -48,13 +48,11 @@ export function ClientIdleView() {
   
   // Permission modals
   const [showLocationModal, setShowLocationModal] = useState(false);
-  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [locationPermissionLoading, setLocationPermissionLoading] = useState(false);
   const [dismissedLocationBanner, setDismissedLocationBanner] = useState(false);
   
   // Pending action after permission
   const pendingActionRef = useRef<'gps' | 'submit' | null>(null);
-  const hasAskedNotifRef = useRef(false);
 
   const serviceConfig = SERVICE_CONFIG[selectedService];
   const needsDestination = serviceRequiresDestination(selectedService);
@@ -168,22 +166,7 @@ export function ClientIdleView() {
     if (!origem) return;
     if (needsDestination && !destino) return;
     
-    // Ask for notification permission after first submit
-    if (shouldAskNotifPermission && !hasAskedNotifRef.current) {
-      hasAskedNotifRef.current = true;
-      setShowNotificationModal(true);
-    }
-    
     createChamado(selectedService, origem, needsDestination ? destino : null, selectedVehicleType);
-  };
-
-  const handleNotifModalConfirm = async () => {
-    setShowNotificationModal(false);
-    await requestNotifPermission();
-  };
-
-  const handleNotifModalDecline = () => {
-    setShowNotificationModal(false);
   };
 
   const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType;
@@ -205,6 +188,16 @@ export function ClientIdleView() {
       
       {/* Provider status - Compact floating card */}
       <div className="absolute top-20 left-3 right-3 z-10 space-y-2">
+        {/* Notification CTA - Solicita permissão em gesto explícito */}
+        {shouldShowNotifCTA && (
+          <NotificationCTA
+            userType="client"
+            permission={notifPermission}
+            onRequestPermission={requestNotifPermission}
+            onDismiss={dismissNotifCTA}
+          />
+        )}
+        
         {/* Location denied banner */}
         {locationDenied && !dismissedLocationBanner && (
           <PermissionDeniedBanner 
@@ -428,13 +421,6 @@ export function ClientIdleView() {
         loading={locationPermissionLoading}
       />
 
-      {/* Notification Permission Modal */}
-      <NotificationPermissionModal 
-        open={showNotificationModal}
-        onConfirm={handleNotifModalConfirm}
-        onDecline={handleNotifModalDecline}
-        userType="client"
-      />
     </div>
   );
 }
