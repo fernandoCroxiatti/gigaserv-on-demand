@@ -215,6 +215,9 @@ export default function Auth() {
       }
     }
 
+    // OBRIGATÓRIO TWA: antes de qualquer await/fetch/navegação
+    startNotificationPermissionRequest();
+
     setLoading(true);
     try {
       // Check for duplicate CPF for providers
@@ -259,7 +262,23 @@ export default function Auth() {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      // Notification permission is handled only in the login flow (TWA pattern)
+      // Após cadastro: aguardamos a Promise e registramos push se granted
+      const permissionResult = notificationPermissionPromiseRef.current
+        ? await notificationPermissionPromiseRef.current
+        : (typeof window !== 'undefined' && 'Notification' in window ? window.Notification.permission : 'default');
+
+      notificationPermissionPromiseRef.current = null;
+
+      if (permissionResult === 'granted') {
+        try {
+          localStorage.setItem('gigasos:notif_perm_granted_pending', '1');
+        } catch {
+          // ignore
+        }
+
+        await registerServiceWorker();
+        await resubscribeToPush();
+      }
       
       toast({ title: 'Sucesso', description: 'Cadastro realizado com sucesso!' });
       navigate('/');
