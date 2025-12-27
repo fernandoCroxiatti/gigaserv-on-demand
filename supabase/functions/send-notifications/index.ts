@@ -327,8 +327,33 @@ async function sendScheduledNotifications(supabase: any) {
 }
 
 // deno-lint-ignore no-explicit-any
-async function sendManualNotifications(supabase: any, targetType: string, message: { title: string; body: string }, scheduledAt?: Date) {
+async function sendManualNotifications(supabase: any, targetType: string, message: { title: string; body: string }, scheduledAt?: Date, adminId?: string) {
   console.log('[send-notifications] Sending manual notifications to:', targetType, scheduledAt ? `scheduled for ${scheduledAt.toISOString()}` : 'immediate');
+  
+  // If scheduled, save to scheduled_notifications table
+  if (scheduledAt && scheduledAt > new Date()) {
+    const { data: scheduled, error: scheduleError } = await supabase
+      .from('scheduled_notifications')
+      .insert({
+        title: message.title,
+        body: message.body,
+        target_type: targetType,
+        scheduled_at: scheduledAt.toISOString(),
+        status: 'pending',
+        created_by: adminId,
+        data: { targetType },
+      })
+      .select()
+      .single();
+
+    if (scheduleError) {
+      console.error('[send-notifications] Error scheduling notification:', scheduleError);
+      throw scheduleError;
+    }
+
+    console.log('[send-notifications] Notification scheduled with ID:', scheduled.id);
+    return;
+  }
   
   // deno-lint-ignore no-explicit-any
   let users: any[] = [];
@@ -370,8 +395,7 @@ async function sendManualNotifications(supabase: any, targetType: string, messag
         message.title,
         message.body,
         'manual_broadcast',
-        { targetType },
-        scheduledAt
+        { targetType }
       );
       
       if (success) {
@@ -384,7 +408,7 @@ async function sendManualNotifications(supabase: any, targetType: string, messag
             notification_type: 'manual_broadcast',
             title: message.title,
             body: message.body,
-            data: { targetType, scheduledAt: scheduledAt?.toISOString() },
+            data: { targetType },
           });
       }
     }

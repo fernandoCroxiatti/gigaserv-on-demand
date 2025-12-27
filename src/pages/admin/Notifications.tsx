@@ -106,6 +106,18 @@ export default function AdminNotifications() {
     }
   });
 
+  // Fetch scheduled notifications
+  const { data: scheduledNotifications, isLoading: scheduledLoading, refetch: refetchScheduled } = useQuery({
+    queryKey: ['scheduled-notifications'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('scheduled_notifications')
+        .select('*')
+        .order('scheduled_at', { ascending: true });
+      return data || [];
+    }
+  });
+
   const handleSendNotification = async () => {
     if (!title.trim() || !body.trim()) {
       toast.error('Preencha o título e a mensagem');
@@ -148,6 +160,7 @@ export default function AdminNotifications() {
       setScheduledDate('');
       setScheduledTime('');
       refetch();
+      refetchScheduled();
     } catch (error) {
       console.error('Error sending notifications:', error);
       toast.error('Erro ao enviar notificações');
@@ -525,6 +538,78 @@ export default function AdminNotifications() {
                         {notif.notification_type}
                       </span>
                     </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Scheduled Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5" />
+            Notificações Agendadas
+          </CardTitle>
+          <CardDescription>
+            Notificações programadas para envio futuro
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {scheduledLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : scheduledNotifications?.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              Nenhuma notificação agendada
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {scheduledNotifications?.map((notif) => (
+                <div 
+                  key={notif.id} 
+                  className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg"
+                >
+                  <div className={`p-2 rounded-full ${
+                    notif.status === 'sent' ? 'bg-green-500/10' : 
+                    notif.status === 'failed' ? 'bg-destructive/10' : 
+                    notif.status === 'cancelled' ? 'bg-muted' : 'bg-amber-500/10'
+                  }`}>
+                    {notif.status === 'sent' ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    ) : notif.status === 'failed' ? (
+                      <AlertCircle className="w-4 h-4 text-destructive" />
+                    ) : (
+                      <Clock className="w-4 h-4 text-amber-500" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{notif.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{notif.body}</p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-xs text-muted-foreground">
+                        Agendado: {format(new Date(notif.scheduled_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                      </span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        notif.status === 'sent' ? 'bg-green-500/10 text-green-600' : 
+                        notif.status === 'failed' ? 'bg-destructive/10 text-destructive' : 
+                        notif.status === 'cancelled' ? 'bg-muted text-muted-foreground' : 
+                        'bg-amber-500/10 text-amber-600'
+                      }`}>
+                        {notif.status === 'sent' ? `Enviado (${notif.sent_count}/${notif.recipients_count})` : 
+                         notif.status === 'failed' ? 'Falhou' : 
+                         notif.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                      </span>
+                      <span className="text-xs px-1.5 py-0.5 bg-secondary rounded">
+                        {getTargetLabel(notif.target_type)}
+                      </span>
+                    </div>
+                    {notif.status === 'failed' && notif.failure_reason && (
+                      <p className="text-xs text-destructive mt-1">{notif.failure_reason}</p>
+                    )}
                   </div>
                 </div>
               ))}
