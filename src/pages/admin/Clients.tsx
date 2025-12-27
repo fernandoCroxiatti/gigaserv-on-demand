@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,8 +15,8 @@ import {
   DollarSign,
   Car,
   User,
-  Search,
-  Calendar
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 import {
   Command,
@@ -46,6 +46,8 @@ import { ChevronsUpDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+const PAGE_SIZE = 20;
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
@@ -58,6 +60,13 @@ export default function AdminClients() {
   const [blockReason, setBlockReason] = useState('');
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Reset visible count when search changes
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    setVisibleCount(PAGE_SIZE);
+  }, []);
 
   // Sort clients alphabetically and filter by search query
   const sortedAndFilteredClients = useMemo(() => {
@@ -77,6 +86,14 @@ export default function AdminClients() {
       return name.includes(query) || phone.includes(query) || email.includes(query);
     });
   }, [clients, searchQuery]);
+
+  // Paginated results
+  const paginatedClients = useMemo(() => {
+    return sortedAndFilteredClients.slice(0, visibleCount);
+  }, [sortedAndFilteredClients, visibleCount]);
+
+  const hasMore = visibleCount < sortedAndFilteredClients.length;
+  const remainingCount = sortedAndFilteredClients.length - visibleCount;
 
   const selectedClient = clients.find(c => c.user_id === selectedClientId);
 
@@ -103,6 +120,10 @@ export default function AdminClients() {
       toast.error('Erro ao desbloquear cliente');
     }
   };
+
+  const loadMore = useCallback(() => {
+    setVisibleCount(prev => prev + PAGE_SIZE);
+  }, []);
 
   if (loading) {
     return (
@@ -160,7 +181,13 @@ export default function AdminClients() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Popover open={open} onOpenChange={setOpen}>
+          <Popover open={open} onOpenChange={(isOpen) => {
+            setOpen(isOpen);
+            if (!isOpen) {
+              setSearchQuery('');
+              setVisibleCount(PAGE_SIZE);
+            }
+          }}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
@@ -187,12 +214,12 @@ export default function AdminClients() {
                 <CommandInput 
                   placeholder="Buscar por nome, telefone..." 
                   value={searchQuery}
-                  onValueChange={setSearchQuery}
+                  onValueChange={handleSearchChange}
                 />
-                <CommandList>
+                <CommandList className="max-h-[300px]">
                   <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                   <CommandGroup>
-                    {sortedAndFilteredClients.map((client) => (
+                    {paginatedClients.map((client) => (
                       <CommandItem
                         key={client.user_id}
                         value={client.user_id}
@@ -200,6 +227,7 @@ export default function AdminClients() {
                           setSelectedClientId(client.user_id);
                           setOpen(false);
                           setSearchQuery('');
+                          setVisibleCount(PAGE_SIZE);
                         }}
                       >
                         <Check
@@ -220,6 +248,15 @@ export default function AdminClients() {
                         </div>
                       </CommandItem>
                     ))}
+                    {hasMore && (
+                      <CommandItem
+                        onSelect={loadMore}
+                        className="justify-center text-primary cursor-pointer"
+                      >
+                        <ChevronDown className="w-4 h-4 mr-2" />
+                        Carregar mais ({remainingCount} restantes)
+                      </CommandItem>
+                    )}
                   </CommandGroup>
                 </CommandList>
               </Command>

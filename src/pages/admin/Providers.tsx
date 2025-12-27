@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,9 +15,9 @@ import {
   Star,
   Phone,
   Mail,
-  User,
   Truck,
-  Calendar
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 import {
   Command,
@@ -47,6 +47,8 @@ import { ChevronsUpDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+const PAGE_SIZE = 20;
+
 export default function AdminProviders() {
   const { user } = useAuth();
   const { providers, loading, blockProvider, unblockProvider, togglePayout } = useAdminProviders();
@@ -55,6 +57,13 @@ export default function AdminProviders() {
   const [blockReason, setBlockReason] = useState('');
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Reset visible count when search changes
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    setVisibleCount(PAGE_SIZE);
+  }, []);
 
   // Sort providers alphabetically and filter by search query
   const sortedAndFilteredProviders = useMemo(() => {
@@ -74,6 +83,14 @@ export default function AdminProviders() {
       return name.includes(query) || phone.includes(query) || email.includes(query);
     });
   }, [providers, searchQuery]);
+
+  // Paginated results
+  const paginatedProviders = useMemo(() => {
+    return sortedAndFilteredProviders.slice(0, visibleCount);
+  }, [sortedAndFilteredProviders, visibleCount]);
+
+  const hasMore = visibleCount < sortedAndFilteredProviders.length;
+  const remainingCount = sortedAndFilteredProviders.length - visibleCount;
 
   const selectedProvider = providers.find(p => p.user_id === selectedProviderId);
 
@@ -111,6 +128,10 @@ export default function AdminProviders() {
       toast.error('Erro ao alterar status de repasse');
     }
   };
+
+  const loadMore = useCallback(() => {
+    setVisibleCount(prev => prev + PAGE_SIZE);
+  }, []);
 
   if (loading) {
     return (
@@ -178,7 +199,13 @@ export default function AdminProviders() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Popover open={open} onOpenChange={setOpen}>
+          <Popover open={open} onOpenChange={(isOpen) => {
+            setOpen(isOpen);
+            if (!isOpen) {
+              setSearchQuery('');
+              setVisibleCount(PAGE_SIZE);
+            }
+          }}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
@@ -209,12 +236,12 @@ export default function AdminProviders() {
                 <CommandInput 
                   placeholder="Buscar por nome, telefone..." 
                   value={searchQuery}
-                  onValueChange={setSearchQuery}
+                  onValueChange={handleSearchChange}
                 />
-                <CommandList>
+                <CommandList className="max-h-[300px]">
                   <CommandEmpty>Nenhum prestador encontrado.</CommandEmpty>
                   <CommandGroup>
-                    {sortedAndFilteredProviders.map((provider) => (
+                    {paginatedProviders.map((provider) => (
                       <CommandItem
                         key={provider.user_id}
                         value={provider.user_id}
@@ -222,6 +249,7 @@ export default function AdminProviders() {
                           setSelectedProviderId(provider.user_id);
                           setOpen(false);
                           setSearchQuery('');
+                          setVisibleCount(PAGE_SIZE);
                         }}
                       >
                         <Check
@@ -246,6 +274,15 @@ export default function AdminProviders() {
                         </div>
                       </CommandItem>
                     ))}
+                    {hasMore && (
+                      <CommandItem
+                        onSelect={loadMore}
+                        className="justify-center text-primary cursor-pointer"
+                      >
+                        <ChevronDown className="w-4 h-4 mr-2" />
+                        Carregar mais ({remainingCount} restantes)
+                      </CommandItem>
+                    )}
                   </CommandGroup>
                 </CommandList>
               </Command>
