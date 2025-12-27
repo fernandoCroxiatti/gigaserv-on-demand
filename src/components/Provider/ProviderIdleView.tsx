@@ -9,8 +9,8 @@ import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { useNotifications } from '@/hooks/useNotifications';
-import { NotificationPermissionModal } from '../Notifications/NotificationPermissionModal';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
+import { NotificationCTA } from '../Notifications/NotificationCTA';
 import { LocationPermissionModal } from '../Permissions/LocationPermissionModal';
 import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
 import { useAntiFraud } from '@/hooks/useAntiFraud';
@@ -56,18 +56,19 @@ export function ProviderIdleView() {
     maxLimit: number;
   } | null>(null);
   
-  const { 
-    shouldAskPermission,
-    requestPermission
-  } = useNotifications();
+  // Notificações - usando novo hook com fluxo correto
+  const {
+    permission: notifPermission,
+    shouldShowCTA: shouldShowNotifCTA,
+    requestPermission: requestNotifPermission,
+    dismissCTA: dismissNotifCTA,
+  } = useNotificationPermission('provider');
   
   // Permission modals
-  const [showNotifModal, setShowNotifModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [locationPermissionLoading, setLocationPermissionLoading] = useState(false);
   const [dismissedLocationBanner, setDismissedLocationBanner] = useState(false);
   
-  const hasAskedNotifRef = useRef(false);
   const pendingToggleOnlineRef = useRef(false);
   
   const isOnline = user?.providerData?.online || false;
@@ -171,12 +172,6 @@ export function ProviderIdleView() {
       });
     }
     
-    // Ask for notification permission when going online
-    if (shouldAskPermission && !hasAskedNotifRef.current) {
-      hasAskedNotifRef.current = true;
-      setShowNotifModal(true);
-    }
-    
     await toggleProviderOnline();
     
     console.log('[ProviderIdle] Toggle online complete');
@@ -259,9 +254,21 @@ export function ProviderIdleView() {
     <div className="relative h-full provider-theme">
       <RealMapView className="absolute inset-0" center={location || undefined} showSearchRadius={isOnline} searchRadius={radarRange} />
 
+      {/* Notification CTA - Solicita permissão em gesto explícito */}
+      {shouldShowNotifCTA && (
+        <div className="absolute top-20 left-3 right-3 z-20">
+          <NotificationCTA
+            userType="provider"
+            permission={notifPermission}
+            onRequestPermission={requestNotifPermission}
+            onDismiss={dismissNotifCTA}
+          />
+        </div>
+      )}
+
       {/* Location error/denied banner */}
       {(geoError || locationDenied) && !dismissedLocationBanner && (
-        <div className="absolute top-20 left-3 right-3 z-10">
+        <div className={`absolute ${shouldShowNotifCTA ? 'top-36' : 'top-20'} left-3 right-3 z-10`}>
           {locationDenied ? (
             <PermissionDeniedBanner 
               type="location"
@@ -276,7 +283,7 @@ export function ProviderIdleView() {
         </div>
       )}
 
-      <div className={`absolute ${(geoError || locationDenied) && !dismissedLocationBanner ? 'top-36' : 'top-20'} left-3 right-3 z-10 animate-slide-down`}>
+      <div className={`absolute ${shouldShowNotifCTA ? (((geoError || locationDenied) && !dismissedLocationBanner) ? 'top-52' : 'top-36') : ((geoError || locationDenied) && !dismissedLocationBanner ? 'top-36' : 'top-20')} left-3 right-3 z-10 animate-slide-down`}>
         <div className={`bg-card rounded-xl px-4 py-3 shadow-sm ${isOnline ? 'ring-1 ring-provider-primary/20' : ''}`}>
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">
@@ -408,17 +415,6 @@ export function ProviderIdleView() {
         onDecline={handleLocationPermissionDecline}
         userType="provider"
         loading={locationPermissionLoading}
-      />
-
-      {/* Notification Permission Modal */}
-      <NotificationPermissionModal 
-        open={showNotifModal} 
-        onConfirm={async () => { 
-          setShowNotifModal(false); 
-          await requestPermission(); 
-        }} 
-        onDecline={() => setShowNotifModal(false)} 
-        userType="provider" 
       />
     </div>
   );
