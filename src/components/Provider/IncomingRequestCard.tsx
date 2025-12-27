@@ -4,13 +4,12 @@ import { Button } from '../ui/button';
 import { Navigation, Clock, DollarSign, X, Check, Route, Ban } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
-import { startRideAlertLoop, stopRideAlertLoop, cleanupRideAlert } from '@/lib/rideAlertSound';
 import { VEHICLE_TYPES, VehicleType } from '@/types/vehicleTypes';
 import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useServiceWorkerAlertSync } from '@/hooks/useServiceWorkerAlertSync';
+import { cancelChamadaNotification } from '@/lib/oneSignalNotify';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
@@ -19,7 +18,6 @@ export function IncomingRequestCard() {
   const [isAccepting, setIsAccepting] = useState(false);
   const { checkProviderCanAccept } = useAntiFraud();
   const navigate = useNavigate();
-  const { notifyServiceWorkerChamadoHandled } = useServiceWorkerAlertSync();
 
   // Calculate distance from provider to client
   const distanceToClient = useMemo(() => {
@@ -65,23 +63,20 @@ export function IncomingRequestCard() {
       : `${distanceToDestination.toFixed(1)} km`
     : '--';
 
-  // Start alert sound when request comes in, stop on accept/decline/expire
+  // Timer for request expiration - NO internal audio (sound comes from OneSignal notification)
   useEffect(() => {
     if (!incomingRequest) {
-      stopRideAlertLoop();
-      notifyServiceWorkerChamadoHandled('expired');
       return;
     }
-    
-    // Start the urgent alert loop
-    startRideAlertLoop();
     
     setTimeLeft(30);
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          stopRideAlertLoop();
-          notifyServiceWorkerChamadoHandled('expired');
+          // Cancel notification when expired
+          if (user?.id) {
+            cancelChamadaNotification([user.id], incomingRequest.id);
+          }
           declineIncomingRequest();
           return 0;
         }
@@ -91,20 +86,12 @@ export function IncomingRequestCard() {
 
     return () => {
       clearInterval(interval);
-      stopRideAlertLoop();
     };
-  }, [incomingRequest, declineIncomingRequest, notifyServiceWorkerChamadoHandled]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      cleanupRideAlert();
-    };
-  }, []);
+  }, [incomingRequest, declineIncomingRequest, user?.id]);
 
   // Handle accept with anti-fraud check
   const handleAccept = async () => {
-    if (isAccepting || !user?.id) return;
+    if (isAccepting || !user?.id || !incomingRequest) return;
     setIsAccepting(true);
     
     try {
@@ -112,8 +99,8 @@ export function IncomingRequestCard() {
       const { canAccept, blockReason } = await checkProviderCanAccept(user.id);
       
       if (!canAccept) {
-        stopRideAlertLoop();
-        notifyServiceWorkerChamadoHandled('declined');
+        // Cancel OneSignal notification
+        cancelChamadaNotification([user.id], incomingRequest.id);
         
         // Determine appropriate message based on block reason
         let message = 'Você não pode aceitar chamados no momento.';
@@ -149,9 +136,8 @@ export function IncomingRequestCard() {
         return;
       }
       
-      // Stop alert and notify SW before accepting
-      stopRideAlertLoop();
-      notifyServiceWorkerChamadoHandled('accepted');
+      // Cancel OneSignal notification before accepting
+      cancelChamadaNotification([user.id], incomingRequest.id);
       await acceptIncomingRequest();
     } finally {
       setIsAccepting(false);
@@ -160,8 +146,9 @@ export function IncomingRequestCard() {
   
   // Handle decline
   const handleDecline = () => {
-    stopRideAlertLoop();
-    notifyServiceWorkerChamadoHandled('declined');
+    if (user?.id && incomingRequest) {
+      cancelChamadaNotification([user.id], incomingRequest.id);
+    }
     declineIncomingRequest();
   };
 
