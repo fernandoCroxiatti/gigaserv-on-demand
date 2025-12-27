@@ -627,8 +627,8 @@ export function useAdminChamados(filters?: {
       let query = supabase.from('chamados').select('*').order('created_at', { ascending: false });
 
       if (filters?.status) query = query.eq('status', filters.status);
-      if (filters?.startDate) query = query.gte('created_at', filters.startDate);
-      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
+      if (filters?.startDate) query = query.gte('created_at', `${filters.startDate}T00:00:00`);
+      if (filters?.endDate) query = query.lte('created_at', `${filters.endDate}T23:59:59`);
       if (filters?.providerId) query = query.eq('prestador_id', filters.providerId);
       if (filters?.serviceType) query = query.eq('tipo_servico', filters.serviceType);
 

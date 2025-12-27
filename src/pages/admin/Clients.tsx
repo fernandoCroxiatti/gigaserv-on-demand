@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAdminClients } from '@/hooks/useAdminData';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,22 +8,21 @@ import { toast } from 'sonner';
 import { 
   Loader2, 
   Users,
-  Search,
   Ban,
   CheckCircle,
   Phone,
   Mail,
   DollarSign,
-  Car
+  Car,
+  User
 } from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -43,15 +41,11 @@ function formatCurrency(value: number) {
 export default function AdminClients() {
   const { user } = useAuth();
   const { clients, loading, blockClient, unblockClient } = useAdminClients();
-  const [search, setSearch] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; client?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
 
-  const filteredClients = clients.filter(c => 
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone?.includes(search)
-  );
+  const selectedClient = clients.find(c => c.user_id === selectedClientId);
 
   const handleBlock = async () => {
     if (!blockDialog.client || !user) return;
@@ -124,107 +118,106 @@ export default function AdminClients() {
         </Card>
       </div>
 
-      {/* Search & Table */}
+      {/* Client Selection */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            Clientes
+            Selecionar Cliente
           </CardTitle>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, email ou telefone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
         </CardHeader>
-        <CardContent>
-          {filteredClients.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              Nenhum cliente encontrado
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Total Gasto</TableHead>
-                    <TableHead>Corridas</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClients.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{c.name || 'Sem nome'}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {c.email && (
-                              <span className="flex items-center gap-1">
-                                <Mail className="w-3 h-3" />
-                                {c.email}
-                              </span>
-                            )}
-                            {c.phone && (
-                              <span className="flex items-center gap-1">
-                                <Phone className="w-3 h-3" />
-                                {c.phone}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {c.is_blocked ? (
-                          <Badge variant="destructive">Bloqueado</Badge>
-                        ) : (
-                          <Badge className="bg-status-finished text-white">Ativo</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <DollarSign className="w-4 h-4 text-muted-foreground" />
-                          {formatCurrency(c.totalSpent || 0)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Car className="w-4 h-4 text-muted-foreground" />
-                          {c.totalRides || 0}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {c.is_blocked ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleUnblock(c.user_id)}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Desbloquear
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setBlockDialog({ open: true, client: c })}
-                          >
-                            <Ban className="w-4 h-4 mr-1" />
-                            Bloquear
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        <CardContent className="space-y-6">
+          <Select 
+            value={selectedClientId || ""} 
+            onValueChange={(value) => setSelectedClientId(value || null)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Selecione um cliente..." />
+            </SelectTrigger>
+            <SelectContent className="bg-background border border-border z-50">
+              {clients.map((c) => (
+                <SelectItem key={c.user_id} value={c.user_id}>
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    <span>{c.name || 'Sem nome'}</span>
+                    {c.is_blocked && (
+                      <Badge variant="destructive" className="ml-2 text-xs">Bloqueado</Badge>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Selected Client Details */}
+          {selectedClient && (
+            <div className="border border-border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">{selectedClient.name || 'Sem nome'}</h3>
+                {selectedClient.is_blocked ? (
+                  <Badge variant="destructive">Bloqueado</Badge>
+                ) : (
+                  <Badge className="bg-status-finished text-white">Ativo</Badge>
+                )}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="w-4 h-4 text-muted-foreground" />
+                    <span>{selectedClient.email || 'Não informado'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    <span>{selectedClient.phone || 'Não informado'}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <DollarSign className="w-4 h-4 text-muted-foreground" />
+                    <span>Total gasto: {formatCurrency(selectedClient.totalSpent || 0)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Car className="w-4 h-4 text-muted-foreground" />
+                    <span>Corridas: {selectedClient.totalRides || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedClient.is_blocked && selectedClient.block_reason && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-sm text-destructive">
+                    <strong>Motivo do bloqueio:</strong> {selectedClient.block_reason}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                {selectedClient.is_blocked ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => handleUnblock(selectedClient.user_id)}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Desbloquear
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setBlockDialog({ open: true, client: selectedClient })}
+                  >
+                    <Ban className="w-4 h-4 mr-1" />
+                    Bloquear
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!selectedClient && (
+            <div className="text-center text-muted-foreground py-8">
+              Selecione um cliente para ver os detalhes
             </div>
           )}
         </CardContent>
