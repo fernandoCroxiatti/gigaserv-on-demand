@@ -259,11 +259,7 @@ export default function Auth() {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      // Permission prompt is armed ONLY after successful registration
-      // and only when browser permission is still "default".
-      if (data.user?.id) {
-        armNotificationPermissionPrompt(data.user.id);
-      }
+      // Notification permission is handled only in the login flow (TWA pattern)
       
       toast({ title: 'Sucesso', description: 'Cadastro realizado com sucesso!' });
       navigate('/');
