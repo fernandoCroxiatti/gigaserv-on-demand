@@ -232,6 +232,14 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     isProvider: mode === 'provider',
   });
 
+  // Track last phase to detect changes (avoid stale closure issues)
+  const lastReceivedPhaseRef = useRef<string>(navigationPhase);
+  
+  // Sync ref when local phase changes
+  useEffect(() => {
+    lastReceivedPhaseRef.current = navigationPhase;
+  }, [navigationPhase]);
+
   // Load navigation state from database on mount (ONCE)
   useEffect(() => {
     const loadNavigationState = async () => {
@@ -249,7 +257,9 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       if (data) {
         if (data.navigation_phase) {
           // Normalize old phase names to new
-          setNavigationPhase(normalizePhase(data.navigation_phase));
+          const normalizedPhase = normalizePhase(data.navigation_phase);
+          setNavigationPhase(normalizedPhase);
+          lastReceivedPhaseRef.current = normalizedPhase;
         }
         if (data.route_polyline) {
           setRoutePolyline(data.route_polyline);
@@ -266,7 +276,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
     loadNavigationState();
   }, [chamado.id]);
-
+  
   // Subscribe to navigation updates (for syncing between client and provider)
   // CRITICAL: Client must update route data when provider changes phase (especially guincho 2nd phase)
   useEffect(() => {
@@ -283,10 +293,20 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         (payload: any) => {
           const { navigation_phase, route_polyline, route_distance_meters, route_duration_seconds } = payload.new;
           
+          console.log('[Navigation] Realtime update received:', {
+            navigation_phase,
+            hasPolyline: !!route_polyline,
+            distance: route_distance_meters,
+            duration: route_duration_seconds,
+          });
+          
           if (navigation_phase) {
             const normalizedPhase = normalizePhase(navigation_phase);
-            if (normalizedPhase !== navigationPhase) {
-              console.log('[Navigation] Phase changed via realtime:', normalizedPhase);
+            const phaseChanged = normalizedPhase !== lastReceivedPhaseRef.current;
+            
+            if (phaseChanged) {
+              console.log('[Navigation] Phase changed via realtime:', lastReceivedPhaseRef.current, '->', normalizedPhase);
+              lastReceivedPhaseRef.current = normalizedPhase;
               setNavigationPhase(normalizedPhase);
               
               // CRITICAL: When phase changes, clear old route data to show fresh route
@@ -303,17 +323,20 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
             }
           }
           
-          // Update route data when available (will arrive shortly after phase change)
-          if (route_polyline) {
-            console.log('[Navigation] Route polyline received via realtime');
+          // ALWAYS update route data when available (even if phase didn't change)
+          // This handles the case where provider sends phase first, then route data second
+          if (route_polyline && route_polyline.length > 0) {
+            console.log('[Navigation] Route polyline received via realtime, length:', route_polyline.length);
             setRoutePolyline(route_polyline);
           }
           
-          if (route_distance_meters) {
+          if (typeof route_distance_meters === 'number' && route_distance_meters > 0) {
+            console.log('[Navigation] Distance received via realtime:', route_distance_meters);
             setDistance(formatDistance(route_distance_meters));
           }
           
-          if (route_duration_seconds) {
+          if (typeof route_duration_seconds === 'number' && route_duration_seconds > 0) {
+            console.log('[Navigation] Duration received via realtime:', route_duration_seconds);
             setEta(formatDuration(route_duration_seconds));
           }
         }
@@ -323,7 +346,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chamado.id, navigationPhase, mode]);
+  }, [chamado.id, mode]); // Removed navigationPhase to avoid recreating channel on phase change
 
   // Calculate route ONCE when phase changes (provider only)
   // CRITICAL: For guincho, must recalculate when changing from to_client to to_destination
