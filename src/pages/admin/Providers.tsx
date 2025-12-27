@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAdminProviders } from '@/hooks/useAdminData';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,23 +8,23 @@ import { toast } from 'sonner';
 import { 
   Loader2, 
   UserCheck,
-  Search,
   Ban,
   CheckCircle,
   CreditCard,
   DollarSign,
   Star,
   Phone,
-  Mail
+  Mail,
+  User,
+  Truck
 } from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -40,15 +39,11 @@ import { Label } from '@/components/ui/label';
 export default function AdminProviders() {
   const { user } = useAuth();
   const { providers, loading, blockProvider, unblockProvider, togglePayout } = useAdminProviders();
-  const [search, setSearch] = useState('');
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
 
-  const filteredProviders = providers.filter(p => 
-    p.profile?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.profile?.email?.toLowerCase().includes(search.toLowerCase()) ||
-    p.profile?.phone?.includes(search)
-  );
+  const selectedProvider = providers.find(p => p.user_id === selectedProviderId);
 
   const handleBlock = async () => {
     if (!blockDialog.provider || !user) return;
@@ -142,139 +137,137 @@ export default function AdminProviders() {
         </Card>
       </div>
 
-      {/* Search & Table */}
+      {/* Provider Selection */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserCheck className="w-5 h-5" />
-            Prestadores
+            Selecionar Prestador
           </CardTitle>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, email ou telefone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
         </CardHeader>
-        <CardContent>
-          {filteredProviders.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              Nenhum prestador encontrado
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Prestador</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Avaliação</TableHead>
-                    <TableHead>Serviços</TableHead>
-                    <TableHead>Stripe</TableHead>
-                    <TableHead>Repasse</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProviders.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{p.profile?.name || 'Sem nome'}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {p.profile?.email && (
-                              <span className="flex items-center gap-1">
-                                <Mail className="w-3 h-3" />
-                                {p.profile.email}
-                              </span>
-                            )}
-                            {p.profile?.phone && (
-                              <span className="flex items-center gap-1">
-                                <Phone className="w-3 h-3" />
-                                {p.profile.phone}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {p.is_blocked ? (
-                          <Badge variant="destructive">Bloqueado</Badge>
-                        ) : p.is_online ? (
-                          <Badge className="bg-status-finished text-white">Online</Badge>
-                        ) : (
-                          <Badge variant="secondary">Offline</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 text-status-searching fill-status-searching" />
-                          <span>{(p.rating || 5).toFixed(1)}</span>
-                          <span className="text-muted-foreground">({p.total_services || 0})</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {(p.services_offered || []).map((s: string) => (
-                            <Badge key={s} variant="outline" className="text-xs">
-                              {s}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {p.stripe_connected ? (
-                          <CheckCircle className="w-4 h-4 text-status-finished" />
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {p.payout_enabled ? (
-                          <Badge className="bg-status-finished text-white">Ativo</Badge>
-                        ) : (
-                          <Badge variant="destructive">Suspenso</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {p.is_blocked ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleUnblock(p.user_id)}
-                            >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Desbloquear
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => setBlockDialog({ open: true, provider: p })}
-                            >
-                              <Ban className="w-4 h-4 mr-1" />
-                              Bloquear
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleTogglePayout(p.user_id, p.payout_enabled)}
-                          >
-                            <DollarSign className="w-4 h-4 mr-1" />
-                            {p.payout_enabled ? 'Suspender' : 'Habilitar'}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+        <CardContent className="space-y-6">
+          <Select 
+            value={selectedProviderId || ""} 
+            onValueChange={(value) => setSelectedProviderId(value || null)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Selecione um prestador..." />
+            </SelectTrigger>
+            <SelectContent className="bg-background border border-border z-50">
+              {providers.map((p) => (
+                <SelectItem key={p.user_id} value={p.user_id}>
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4" />
+                    <span>{p.profile?.name || 'Sem nome'}</span>
+                    {p.is_online ? (
+                      <Badge className="bg-status-finished text-white ml-2 text-xs">Online</Badge>
+                    ) : p.is_blocked ? (
+                      <Badge variant="destructive" className="ml-2 text-xs">Bloqueado</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="ml-2 text-xs">Offline</Badge>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Selected Provider Details */}
+          {selectedProvider && (
+            <div className="border border-border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">{selectedProvider.profile?.name || 'Sem nome'}</h3>
+                <div className="flex items-center gap-2">
+                  {selectedProvider.is_blocked ? (
+                    <Badge variant="destructive">Bloqueado</Badge>
+                  ) : selectedProvider.is_online ? (
+                    <Badge className="bg-status-finished text-white">Online</Badge>
+                  ) : (
+                    <Badge variant="secondary">Offline</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="w-4 h-4 text-muted-foreground" />
+                    <span>{selectedProvider.profile?.email || 'Não informado'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    <span>{selectedProvider.profile?.phone || 'Não informado'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Star className="w-4 h-4 text-status-searching fill-status-searching" />
+                    <span>{(selectedProvider.rating || 5).toFixed(1)} ({selectedProvider.total_services || 0} serviços)</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <CreditCard className="w-4 h-4 text-muted-foreground" />
+                    <span>Stripe: {selectedProvider.stripe_connected ? 'Conectado' : 'Não conectado'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <DollarSign className="w-4 h-4 text-muted-foreground" />
+                    <span>Repasse: {selectedProvider.payout_enabled ? 'Ativo' : 'Suspenso'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Services Offered */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Serviços oferecidos:</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(selectedProvider.services_offered || []).map((s: string) => (
+                    <Badge key={s} variant="outline" className="text-xs">
+                      {s}
+                    </Badge>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              </div>
+
+              {selectedProvider.is_blocked && selectedProvider.block_reason && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-sm text-destructive">
+                    <strong>Motivo do bloqueio:</strong> {selectedProvider.block_reason}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                {selectedProvider.is_blocked ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => handleUnblock(selectedProvider.user_id)}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Desbloquear
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setBlockDialog({ open: true, provider: selectedProvider })}
+                  >
+                    <Ban className="w-4 h-4 mr-1" />
+                    Bloquear
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => handleTogglePayout(selectedProvider.user_id, selectedProvider.payout_enabled)}
+                >
+                  <DollarSign className="w-4 h-4 mr-1" />
+                  {selectedProvider.payout_enabled ? 'Suspender Repasse' : 'Habilitar Repasse'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!selectedProvider && (
+            <div className="text-center text-muted-foreground py-8">
+              Selecione um prestador para ver os detalhes
             </div>
           )}
         </CardContent>

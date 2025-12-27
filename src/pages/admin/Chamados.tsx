@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAdminChamados } from '@/hooks/useAdminData';
 import { 
@@ -15,6 +17,8 @@ import {
   DollarSign,
   CheckCircle,
   XCircle,
+  Filter,
+  Calendar,
 } from 'lucide-react';
 import {
   Table,
@@ -50,23 +54,56 @@ const SERVICE_LABELS: Record<ServiceType, string> = {
   chaveiro: 'Chaveiro',
 };
 
+// Filtros simplificados de status
+const STATUS_FILTERS = [
+  { value: 'all', label: 'Todos os Status' },
+  { value: 'finished', label: 'Concluída' },
+  { value: 'canceled', label: 'Cancelada' },
+  { value: 'in_progress', label: 'Em Andamento' },
+];
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
 export default function AdminChamados() {
-  const [statusFilter, setStatusFilter] = useState<ChamadoStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [serviceFilter, setServiceFilter] = useState<ServiceType | 'all'>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [search, setSearch] = useState('');
 
+  // Map filter to actual status values
+  const getStatusForQuery = (): ChamadoStatus | undefined => {
+    if (statusFilter === 'all') return undefined;
+    if (statusFilter === 'finished') return 'finished';
+    if (statusFilter === 'canceled') return 'canceled';
+    return undefined; // 'in_progress' will be filtered client-side
+  };
+
   const { chamados, loading } = useAdminChamados({
-    status: statusFilter !== 'all' ? statusFilter : undefined,
+    status: getStatusForQuery(),
+    serviceType: serviceFilter !== 'all' ? serviceFilter : undefined,
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
   });
 
-  const filteredChamados = chamados.filter(c => 
-    c.cliente?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.prestador?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.origem_address?.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter by search and in_progress status
+  const filteredChamados = chamados.filter(c => {
+    // Search filter
+    const matchesSearch = 
+      c.cliente?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.prestador?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.origem_address?.toLowerCase().includes(search.toLowerCase());
+    
+    // In progress filter (multiple statuses)
+    if (statusFilter === 'in_progress') {
+      const inProgressStatuses = ['searching', 'negotiating', 'awaiting_payment', 'in_service', 'pending_client_confirmation', 'accepted'];
+      return matchesSearch && inProgressStatuses.includes(c.status);
+    }
+    
+    return matchesSearch;
+  });
 
   // Calculate stats
   const stats = {
@@ -74,6 +111,14 @@ export default function AdminChamados() {
     active: chamados.filter(c => ['searching', 'negotiating', 'awaiting_payment', 'in_service'].includes(c.status)).length,
     completed: chamados.filter(c => c.status === 'finished').length,
     canceled: chamados.filter(c => c.status === 'canceled').length,
+  };
+
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setServiceFilter('all');
+    setStartDate('');
+    setEndDate('');
+    setSearch('');
   };
 
   if (loading) {
@@ -127,34 +172,98 @@ export default function AdminChamados() {
         </Card>
       </div>
 
-      {/* Filters & Table */}
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Filtros
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {/* Date Range */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1 text-sm">
+                <Calendar className="w-4 h-4" />
+                Data Inicial
+              </Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1 text-sm">
+                <Calendar className="w-4 h-4" />
+                Data Final
+              </Label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <div className="space-y-2">
+              <Label className="text-sm">Status</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent className="bg-background border border-border z-50">
+                  {STATUS_FILTERS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Service Type Filter */}
+            <div className="space-y-2">
+              <Label className="text-sm">Tipo de Serviço</Label>
+              <Select value={serviceFilter} onValueChange={(v) => setServiceFilter(v as ServiceType | 'all')}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent className="bg-background border border-border z-50">
+                  <SelectItem value="all">Todos os Serviços</SelectItem>
+                  {Object.entries(SERVICE_LABELS).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Clear Filters */}
+            <div className="flex items-end">
+              <Button variant="outline" onClick={clearFilters} className="w-full">
+                Limpar Filtros
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Search & Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Car className="w-5 h-5" />
-            Corridas
+            Corridas ({filteredChamados.length})
           </CardTitle>
-          <div className="flex flex-col sm:flex-row gap-2 mt-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por cliente, prestador ou endereço..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ChamadoStatus | 'all')}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {Object.entries(STATUS_CONFIG).map(([key, { label }]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por cliente, prestador ou endereço..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
         </CardHeader>
         <CardContent>
