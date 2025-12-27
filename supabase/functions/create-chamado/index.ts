@@ -222,6 +222,58 @@ serve(async (req) => {
       eligibleProviderIds: eligibleProviders.map((id) => id.substring(0, 8)),
     });
 
+    // ===== SEND ONESIGNAL PUSH NOTIFICATIONS TO ELIGIBLE PROVIDERS =====
+    const serviceLabels: Record<string, string> = {
+      guincho: 'Guincho',
+      borracharia: 'Borracharia',
+      mecanica: 'Mecânica',
+      chaveiro: 'Chaveiro',
+    };
+    const serviceLabel = serviceLabels[body.tipo_servico] || body.tipo_servico;
+
+    // Send push notification to each eligible provider via OneSignal
+    const notificationPromises = eligibleProviders.map(async (providerId) => {
+      try {
+        const response = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/onesignal-push`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({
+              action: "chamada",
+              user_id: providerId,
+              chamado_id: chamado.id,
+              title: `Nova Chamada de ${serviceLabel}!`,
+              body: origemAddress || "Cliente aguardando atendimento",
+              data: {
+                chamadoId: chamado.id,
+                tipoServico: body.tipo_servico,
+                origemLat: body.origem_lat,
+                origemLng: body.origem_lng,
+              },
+            }),
+          }
+        );
+        
+        if (!response.ok) {
+          const errText = await response.text();
+          logStep("WARN: OneSignal push failed for provider", { providerId: providerId.substring(0, 8), error: errText });
+        } else {
+          logStep("OneSignal push sent", { providerId: providerId.substring(0, 8) });
+        }
+      } catch (err) {
+        logStep("WARN: OneSignal push error", { providerId: providerId.substring(0, 8), error: String(err) });
+      }
+    });
+
+    // Fire and forget - don't block response
+    Promise.all(notificationPromises).catch((err) => {
+      logStep("WARN: Some notifications failed", { error: String(err) });
+    });
+
     return new Response(JSON.stringify({ chamado, eligibleProvidersCount: eligibleProviders.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
