@@ -65,6 +65,28 @@ export function useNavigationInstructions({
   const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
   const lastCalculationRef = useRef<string>('');
   const initialDistanceRef = useRef<number>(0);
+  const lastPhaseRef = useRef<string>(phase);
+  
+  // CRITICAL: Reset initial distance when phase changes (e.g., to_destination for guincho)
+  useEffect(() => {
+    if (lastPhaseRef.current !== phase) {
+      console.log('[NavigationInstructions] Phase changed from', lastPhaseRef.current, 'to', phase, '- resetting distance tracking');
+      initialDistanceRef.current = 0;
+      lastCalculationRef.current = '';
+      lastPhaseRef.current = phase;
+      
+      // Reset state for new phase
+      setState(prev => ({
+        ...prev,
+        eta: '',
+        etaSeconds: 0,
+        distance: '',
+        distanceMeters: 0,
+        progress: 0,
+        clientStatus: phase === 'to_destination' || phase === 'going_to_destination' ? 'em_transito' : 'a_caminho',
+      }));
+    }
+  }, [phase]);
 
   // Calculate distance between two points (Haversine formula)
   const calculateDistance = useCallback((from: Location, to: Location): number => {
