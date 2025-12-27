@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ChevronDown,
-  FileText
+  FileText,
+  Calendar
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -59,6 +60,9 @@ export default function AdminNotifications() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
 
   // Fetch notification stats
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -108,21 +112,41 @@ export default function AdminNotifications() {
       return;
     }
 
+    if (scheduleEnabled && (!scheduledDate || !scheduledTime)) {
+      toast.error('Preencha a data e hora para agendamento');
+      return;
+    }
+
     setSending(true);
     try {
+      let scheduledAt: string | undefined;
+      if (scheduleEnabled && scheduledDate && scheduledTime) {
+        const dateTime = new Date(`${scheduledDate}T${scheduledTime}:00`);
+        if (dateTime <= new Date()) {
+          toast.error('A data de agendamento deve ser no futuro');
+          setSending(false);
+          return;
+        }
+        scheduledAt = dateTime.toISOString();
+      }
+
       const { error } = await supabase.functions.invoke('send-notifications', {
         body: {
           action: 'manual',
           targetType,
-          message: { title, body }
+          message: { title, body },
+          scheduledAt
         }
       });
 
       if (error) throw error;
 
-      toast.success('Notificações enviadas com sucesso!');
+      toast.success(scheduleEnabled ? 'Notificação agendada com sucesso!' : 'Notificações enviadas com sucesso!');
       setTitle('');
       setBody('');
+      setScheduleEnabled(false);
+      setScheduledDate('');
+      setScheduledTime('');
       refetch();
     } catch (error) {
       console.error('Error sending notifications:', error);
@@ -393,25 +417,69 @@ export default function AdminNotifications() {
             <p className="text-xs text-muted-foreground">{body.length}/160 caracteres</p>
           </div>
 
+          {/* Scheduling Option */}
+          <div className="space-y-3 p-4 border border-border rounded-lg">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="schedule" className="flex items-center gap-2 cursor-pointer">
+                <Calendar className="w-4 h-4" />
+                Agendar envio
+              </Label>
+              <input
+                type="checkbox"
+                id="schedule"
+                checked={scheduleEnabled}
+                onChange={(e) => setScheduleEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+            </div>
+            
+            {scheduleEnabled && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="space-y-2">
+                  <Label htmlFor="scheduledDate">Data</Label>
+                  <Input
+                    id="scheduledDate"
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="scheduledTime">Hora</Label>
+                  <Input
+                    id="scheduledTime"
+                    type="time"
+                    value={scheduledTime}
+                    onChange={(e) => setScheduledTime(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Warning */}
           <div className="flex items-start gap-2 p-3 bg-amber-500/10 text-amber-600 rounded-lg text-sm">
             <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <p>
               A notificação será enviada apenas para usuários que ativaram notificações no app.
+              {scheduleEnabled && ' O agendamento usa o fuso horário local.'}
             </p>
           </div>
 
           <Button 
             onClick={handleSendNotification} 
-            disabled={sending || !title.trim() || !body.trim()}
+            disabled={sending || !title.trim() || !body.trim() || (scheduleEnabled && (!scheduledDate || !scheduledTime))}
             className="w-full"
           >
             {sending ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : scheduleEnabled ? (
+              <Calendar className="w-4 h-4 mr-2" />
             ) : (
               <Send className="w-4 h-4 mr-2" />
             )}
-            Enviar Notificação
+            {scheduleEnabled ? 'Agendar Notificação' : 'Enviar Agora'}
           </Button>
         </CardContent>
       </Card>
