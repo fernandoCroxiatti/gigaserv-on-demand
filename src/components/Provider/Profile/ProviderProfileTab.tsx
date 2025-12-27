@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Star, User, Phone, Mail, MapPin, Car } from 'lucide-react';
+import { AvatarUpload } from '@/components/Profile/AvatarUpload';
 
 interface ProviderProfileTabProps {
   rating?: number;
@@ -15,13 +16,13 @@ export function ProviderProfileTab({ rating = 5.0, totalServices = 0 }: Provider
       {/* Profile Header */}
       <div className="bg-card rounded-2xl p-6 text-center">
         <div className="relative inline-block mb-4">
-          <img 
-            src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name}`}
-            alt={user?.name}
-            className="w-24 h-24 rounded-full border-4 border-background shadow-lg mx-auto"
+          <AvatarUpload 
+            currentAvatar={user?.avatar}
+            userName={user?.name}
+            size="lg"
           />
           {providerData?.is_online && (
-            <div className="absolute bottom-0 right-0 w-6 h-6 bg-status-finished rounded-full border-2 border-background flex items-center justify-center">
+            <div className="absolute bottom-0 right-8 w-6 h-6 bg-status-finished rounded-full border-2 border-background flex items-center justify-center">
               <div className="w-2 h-2 bg-white rounded-full" />
             </div>
           )}

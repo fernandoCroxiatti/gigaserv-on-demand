@@ -4,6 +4,7 @@ import { User, Phone, Mail, Edit, Star, Car } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { AvatarUpload } from '@/components/Profile/AvatarUpload';
 
 interface ClientProfileTabProps {
   totalRides: number;
@@ -44,10 +45,9 @@ export function ClientProfileTab({ totalRides, averageRating }: ClientProfileTab
       {/* Profile Header Card */}
       <div className="bg-card rounded-2xl p-6">
         <div className="flex items-center gap-4 mb-6">
-          <img 
-            src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name}`}
-            alt={user?.name}
-            className="w-20 h-20 rounded-full border-4 border-primary/20 shadow-lg"
+          <AvatarUpload 
+            currentAvatar={user?.avatar}
+            userName={user?.name}
           />
           <div className="flex-1">
             <h2 className="text-xl font-bold">{user?.name}</h2>
