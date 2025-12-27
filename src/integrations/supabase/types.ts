@@ -831,6 +831,60 @@ export type Database = {
           },
         ]
       }
+      scheduled_notifications: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          data: Json | null
+          failed_at: string | null
+          failure_reason: string | null
+          id: string
+          recipients_count: number | null
+          scheduled_at: string
+          sent_at: string | null
+          sent_count: number | null
+          status: string
+          target_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          data?: Json | null
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          recipients_count?: number | null
+          scheduled_at: string
+          sent_at?: string | null
+          sent_count?: number | null
+          status?: string
+          target_type: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          data?: Json | null
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          recipients_count?: number | null
+          scheduled_at?: string
+          sent_at?: string | null
+          sent_count?: number | null
+          status?: string
+          target_type?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       service_pairs: {
         Row: {
           cancelled_services: number | null
