@@ -100,33 +100,36 @@ export default function AdminNotifications() {
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
 
-  // Fetch notification stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  // Fetch notification stats with auto-refresh every 30 seconds
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
     queryKey: ['notification-stats'],
     queryFn: async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const { count: todayCount } = await supabase
-        .from('notification_history')
-        .select('*', { count: 'exact', head: true })
-        .gte('sent_at', today.toISOString());
-
-      const { count: totalCount } = await supabase
-        .from('notification_history')
-        .select('*', { count: 'exact', head: true });
-
-      const { count: providersWithNotif } = await supabase
-        .from('notification_preferences')
-        .select('*', { count: 'exact', head: true })
-        .eq('enabled', true);
+      const [todayResult, totalResult, enabledResult] = await Promise.all([
+        supabase
+          .from('notification_history')
+          .select('*', { count: 'exact', head: true })
+          .gte('sent_at', today.toISOString()),
+        supabase
+          .from('notification_history')
+          .select('*', { count: 'exact', head: true }),
+        supabase
+          .from('notification_preferences')
+          .select('*', { count: 'exact', head: true })
+          .eq('enabled', true)
+          .eq('permission_granted', true)
+      ]);
 
       return {
-        todayCount: todayCount || 0,
-        totalCount: totalCount || 0,
-        enabledUsers: providersWithNotif || 0
+        todayCount: todayResult.count || 0,
+        totalCount: totalResult.count || 0,
+        enabledUsers: enabledResult.count || 0
       };
-    }
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+    staleTime: 10000, // Consider data stale after 10 seconds
   });
 
   // Fetch recent notifications
