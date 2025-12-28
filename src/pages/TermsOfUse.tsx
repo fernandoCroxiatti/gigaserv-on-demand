@@ -77,12 +77,30 @@ export default function TermsOfUse() {
           </ul>
 
           <h2 className="text-lg font-semibold mt-6">5. Pagamentos</h2>
+          <p>O pagamento pelos serviços pode ocorrer de duas formas:</p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>Os pagamentos são processados através do Stripe</li>
-            <li>A GIGA S.O.S cobra uma taxa de intermediação sobre cada serviço</li>
-            <li>Prestadores recebem os valores via transferência Stripe</li>
-            <li>Disputas de pagamento devem ser reportadas em até 7 dias</li>
+            <li>Pagamento por cartão de crédito ou débito, realizado dentro do aplicativo e processado pelo Stripe;</li>
+            <li>Pagamento via Pix ou dinheiro, realizado diretamente entre cliente e prestador, fora do aplicativo.</li>
           </ul>
+          <p className="mt-3">
+            Quando o pagamento é realizado por cartão dentro do aplicativo, a taxa de intermediação da GIGA S.O.S 
+            é descontada automaticamente do valor da transação.
+          </p>
+          <p className="mt-3">
+            Quando o pagamento do serviço é realizado fora do aplicativo (Pix ou dinheiro), a taxa de intermediação 
+            não é descontada automaticamente, devendo ser paga posteriormente pelo prestador na aba "Taxas" do aplicativo.
+          </p>
+          <p className="mt-3">
+            A GIGA S.O.S não processa pagamentos em Pix ou dinheiro, atuando apenas como intermediadora da conexão 
+            entre clientes e prestadores nesses casos.
+          </p>
+          <p className="mt-3">
+            Pagamentos por cartão são processados de forma segura pelo Stripe, seguindo padrões internacionais de segurança.
+          </p>
+          <p className="mt-3">
+            Eventuais disputas relacionadas a pagamentos realizados dentro do aplicativo devem ser reportadas em até 
+            7 (sete) dias.
+          </p>
 
           <h2 className="text-lg font-semibold mt-6">6. Cancelamentos</h2>
           <p>
