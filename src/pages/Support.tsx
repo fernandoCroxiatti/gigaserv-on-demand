@@ -13,23 +13,27 @@ import {
 const clientFAQ = [
   {
     question: "Quais formas de pagamento o GIGA S.O.S aceita?",
-    answer: "Atualmente aceitamos pagamentos por cartão de crédito e cartão de débito."
+    answer: "O GIGA S.O.S permite pagamentos por cartão de crédito ou débito diretamente pelo aplicativo. Também é possível pagar via Pix ou dinheiro diretamente ao prestador, conforme combinado no atendimento."
   },
   {
     question: "Posso pagar via PIX?",
-    answer: "No momento, o pagamento via PIX ainda não está disponível no app."
+    answer: "Sim. O pagamento via Pix é realizado diretamente com o prestador do serviço. O aplicativo não processa pagamentos via Pix."
   },
   {
-    question: "O pagamento é seguro?",
-    answer: "Sim. Todos os pagamentos são processados com segurança através da plataforma Stripe, utilizada por grandes aplicativos no mundo todo."
+    question: "Como funciona a taxa do aplicativo?",
+    answer: "A GIGA S.O.S cobra uma taxa de intermediação sobre cada serviço: Se o pagamento for feito por cartão no aplicativo, a taxa é descontada automaticamente. Se o pagamento for feito via Pix ou dinheiro, a taxa deve ser paga pelo prestador na aba \"Taxas\" do aplicativo."
   },
   {
-    question: "Quando meu pagamento é cobrado?",
-    answer: "O pagamento é confirmado no momento da solicitação do serviço."
+    question: "O pagamento por cartão é seguro?",
+    answer: "Sim. Os pagamentos realizados por cartão no aplicativo são processados pelo Stripe, uma plataforma reconhecida internacionalmente por seus padrões de segurança."
+  },
+  {
+    question: "Quando o pagamento é cobrado?",
+    answer: "Em pagamentos por cartão, a cobrança ocorre dentro do aplicativo. Em pagamentos via Pix ou dinheiro, o acerto é feito diretamente com o prestador no momento do atendimento."
   },
   {
     question: "Recebo comprovante do pagamento?",
-    answer: "Sim. Você pode acompanhar o status do pagamento diretamente no app."
+    answer: "Pagamentos feitos por cartão no aplicativo geram comprovante eletrônico. Pagamentos feitos diretamente com o prestador devem ter o comprovante solicitado a ele."
   },
   {
     question: "Posso cancelar uma solicitação?",
@@ -109,7 +113,7 @@ export default function Support() {
         {/* Payment Info Banner */}
         <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-6">
           <p className="text-sm font-medium text-primary">
-            Formas de pagamento aceitas: Cartão de crédito e débito
+            Formas de pagamento: Cartão de crédito e débito pelo app • Pix ou dinheiro diretamente com o prestador
           </p>
         </div>
 
