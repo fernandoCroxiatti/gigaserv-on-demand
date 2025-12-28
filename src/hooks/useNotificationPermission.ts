@@ -240,31 +240,45 @@ export function useNotificationPermission(activeProfile?: 'client' | 'provider')
               });
             
             // Atualizar preferências
-            await supabase
+            const { error: prefError } = await supabase
               .from('notification_preferences')
               .upsert({
                 user_id: user.id,
                 permission_asked_at: new Date().toISOString(),
                 permission_granted: true,
                 enabled: true,
+                chamado_updates: true,
+                promotional: true,
+                updated_at: new Date().toISOString(),
               }, {
                 onConflict: 'user_id',
               });
+            
+            if (prefError) {
+              console.error('[useNotificationPermission] Error saving preferences:', prefError);
+            }
           }
         }
       } else {
         // Salvar que foi negado
         if (user?.id) {
-          await supabase
+          const { error: prefError } = await supabase
             .from('notification_preferences')
             .upsert({
               user_id: user.id,
               permission_asked_at: new Date().toISOString(),
               permission_granted: false,
               enabled: false,
+              chamado_updates: true,
+              promotional: true,
+              updated_at: new Date().toISOString(),
             }, {
               onConflict: 'user_id',
             });
+          
+          if (prefError) {
+            console.error('[useNotificationPermission] Error saving preferences (denied):', prefError);
+          }
         }
       }
       

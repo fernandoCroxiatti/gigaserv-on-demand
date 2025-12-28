@@ -88,16 +88,23 @@ export function useNotifications() {
     
     // Update preferences in database
     if (user?.id) {
-      await supabase
+      const { error } = await supabase
         .from('notification_preferences')
         .upsert({
           user_id: user.id,
           permission_asked_at: new Date().toISOString(),
           permission_granted: granted,
-          enabled: granted
+          enabled: granted,
+          chamado_updates: true,
+          promotional: true,
+          updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id'
         });
+      
+      if (error) {
+        console.error('[useNotifications] Error saving preferences:', error);
+      }
     }
     
     return granted;
