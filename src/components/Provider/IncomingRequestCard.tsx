@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { cancelChamadaNotification } from '@/lib/oneSignalNotify';
+import { playNotificationSound } from '@/lib/audioManager';
 
 export function IncomingRequestCard() {
   const { incomingRequest, acceptIncomingRequest, declineIncomingRequest, providerData } = useApp();
@@ -63,11 +64,15 @@ export function IncomingRequestCard() {
       : `${distanceToDestination.toFixed(1)} km`
     : '--';
 
-  // Timer for request expiration - NO internal audio (sound comes from OneSignal notification)
+  // Timer for request expiration - play in-app sound as fallback
   useEffect(() => {
     if (!incomingRequest) {
       return;
     }
+    
+    // Tocar som de notificação in-app (fallback se OneSignal não tocar)
+    // Usa o AudioManager centralizado - ignora silenciosamente se áudio não desbloqueado
+    playNotificationSound();
     
     setTimeLeft(30);
     const interval = setInterval(() => {

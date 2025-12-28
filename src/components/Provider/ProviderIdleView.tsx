@@ -17,6 +17,7 @@ import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { FinancialAlertBanner } from './FinancialAlertBanner';
 import { useAuth } from '@/hooks/useAuth';
 import { useProviderOnlineSync } from '@/hooks/useProviderOnlineSync';
+import { useProviderAutoOffline } from '@/hooks/useProviderAutoOffline';
 
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
@@ -96,6 +97,13 @@ export function ProviderIdleView() {
     hasLocation: hasValidLocation,
     onStatusLost: handleStatusLost,
     onReconnected: handleReconnected
+  });
+
+  // Hook para forçar offline quando o app perde foco ou é fechado
+  // Não altera o fluxo atual de "ficar online", apenas força offline ao sair
+  useProviderAutoOffline({
+    userId: authUser?.id || null,
+    isOnline
   });
 
   useEffect(() => {

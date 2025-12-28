@@ -11,6 +11,7 @@ import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 import { SafeSplashScreen } from "./components/SafeSplashScreen";
 import { ProfileSelectionScreen } from "./components/ProfileSelectionScreen";
 import { useSafeInitialization } from "./hooks/useSafeInitialization";
+import { useAudioUnlock } from "./hooks/useAudioUnlock";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
@@ -118,6 +119,10 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 function AppWithNotifications({ children }: { children: React.ReactNode }) {
   const context = useOptionalApp();
   const activeProfile = context?.user?.activeProfile || 'client';
+
+  // Hook para desbloqueio de áudio - listener passivo global
+  // Não altera nenhuma lógica existente, apenas adiciona listener de clique
+  useAudioUnlock();
 
   return (
     <NotificationProvider activeProfile={activeProfile}>
