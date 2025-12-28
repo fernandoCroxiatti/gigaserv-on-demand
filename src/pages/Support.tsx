@@ -51,8 +51,8 @@ const providerFAQ = [
     answer: "Os repasses seguem o cronograma padrão da Stripe, conforme a conta configurada."
   },
   {
-    question: "Quando recebo meu primeiro pagamento?",
-    answer: "No primeiro pagamento, a Stripe pode aplicar um prazo inicial de liberação por motivos de segurança e verificação da conta. Após esse período inicial, os repasses passam a ocorrer normalmente conforme o cronograma configurado na Stripe."
+    question: "Por que meu primeiro pagamento por cartão pode demorar até 30 dias para cair?",
+    answer: "O primeiro pagamento realizado por cartão pode levar até 30 dias para ser repassado ao prestador, pois o Stripe realiza validações iniciais obrigatórias, como verificação de identidade, análise de segurança e confirmação de dados bancários. Esse processo é padrão do Stripe e não depende da GIGA S.O.S. Após a conclusão da primeira validação, os próximos pagamentos costumam ocorrer normalmente."
   },
   {
     question: "Preciso criar uma conta na Stripe?",

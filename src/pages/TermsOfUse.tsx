@@ -98,6 +98,15 @@ export default function TermsOfUse() {
             Pagamentos por cartão são processados de forma segura pelo Stripe, seguindo padrões internacionais de segurança.
           </p>
           <p className="mt-3">
+            O primeiro repasse de pagamento realizado por cartão pode levar até 30 (trinta) dias para ser concluído, 
+            pois está sujeito a processos de verificação e validação exigidos pelo Stripe, como confirmação de identidade, 
+            análise de risco e validação de dados bancários.
+          </p>
+          <p className="mt-3">
+            Esse prazo é definido exclusivamente pelo Stripe e não depende da GIGA S.O.S. Após a conclusão dessas 
+            validações iniciais, os pagamentos subsequentes tendem a ocorrer dentro do prazo padrão da plataforma de pagamentos.
+          </p>
+          <p className="mt-3">
             Eventuais disputas relacionadas a pagamentos realizados dentro do aplicativo devem ser reportadas em até 
             7 (sete) dias.
           </p>
