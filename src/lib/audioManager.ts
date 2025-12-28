@@ -11,11 +11,13 @@
 let audioUnlocked = false;
 let audioContext: AudioContext | null = null;
 
-// URL do som de notificação (arquivo padrão do sistema ou arquivo customizado)
+// URLs dos sons
 const NOTIFICATION_SOUND_URL = '/notification.mp3';
+const PROVIDER_FOUND_SOUND_URL = '/provider-found.mp3';
 
-// Audio element reutilizável
+// Audio elements reutilizáveis
 let notificationAudio: HTMLAudioElement | null = null;
+let providerFoundAudio: HTMLAudioElement | null = null;
 
 /**
  * Desbloqueia o contexto de áudio do navegador
@@ -106,6 +108,43 @@ export function playNotificationSound(): void {
   } catch (error) {
     // Nunca quebrar o fluxo do app
     console.log('[AudioManager] Error playing notification sound (non-critical):', error);
+  }
+}
+
+/**
+ * Reproduz o som de "prestador encontrado" para o cliente
+ * 
+ * Comportamento:
+ * - Só toca se audioUnlocked === true
+ * - Ignora silenciosamente se não estiver desbloqueado
+ * - Nunca lança erro ou quebra o fluxo
+ */
+export function playProviderFoundSound(): void {
+  if (!audioUnlocked) {
+    console.log('[AudioManager] Audio not unlocked, skipping provider found sound');
+    return;
+  }
+
+  try {
+    if (!providerFoundAudio) {
+      providerFoundAudio = new Audio(PROVIDER_FOUND_SOUND_URL);
+    }
+
+    // Reset e tocar
+    providerFoundAudio.currentTime = 0;
+    providerFoundAudio.volume = 1;
+    
+    const playPromise = providerFoundAudio.play();
+    
+    if (playPromise !== undefined) {
+      playPromise.catch((error) => {
+        // Ignorar erros silenciosamente
+        console.log('[AudioManager] Provider found sound failed (non-critical):', error.message);
+      });
+    }
+  } catch (error) {
+    // Nunca quebrar o fluxo do app
+    console.log('[AudioManager] Error playing provider found sound (non-critical):', error);
   }
 }
 
