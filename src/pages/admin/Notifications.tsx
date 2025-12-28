@@ -25,8 +25,28 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
 
-// Templates pré-prontos para prestadores
+// =============================================
+// TEMPLATES PRÉ-PRONTOS - SAUDAÇÕES (AMBOS)
+// =============================================
+const greetingTemplates = [
+  { title: 'Bom dia!', body: 'Estamos online para te ajudar.' },
+  { title: 'Boa tarde!', body: 'Conte com o GIGA S.O.S sempre que precisar.' },
+  { title: 'Boa noite!', body: 'Atendimento disponível quando você precisar.' },
+  { title: 'Olá!', body: 'O GIGA S.O.S está pronto para te atender.' },
+  { title: 'GIGA S.O.S', body: 'Estamos por aqui sempre que precisar.' },
+];
+
+// =============================================
+// TEMPLATES PRÉ-PRONTOS - PRESTADORES
+// =============================================
 const providerTemplates = [
+  // Saudação + Operacional (novas)
+  { title: 'Bom dia!', body: 'Já há chamados disponíveis na sua região.' },
+  { title: 'Boa tarde!', body: 'Demanda ativa. Fique online.' },
+  { title: 'Boa noite!', body: 'Clientes aguardando atendimento.' },
+  { title: 'Horário de pico ativo', body: 'Mais oportunidades agora.' },
+  { title: 'Fique disponível', body: 'Mantenha-se disponível para receber novos chamados.' },
+  // Originais
   { title: 'Novos chamados na sua região!', body: 'Há novos clientes precisando de guincho na sua área. Fique online e aproveite!' },
   { title: 'Bônus do dia ativo!', body: 'Complete 3 chamados hoje e ganhe um bônus especial. Não perca!' },
   { title: 'Atualize seu cadastro', body: 'Mantenha seus dados atualizados para continuar recebendo chamados.' },
@@ -35,8 +55,17 @@ const providerTemplates = [
   { title: 'Horário de pico!', body: 'Muitos chamados neste momento. Fique online e aumente seus ganhos!' },
 ];
 
-// Templates pré-prontos para clientes
+// =============================================
+// TEMPLATES PRÉ-PRONTOS - CLIENTES
+// =============================================
 const clientTemplates = [
+  // Saudação + Conversão (novas)
+  { title: 'Bom dia!', body: 'Precisa de guincho hoje? Solicite pelo app.' },
+  { title: 'Boa tarde!', body: 'Atendimento rápido e seguro perto de você.' },
+  { title: 'Boa noite!', body: 'Imprevistos acontecem. Conte com o GIGA S.O.S.' },
+  { title: 'Profissionais próximos', body: 'Profissionais disponíveis próximos a você agora.' },
+  { title: 'Solicite ajuda', body: 'Solicite ajuda em poucos cliques pelo GIGA S.O.S.' },
+  // Originais
   { title: 'Precisando de guincho?', body: 'Solicite agora mesmo e tenha um prestador em minutos!' },
   { title: 'Novidade no GIGA S.O.S', body: 'Confira as novidades do app e aproveite os novos recursos.' },
   { title: 'Avalie seu último serviço', body: 'Sua opinião é importante! Avalie o prestador do seu último chamado.' },
@@ -45,8 +74,15 @@ const clientTemplates = [
   { title: 'Obrigado por usar o GIGA S.O.S', body: 'Estamos sempre melhorando para você. Conte conosco!' },
 ];
 
-// Templates gerais (para todos)
+// =============================================
+// TEMPLATES PRÉ-PRONTOS - GERAIS (TODOS)
+// =============================================
 const generalTemplates = [
+  // Mensagens neutras (novas)
+  { title: 'Obrigado!', body: 'Obrigado por usar o GIGA S.O.S.' },
+  { title: 'Melhorias constantes', body: 'Estamos sempre melhorando para você.' },
+  { title: 'Conte conosco', body: 'Conte com o GIGA S.O.S quando precisar.' },
+  // Originais
   { title: 'Atualização do App', body: 'Atualize o app para ter acesso às últimas melhorias e correções.' },
   { title: 'Manutenção programada', body: 'O app passará por manutenção hoje às 00h. Previsão de retorno: 02h.' },
   { title: 'Novos recursos disponíveis', body: 'Confira as novidades que preparamos para você!' },
@@ -339,7 +375,27 @@ export default function AdminNotifications() {
               {targetType === 'all' && (
                 <>
                   <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Gerais:</p>
+                    <p className="text-xs font-medium text-muted-foreground">🔹 Saudações (Ambos):</p>
+                    <div className="grid gap-2">
+                      {greetingTemplates.map((template, idx) => (
+                        <button
+                          key={`greeting-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            setTitle(template.title);
+                            setBody(template.body);
+                            setTemplatesOpen(false);
+                          }}
+                          className="text-left p-2 rounded-lg border border-border hover:bg-accent transition-colors"
+                        >
+                          <p className="text-sm font-medium">{template.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{template.body}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">🔹 Gerais / Neutras:</p>
                     <div className="grid gap-2">
                       {generalTemplates.map((template, idx) => (
                         <button
@@ -359,9 +415,9 @@ export default function AdminNotifications() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Para Prestadores:</p>
+                    <p className="text-xs font-medium text-muted-foreground">🔹 Para Prestadores:</p>
                     <div className="grid gap-2">
-                      {providerTemplates.slice(0, 3).map((template, idx) => (
+                      {providerTemplates.slice(0, 5).map((template, idx) => (
                         <button
                           key={idx}
                           type="button"
@@ -379,9 +435,9 @@ export default function AdminNotifications() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Para Clientes:</p>
+                    <p className="text-xs font-medium text-muted-foreground">🔹 Para Clientes:</p>
                     <div className="grid gap-2">
-                      {clientTemplates.slice(0, 3).map((template, idx) => (
+                      {clientTemplates.slice(0, 5).map((template, idx) => (
                         <button
                           key={idx}
                           type="button"
