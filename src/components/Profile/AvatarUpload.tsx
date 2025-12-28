@@ -65,10 +65,10 @@ export function AvatarUpload({ currentAvatar, userName, onAvatarChange, size = '
     setUploading(true);
 
     try {
-      // Generate unique file name
+      // Generate unique file name with user folder for RLS policy compliance
       const fileExt = file.name.split('.').pop();
-      const fileName = `${profile.user_id}-${Date.now()}.${fileExt}`;
-      const filePath = fileName;
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${profile.user_id}/${fileName}`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
