@@ -655,9 +655,9 @@ export default function AdminNotifications() {
                         notif.status === 'cancelled' ? 'bg-muted text-muted-foreground' : 
                         'bg-amber-500/10 text-amber-600'
                       }`}>
-                        {notif.status === 'sent' ? `Enviado (${notif.sent_count}/${notif.recipients_count})` : 
+                        {notif.status === 'sent' ? `Enviada (${notif.sent_count}/${notif.recipients_count})` : 
                          notif.status === 'failed' ? 'Falhou' : 
-                         notif.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                         notif.status === 'cancelled' ? 'Cancelada' : 'Programada'}
                       </span>
                       <span className="text-xs px-1.5 py-0.5 bg-secondary rounded">
                         {getTargetLabel(notif.target_type)}
