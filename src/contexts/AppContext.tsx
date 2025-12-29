@@ -929,14 +929,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       const newStatus = !providerData.is_online;
-      
-      console.log('[ToggleOnline] Toggling provider status via backend:', { 
-        currentStatus: providerData.is_online, 
+
+      console.log('[ToggleOnline] Toggling provider status via backend:', {
+        currentStatus: providerData.is_online,
         newStatus,
         userId: authUser.id,
         hasLocation: !!(providerData.current_lat && providerData.current_lng)
       });
-      
+
       const { data, error } = await supabase.functions.invoke('toggle-provider-online', {
         body: {
           online: newStatus,
@@ -950,12 +950,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
+      // Persist active_profile when going online so provider listeners/polling always activate after reload
+      if (newStatus) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ active_profile: 'provider' })
+          .eq('user_id', authUser.id);
+
+        if (profileError) {
+          console.warn('[ToggleOnline] Failed to persist active_profile=provider (non-blocking):', profileError);
+        }
+      }
+
       // Update local state immediately
       if (newStatus) {
         setProfile(prev => prev ? { ...prev, active_profile: 'provider' } : null);
       }
       setProviderData(prev => prev ? { ...prev, is_online: newStatus } : null);
-      
+
       console.log('[ToggleOnline] Provider is now:', newStatus ? 'ONLINE' : 'OFFLINE', data);
       toast.success(newStatus ? 'Você está online! Aguardando chamados...' : 'Você está offline');
     } catch (error) {
