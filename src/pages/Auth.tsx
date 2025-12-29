@@ -476,15 +476,20 @@ export default function Auth() {
                     {checkingPhone ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continuar'}
                   </Button>
 
-                  <p className="text-center text-sm text-muted-foreground pt-2">
-                    Não tem conta?{' '}
-                    <button
-                      onClick={() => setStep('register')}
-                      className="font-semibold text-primary hover:underline"
-                    >
-                      Criar agora
-                    </button>
-                  </p>
+                  <div className="flex items-center gap-3 pt-2">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs text-muted-foreground">ou</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => setStep('register')}
+                    variant="outline"
+                    className="w-full h-12 rounded-2xl font-semibold border-primary text-primary hover:bg-primary/5 transition-all"
+                  >
+                    Criar conta
+                  </Button>
                 </div>
               </>
             )}
