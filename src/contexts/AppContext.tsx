@@ -250,6 +250,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const oldStatus = chamado.status;
             const newStatus = updated.status;
             
+            // CRITICAL: If chamado was canceled, clear state so provider can receive new chamados
+            if (newStatus === 'canceled') {
+              console.log('[AppContext] Chamado canceled, clearing state to allow new chamados');
+              setChamado(null);
+              setChatMessages([]);
+              setIncomingRequest(null);
+              
+              // Notify based on who canceled
+              if (profile?.active_profile === 'provider') {
+                toast.info('O cliente cancelou o chamado.');
+              } else {
+                toast.info('Chamado cancelado.');
+              }
+              return;
+            }
+            
             setChamado(updated);
             
             // Notify based on new status and user role
