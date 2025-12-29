@@ -113,21 +113,26 @@ export default function Auth() {
     return promise;
   };
 
-  // Check if phone exists in database
+  // Check if phone exists in database using edge function (bypasses RLS)
   const checkPhoneExists = async (): Promise<boolean> => {
     const digits = phone.replace(/\D/g, '');
     if (digits.length < 10) return false;
     
-    const email = getEmailFromPhone(phone);
-    
-    // Try to check if user exists by checking profiles table
-    const { data } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('phone', digits)
-      .limit(1);
-    
-    return data && data.length > 0;
+    try {
+      const response = await supabase.functions.invoke('check-phone-exists', {
+        body: { phone: digits }
+      });
+      
+      if (response.error) {
+        console.error('Error checking phone:', response.error);
+        return false;
+      }
+      
+      return response.data?.exists === true;
+    } catch (error) {
+      console.error('Error checking phone:', error);
+      return false;
+    }
   };
 
   // Handle "Continuar" button - check if phone exists
