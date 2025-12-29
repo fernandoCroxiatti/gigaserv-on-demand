@@ -484,11 +484,33 @@ export default function Auth() {
 
                   <Button
                     type="button"
-                    onClick={() => setStep('register')}
+                    onClick={async () => {
+                      const digits = phone.replace(/\D/g, '');
+                      if (digits.length < 10 || digits.length > 11) {
+                        toast({ title: 'Atenção', description: 'Digite seu telefone para criar conta', variant: 'destructive' });
+                        return;
+                      }
+                      setCheckingPhone(true);
+                      try {
+                        const exists = await checkPhoneExists();
+                        if (exists) {
+                          setPhoneExists(true);
+                          setStep('password');
+                          toast({ title: 'Atenção', description: 'Este telefone já possui cadastro. Faça login.', variant: 'destructive' });
+                        } else {
+                          setStep('register');
+                        }
+                      } catch {
+                        toast({ title: 'Erro', description: 'Erro ao verificar telefone', variant: 'destructive' });
+                      } finally {
+                        setCheckingPhone(false);
+                      }
+                    }}
+                    disabled={checkingPhone}
                     variant="outline"
                     className="w-full h-12 rounded-2xl font-semibold border-primary text-primary hover:bg-primary/5 transition-all"
                   >
-                    Criar conta
+                    {checkingPhone ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Criar conta'}
                   </Button>
                 </div>
               </>
