@@ -11,7 +11,7 @@ import { ForgotPasswordModal } from '@/components/Auth/ForgotPasswordModal';
 import { requestOneSignalPermission, oneSignalLogin } from '@/lib/oneSignal';
 
 type ProfileType = 'client' | 'provider';
-type AuthStep = 'select' | 'login' | 'register';
+type AuthStep = 'select' | 'phone' | 'password' | 'register';
 
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
@@ -54,7 +54,9 @@ export default function Auth() {
   const [step, setStep] = useState<AuthStep>('select');
   const [profileType, setProfileType] = useState<ProfileType>('client');
   const [loading, setLoading] = useState(false);
+  const [checkingPhone, setCheckingPhone] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [phoneExists, setPhoneExists] = useState(false);
   
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -79,18 +81,23 @@ export default function Auth() {
 
   const handleSelectProfile = (type: ProfileType) => {
     setProfileType(type);
-    setStep('login');
+    setStep('phone');
     setPhone('');
     setPassword('');
     setName('');
     setCpf('');
     setVehiclePlate('');
     setSelectedServices(['guincho']);
+    setPhoneExists(false);
   };
 
   const handleBack = () => {
     if (step === 'register') {
-      setStep('login');
+      setStep('phone');
+      setPhoneExists(false);
+    } else if (step === 'password') {
+      setStep('phone');
+      setPassword('');
     } else {
       setStep('select');
     }
@@ -101,10 +108,53 @@ export default function Auth() {
    * OneSignal handles this internally with proper TWA/PWA support
    */
   const startNotificationPermissionRequest = () => {
-    // Start the OneSignal permission request promise
     const promise = requestOneSignalPermission();
     permissionPromiseRef.current = promise;
     return promise;
+  };
+
+  // Check if phone exists in database
+  const checkPhoneExists = async (): Promise<boolean> => {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 10) return false;
+    
+    const email = getEmailFromPhone(phone);
+    
+    // Try to check if user exists by checking profiles table
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('phone', digits)
+      .limit(1);
+    
+    return data && data.length > 0;
+  };
+
+  // Handle "Continuar" button - check if phone exists
+  const handleContinue = async () => {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 11) {
+      toast({ title: 'Erro', description: 'Digite um telefone válido', variant: 'destructive' });
+      return;
+    }
+
+    setCheckingPhone(true);
+    try {
+      const exists = await checkPhoneExists();
+      setPhoneExists(exists);
+      
+      if (exists) {
+        // Phone exists - go to password step
+        setStep('password');
+      } else {
+        // Phone doesn't exist - go to register step
+        setStep('register');
+      }
+    } catch {
+      toast({ title: 'Erro', description: 'Erro ao verificar telefone', variant: 'destructive' });
+    } finally {
+      setCheckingPhone(false);
+    }
   };
 
   const handleLoginClick = async () => {
@@ -267,7 +317,7 @@ export default function Auth() {
   const isProvider = profileType === 'provider';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/30 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Hero Logo Section - Only show on select step */}
       {step === 'select' && (
         <div className="flex-1 flex flex-col items-center justify-center px-6 pt-12 pb-6">
@@ -320,7 +370,7 @@ export default function Auth() {
         </div>
       )}
 
-      {/* Compact Header for login/register steps */}
+      {/* Compact Header for other steps */}
       {step !== 'select' && (
         <div className="px-6 pt-10 pb-4">
           <div className="flex items-center justify-center gap-1.5">
@@ -339,21 +389,21 @@ export default function Auth() {
             {/* Step: Select Profile */}
             {step === 'select' && (
               <div className="space-y-4">
-                <h2 className="text-lg font-semibold text-center text-foreground">Como deseja entrar?</h2>
+                <h2 className="text-lg font-semibold text-center text-foreground">Como deseja continuar?</h2>
                 
                 <Button
                   onClick={() => handleSelectProfile('client')}
-                  className="w-full h-12 rounded-xl text-base font-semibold shadow-sm hover:shadow-md transition-shadow"
+                  className="w-full h-14 rounded-2xl text-base font-semibold shadow-sm hover:shadow-md transition-all"
                   variant="default"
                 >
-                  Login Cliente
+                  Continuar como Cliente
                 </Button>
                 
                 <Button
                   onClick={() => handleSelectProfile('provider')}
-                  className="w-full h-12 rounded-xl text-base font-semibold shadow-sm hover:shadow-md transition-shadow bg-blue-500/90 hover:bg-blue-500 text-white"
+                  className="w-full h-14 rounded-2xl text-base font-semibold shadow-sm hover:shadow-md transition-all bg-secondary text-foreground hover:bg-secondary/80 border border-border"
                 >
-                  Login Prestador
+                  Continuar como Prestador
                 </Button>
 
                 <p className="text-center text-[10px] text-muted-foreground/70 pt-2 leading-relaxed">
@@ -386,19 +436,20 @@ export default function Auth() {
               </div>
             )}
 
-            {/* Step: Login */}
-            {step === 'login' && (
+            {/* Step: Phone (Unified login/register flow) */}
+            {step === 'phone' && (
               <>
                 <div className="flex items-center gap-2">
                   <button onClick={handleBack} className="p-1.5 -ml-1 rounded-full hover:bg-secondary/80 transition-colors">
                     <ArrowLeft className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <h2 className="text-base font-semibold text-foreground">
-                    Login {isProvider ? 'Prestador' : 'Cliente'}
-                  </h2>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Entrar ou criar conta</h2>
+                    <p className="text-xs text-muted-foreground">Rápido, seguro e disponível 24h</p>
+                  </div>
                 </div>
 
-                <form onSubmit={handleLoginSubmit} className="space-y-3">
+                <div className="space-y-4 pt-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="phone" className="text-foreground text-sm">Telefone</Label>
                     <div className="relative">
@@ -409,11 +460,49 @@ export default function Auth() {
                         value={phone}
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(11) 99999-9999"
-                        className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
+                        className="pl-9 h-12 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-base"
+                        autoFocus
                       />
                     </div>
                   </div>
 
+                  <Button
+                    type="button"
+                    onClick={() => void handleContinue()}
+                    disabled={checkingPhone || phone.replace(/\D/g, '').length < 10}
+                    className="w-full h-12 rounded-2xl font-semibold shadow-sm hover:shadow-md transition-all"
+                    variant="default"
+                  >
+                    {checkingPhone ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continuar'}
+                  </Button>
+
+                  <p className="text-center text-sm text-muted-foreground pt-2">
+                    Não tem conta?{' '}
+                    <button
+                      onClick={() => setStep('register')}
+                      className="font-semibold text-primary hover:underline"
+                    >
+                      Criar agora
+                    </button>
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Step: Password (for existing users) */}
+            {step === 'password' && (
+              <>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleBack} className="p-1.5 -ml-1 rounded-full hover:bg-secondary/80 transition-colors">
+                    <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Bem-vindo de volta!</h2>
+                    <p className="text-xs text-muted-foreground">{phone}</p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleLoginSubmit} className="space-y-4 pt-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="password" className="text-foreground text-sm">Senha</Label>
                     <div className="relative">
@@ -423,8 +512,9 @@ export default function Auth() {
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Sua senha"
-                        className="pl-9 pr-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
+                        placeholder="Digite sua senha"
+                        className="pl-9 pr-9 h-12 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-base"
+                        autoFocus
                       />
                       <button
                         type="button"
@@ -444,7 +534,7 @@ export default function Auth() {
                     <button
                       type="button"
                       onClick={() => setShowForgotPassword(true)}
-                      className={`text-xs ${isProvider ? 'text-blue-500' : 'text-primary'} hover:underline`}
+                      className="text-xs text-primary hover:underline"
                     >
                       Esqueci minha senha
                     </button>
@@ -454,8 +544,8 @@ export default function Auth() {
                     type="button"
                     onClick={() => void handleLoginClick()}
                     disabled={loading}
-                    className={`w-full h-11 rounded-xl font-semibold mt-3 shadow-sm hover:shadow-md transition-shadow ${isProvider ? 'bg-blue-500/90 hover:bg-blue-500 text-white' : ''}`}
-                    variant={isProvider ? undefined : 'default'}
+                    className="w-full h-12 rounded-2xl font-semibold shadow-sm hover:shadow-md transition-all"
+                    variant="default"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Entrar'}
                   </Button>
@@ -466,16 +556,6 @@ export default function Auth() {
                   onOpenChange={setShowForgotPassword}
                   isProvider={isProvider}
                 />
-
-                <p className="text-center text-xs text-muted-foreground">
-                  Não tem conta?{' '}
-                  <button
-                    onClick={() => setStep('register')}
-                    className={`font-semibold ${isProvider ? 'text-blue-500' : 'text-primary'}`}
-                  >
-                    Cadastre-se
-                  </button>
-                </p>
               </>
             )}
 
@@ -486,12 +566,15 @@ export default function Auth() {
                   <button onClick={handleBack} className="p-1.5 -ml-1 rounded-full hover:bg-secondary/80 transition-colors">
                     <ArrowLeft className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <h2 className="text-base font-semibold text-foreground">
-                    Cadastro {isProvider ? 'Prestador' : 'Cliente'}
-                  </h2>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Criar conta</h2>
+                    <p className="text-xs text-muted-foreground">
+                      {isProvider ? 'Cadastro de Prestador' : 'Cadastro de Cliente'}
+                    </p>
+                  </div>
                 </div>
 
-                <form onSubmit={handleRegister} className="space-y-3">
+                <form onSubmit={handleRegister} className="space-y-3 pt-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="name" className="text-foreground text-sm">Nome completo</Label>
                     <div className="relative">
@@ -502,22 +585,22 @@ export default function Auth() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Seu nome"
-                        className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
+                        className="pl-9 h-12 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-base"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="phone" className="text-foreground text-sm">Telefone</Label>
+                    <Label htmlFor="phone-register" className="text-foreground text-sm">Telefone</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
-                        id="phone"
+                        id="phone-register"
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(11) 99999-9999"
-                        className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
+                        className="pl-9 h-12 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-base"
                       />
                     </div>
                   </div>
@@ -534,7 +617,7 @@ export default function Auth() {
                             value={cpf}
                             onChange={(e) => setCpf(formatCPF(e.target.value))}
                             placeholder="000.000.000-00"
-                            className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
+                            className="pl-9 h-12 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-base"
                           />
                         </div>
                       </div>
@@ -549,7 +632,7 @@ export default function Auth() {
                             value={vehiclePlate}
                             onChange={(e) => setVehiclePlate(e.target.value.toUpperCase().slice(0, 7))}
                             placeholder="ABC-1D23"
-                            className="pl-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary uppercase text-sm"
+                            className="pl-9 h-12 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary uppercase text-base"
                           />
                         </div>
                       </div>
@@ -566,17 +649,17 @@ export default function Auth() {
                                 key={service}
                                 type="button"
                                 onClick={() => toggleService(service)}
-                                className={`flex items-center gap-1.5 p-2.5 rounded-lg border transition-all ${
+                                className={`flex items-center gap-1.5 p-2.5 rounded-xl border transition-all ${
                                   isSelected 
-                                    ? 'border-blue-500 bg-blue-500/10' 
-                                    : 'border-border/50 bg-secondary/40 hover:border-blue-500/50'
+                                    ? 'border-primary bg-primary/10' 
+                                    : 'border-border/50 bg-secondary/40 hover:border-primary/50'
                                 }`}
                               >
                                 <span className="text-sm">{config.icon}</span>
-                                <span className={`text-xs font-medium ${isSelected ? 'text-blue-600' : 'text-foreground'}`}>
+                                <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                                   {config.label}
                                 </span>
-                                {isSelected && <Check className="w-3 h-3 ml-auto text-blue-500" />}
+                                {isSelected && <Check className="w-3 h-3 ml-auto text-primary" />}
                               </button>
                             );
                           })}
@@ -586,16 +669,16 @@ export default function Auth() {
                   )}
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="password" className="text-foreground text-sm">Senha</Label>
+                    <Label htmlFor="password-register" className="text-foreground text-sm">Senha</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
-                        id="password"
+                        id="password-register"
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Mínimo 6 caracteres"
-                        className="pl-9 pr-9 h-11 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-sm"
+                        className="pl-9 pr-9 h-12 rounded-xl bg-secondary/40 border-0 focus:ring-2 focus:ring-primary text-base"
                       />
                       <button
                         type="button"
@@ -614,20 +697,23 @@ export default function Auth() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className={`w-full h-11 rounded-xl font-semibold mt-3 shadow-sm hover:shadow-md transition-shadow ${isProvider ? 'bg-blue-500/90 hover:bg-blue-500 text-white' : ''}`}
-                    variant={isProvider ? undefined : 'default'}
+                    className="w-full h-12 rounded-2xl font-semibold mt-3 shadow-sm hover:shadow-md transition-all"
+                    variant="default"
                   >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Cadastrar'}
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Criar conta'}
                   </Button>
                 </form>
 
-                <p className="text-center text-xs text-muted-foreground">
+                <p className="text-center text-sm text-muted-foreground">
                   Já tem conta?{' '}
                   <button
-                    onClick={() => setStep('login')}
-                    className={`font-semibold ${isProvider ? 'text-blue-500' : 'text-primary'}`}
+                    onClick={() => {
+                      setStep('phone');
+                      setPhoneExists(false);
+                    }}
+                    className="font-semibold text-primary hover:underline"
                   >
-                    Faça login
+                    Fazer login
                   </button>
                 </p>
               </>
