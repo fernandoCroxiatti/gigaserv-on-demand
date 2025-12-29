@@ -40,7 +40,7 @@ export const ProfileSelectionScreen: React.FC<ProfileSelectionScreenProps> = ({
           onClick={onStart}
           disabled={isLoading}
           size="lg"
-          className="w-full max-w-xs text-lg py-6"
+          className="w-full max-w-xs text-lg py-6 rounded-2xl font-semibold shadow-sm hover:shadow-md transition-all"
         >
           Começar
         </Button>
