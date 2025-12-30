@@ -45,6 +45,7 @@ export function ClientIdleView() {
   const [usingGpsLocation, setUsingGpsLocation] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Permission modals
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -163,13 +164,21 @@ export function ClientIdleView() {
   };
 
   const handleSolicitar = async () => {
+    // Double-click protection
+    if (isSubmitting) return;
     if (!origem) return;
     if (needsDestination && !destino) return;
     
-    createChamado(selectedService, origem, needsDestination ? destino : null, selectedVehicleType);
+    setIsSubmitting(true);
+    try {
+      await createChamado(selectedService, origem, needsDestination ? destino : null, selectedVehicleType);
+    } finally {
+      // Small delay to prevent rapid re-clicks
+      setTimeout(() => setIsSubmitting(false), 2000);
+    }
   };
 
-  const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType;
+  const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType && !isSubmitting;
 
   return (
     <div className="relative h-full">
@@ -405,9 +414,18 @@ export function ClientIdleView() {
             size="lg"
             disabled={!canSubmit}
           >
-            <span className="mr-2">{serviceConfig.icon}</span>
-            Solicitar {serviceConfig.label}
-            <ChevronRight className="w-5 h-5 ml-1" />
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                Solicitando...
+              </>
+            ) : (
+              <>
+                <span className="mr-2">{serviceConfig.icon}</span>
+                Solicitar {serviceConfig.label}
+                <ChevronRight className="w-5 h-5 ml-1" />
+              </>
+            )}
           </Button>
         </div>
       </div>

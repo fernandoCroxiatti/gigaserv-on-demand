@@ -137,6 +137,9 @@ export default function Auth() {
 
   // Handle "Continuar" button - check if phone exists
   const handleContinue = async () => {
+    // Double-click protection
+    if (checkingPhone) return;
+    
     const digits = phone.replace(/\D/g, '');
     if (digits.length < 10 || digits.length > 11) {
       toast({ title: 'Erro', description: 'Digite um telefone válido', variant: 'destructive' });
@@ -163,6 +166,9 @@ export default function Auth() {
   };
 
   const handleLoginClick = async () => {
+    // Double-click protection
+    if (loading) return;
+    
     if (!phone || !password) {
       toast({ title: 'Erro', description: 'Preencha todos os campos', variant: 'destructive' });
       return;
@@ -210,24 +216,32 @@ export default function Auth() {
     void handleLoginClick();
   };
 
+  // Check if CPF exists using edge function (bypasses RLS)
   const checkCpfExists = async (cpfValue: string): Promise<boolean> => {
     const cleanCpf = cpfValue.replace(/\D/g, '');
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('cpf', cleanCpf)
-      .eq('perfil_principal', 'provider')
-      .limit(1);
     
-    if (error) {
+    try {
+      const response = await supabase.functions.invoke('check-cpf-exists', {
+        body: { cpf: cleanCpf }
+      });
+      
+      if (response.error) {
+        console.error('Error checking CPF:', response.error);
+        return false;
+      }
+      
+      return response.data?.exists === true;
+    } catch (error) {
       console.error('Error checking CPF:', error);
       return false;
     }
-    return data && data.length > 0;
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Double-click protection
+    if (loading) return;
     
     if (!phone || !password || !name) {
       toast({ title: 'Erro', description: 'Preencha todos os campos obrigatórios', variant: 'destructive' });
@@ -259,6 +273,17 @@ export default function Auth() {
 
     setLoading(true);
     try {
+      // CRITICAL: Re-verify phone doesn't exist before registration
+      // This prevents race conditions where phone was registered between check and submit
+      const phoneAlreadyExists = await checkPhoneExists();
+      if (phoneAlreadyExists) {
+        toast({ title: 'Atenção', description: 'Este telefone já possui cadastro. Faça login.', variant: 'destructive' });
+        setPhoneExists(true);
+        setStep('password');
+        setLoading(false);
+        return;
+      }
+
       // Check for duplicate CPF for providers
       if (profileType === 'provider') {
         const cpfExists = await checkCpfExists(cpf);
