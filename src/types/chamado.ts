@@ -114,6 +114,10 @@ export interface Chamado {
   payment: Payment | null;
   vehicleType: string | null; // Vehicle type selected by client
 
+  // Negotiation tracking
+  lastProposalBy: 'client' | 'provider' | null; // Who made the last proposal
+  valueAccepted: boolean; // Whether the value has been mutually accepted
+
   // Direct payment (PIX/Dinheiro ao prestador) flags (from backend)
   directPaymentToProvider?: boolean;
   directPaymentReceiptConfirmed?: boolean;

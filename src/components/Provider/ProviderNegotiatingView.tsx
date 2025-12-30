@@ -2,14 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
-import { Send, MessageCircle, User, Navigation, Clock, ArrowRight, Check, Route, Phone, MapPin } from 'lucide-react';
+import { Send, User, Navigation, Clock, Check, Route, Phone, MapPin, Loader2 } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
 import { calculateDistance } from '@/lib/distance';
 import { VEHICLE_TYPES, VehicleType } from '@/types/vehicleTypes';
 
 export function ProviderNegotiatingView() {
-  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, providerData } = useApp();
+  const { chamado, chatMessages, sendChatMessage, cancelChamado, proposeValue, acceptValue, providerData } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
@@ -77,6 +77,16 @@ export function ProviderNegotiatingView() {
       : `${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}min`
     : '--';
 
+  // Determine negotiation state for PROVIDER
+  // State 1: No proposal sent yet - Provider can send proposal
+  // State 2: Provider sent proposal, waiting for client response
+  // State 3: Client sent counter-proposal - Provider can accept or counter
+  // State 4: Value accepted - Just show confirmation
+  const hasProposal = chamado.valorProposto !== null;
+  const lastProposalByProvider = chamado.lastProposalBy === 'provider';
+  const lastProposalByClient = chamado.lastProposalBy === 'client';
+  const valueAccepted = chamado.valueAccepted === true;
+
   const handleSendMessage = () => {
     if (!message.trim()) return;
     sendChatMessage(message);
@@ -96,9 +106,8 @@ export function ProviderNegotiatingView() {
     setSelectedSuggestion(value);
   };
 
-  const handleConfirmValue = () => {
-    if (!chamado.valorProposto) return;
-    confirmValue();
+  const handleAcceptValue = () => {
+    acceptValue();
   };
 
   // Suggested values based on service type
@@ -242,58 +251,128 @@ export function ProviderNegotiatingView() {
                 <h3 className="text-base font-bold text-foreground">Negociação de valor</h3>
                 <span className="text-[10px] text-muted-foreground bg-secondary px-2 py-1 rounded-full">{serviceConfig.estimatedTime}</span>
               </div>
-              
-              {/* Sugestões de valor - Chips */}
-              <div className="grid grid-cols-4 gap-2 mb-3">
-                {suggestedValues.map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => handleSuggestionClick(value)}
-                    className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                      selectedSuggestion === value
-                        ? 'bg-provider-primary text-primary-foreground shadow-md scale-[1.02]'
-                        : 'bg-secondary/80 hover:bg-secondary text-foreground hover:scale-[1.01]'
-                    }`}
-                  >
-                    R$ {value}
-                  </button>
-                ))}
-              </div>
 
-              {/* Campo propor valor */}
-              <div className="flex gap-2 mb-3">
-                <div className="flex-1 flex items-center bg-background rounded-xl px-3 border-2 border-border/50 focus-within:border-provider-primary transition-colors">
-                  <span className="text-muted-foreground text-sm font-medium">R$</span>
-                  <input
-                    type="number"
-                    value={proposedValue}
-                    onChange={(e) => {
-                      setProposedValue(e.target.value);
-                      setSelectedSuggestion(null);
-                    }}
-                    placeholder="Ou digite um valor"
-                    className="flex-1 bg-transparent py-3 px-2 focus:outline-none text-sm font-semibold"
-                  />
-                </div>
-                <Button 
-                  variant="provider" 
-                  onClick={handleProposeValue} 
-                  disabled={!proposedValue} 
-                  size="sm" 
-                  className="px-6 h-12 rounded-xl font-semibold"
-                >
-                  Propor
-                </Button>
-              </div>
-
-              {/* Valor acordado */}
-              {chamado.valorProposto && (
+              {/* Estado 4: Valor Aceito - Mostrar indicador */}
+              {valueAccepted && hasProposal && (
                 <div className="p-4 bg-provider-primary/10 rounded-xl flex items-center justify-between border-2 border-provider-primary/30">
-                  <span className="text-sm text-foreground font-medium">Valor acordado</span>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-5 h-5 text-provider-primary" />
+                    <span className="text-sm text-foreground font-medium">Valor acordado</span>
+                  </div>
                   <span className="text-2xl font-bold text-provider-primary">
-                    R$ {chamado.valorProposto.toFixed(2)}
+                    R$ {chamado.valorProposto?.toFixed(2)}
                   </span>
                 </div>
+              )}
+
+              {/* Estado 2: Prestador enviou proposta - Aguardando cliente */}
+              {!valueAccepted && lastProposalByProvider && hasProposal && (
+                <div className="p-4 bg-secondary/50 rounded-xl flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Sua proposta</p>
+                    <p className="text-2xl font-bold text-provider-primary">R$ {chamado.valorProposto?.toFixed(2)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs">Aguardando cliente</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Estado 3: Cliente enviou contra-proposta - Prestador pode aceitar ou contra-propor */}
+              {!valueAccepted && lastProposalByClient && hasProposal && (
+                <>
+                  {/* Valor proposto pelo cliente */}
+                  <div className="p-4 bg-secondary/50 rounded-xl flex items-center justify-between mb-3">
+                    <span className="text-sm text-foreground font-medium">Proposta do cliente</span>
+                    <span className="text-2xl font-bold text-provider-primary">
+                      R$ {chamado.valorProposto?.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Campo nova proposta */}
+                  <div className="mb-3">
+                    <p className="text-xs text-muted-foreground mb-2">Enviar nova proposta:</p>
+                    <div className="grid grid-cols-4 gap-2 mb-2">
+                      {suggestedValues.map((value) => (
+                        <button
+                          key={value}
+                          onClick={() => handleSuggestionClick(value)}
+                          className={`py-2 rounded-xl text-sm font-semibold transition-all ${
+                            selectedSuggestion === value
+                              ? 'bg-provider-primary text-primary-foreground shadow-md scale-[1.02]'
+                              : 'bg-secondary/80 hover:bg-secondary text-foreground hover:scale-[1.01]'
+                          }`}
+                        >
+                          R$ {value}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1 flex items-center bg-background rounded-xl px-3 border-2 border-border/50 focus-within:border-provider-primary transition-colors">
+                        <span className="text-muted-foreground text-sm font-medium">R$</span>
+                        <input
+                          type="number"
+                          value={proposedValue}
+                          onChange={(e) => {
+                            setProposedValue(e.target.value);
+                            setSelectedSuggestion(null);
+                          }}
+                          placeholder="Ou digite um valor"
+                          className="flex-1 bg-transparent py-3 px-2 focus:outline-none text-sm font-semibold"
+                        />
+                      </div>
+                      <Button 
+                        variant="secondary"
+                        onClick={handleProposeValue} 
+                        disabled={!proposedValue} 
+                        size="sm" 
+                        className="px-4 h-12 rounded-xl font-semibold"
+                      >
+                        Propor
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Estado 1: Nenhuma proposta - Prestador pode enviar primeira proposta */}
+              {!hasProposal && (
+                <>
+                  {/* Sugestões de valor - Chips */}
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    {suggestedValues.map((value) => (
+                      <button
+                        key={value}
+                        onClick={() => handleSuggestionClick(value)}
+                        className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                          selectedSuggestion === value
+                            ? 'bg-provider-primary text-primary-foreground shadow-md scale-[1.02]'
+                            : 'bg-secondary/80 hover:bg-secondary text-foreground hover:scale-[1.01]'
+                        }`}
+                      >
+                        R$ {value}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Campo propor valor */}
+                  <div className="flex gap-2">
+                    <div className="flex-1 flex items-center bg-background rounded-xl px-3 border-2 border-border/50 focus-within:border-provider-primary transition-colors">
+                      <span className="text-muted-foreground text-sm font-medium">R$</span>
+                      <input
+                        type="number"
+                        value={proposedValue}
+                        onChange={(e) => {
+                          setProposedValue(e.target.value);
+                          setSelectedSuggestion(null);
+                        }}
+                        placeholder="Digite o valor"
+                        className="flex-1 bg-transparent py-3 px-2 focus:outline-none text-sm font-semibold"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -344,31 +423,86 @@ export function ProviderNegotiatingView() {
 
           {/* Botões de ação - Rodapé */}
           <div className="px-4 pt-2 pb-4 space-y-3">
-            {/* Confirmação psicológica */}
-            {chamado.valorProposto && (
-              <p className="text-center text-[11px] text-muted-foreground">
-                Ao confirmar, você aceita realizar o serviço pelo valor acordado.
-              </p>
-            )}
             
-            <div className="flex gap-3">
-              <Button 
-                variant="ghost" 
-                onClick={cancelChamado} 
-                className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
-              >
-                Cancelar
-              </Button>
-              <Button 
-                variant="provider"
-                onClick={handleConfirmValue} 
-                disabled={!chamado.valorProposto}
-                className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
-              >
-                Confirmar valor
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
+            {/* Estado 4: Valor aceito - Apenas indicador, sem ações */}
+            {valueAccepted && (
+              <div className="flex gap-3">
+                <Button 
+                  variant="ghost" 
+                  onClick={cancelChamado} 
+                  className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Cancelar
+                </Button>
+                <div className="flex-1 h-12 bg-provider-primary/10 rounded-xl flex items-center justify-center gap-2 text-provider-primary">
+                  <Check className="w-4 h-4" />
+                  <span className="text-sm font-semibold">Aguardando pagamento do cliente</span>
+                </div>
+              </div>
+            )}
+
+            {/* Estado 3: Contra-proposta do cliente - Aceitar ou Propor */}
+            {!valueAccepted && lastProposalByClient && hasProposal && (
+              <div className="flex gap-3">
+                <Button 
+                  variant="ghost" 
+                  onClick={cancelChamado} 
+                  className="h-12 px-4 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  variant="provider"
+                  onClick={handleAcceptValue} 
+                  className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
+                >
+                  Aceitar valor
+                  <Check className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+
+            {/* Estado 2: Aguardando resposta do cliente */}
+            {!valueAccepted && lastProposalByProvider && hasProposal && (
+              <div className="flex gap-3">
+                <Button 
+                  variant="ghost" 
+                  onClick={cancelChamado} 
+                  className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  disabled
+                  variant="provider"
+                  className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Aguardando resposta do cliente
+                </Button>
+              </div>
+            )}
+
+            {/* Estado 1: Nenhuma proposta - Enviar proposta */}
+            {!hasProposal && (
+              <div className="flex gap-3">
+                <Button 
+                  variant="ghost" 
+                  onClick={cancelChamado} 
+                  className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  variant="provider"
+                  onClick={handleProposeValue} 
+                  disabled={!proposedValue}
+                  className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
+                >
+                  Enviar proposta
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
