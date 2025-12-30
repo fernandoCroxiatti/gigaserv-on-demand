@@ -1,3 +1,19 @@
+/**
+ * ProviderView - State-driven UI controller for provider-side experience
+ * 
+ * ARCHITECTURE NOTES:
+ * - This component acts as a router based on chamado.status
+ * - Handles incoming request overlay for new chamados
+ * - Terms acceptance modal blocks access until provider accepts new terms
+ * 
+ * STATUS FLOW (Provider perspective):
+ * idle → negotiating → awaiting_payment → in_service → pending_client_confirmation → finished
+ * 
+ * IMPORTANT: 
+ * - Provider never sees 'searching' status (that's client-only)
+ * - IncomingRequestCard appears as overlay when new chamado is available
+ * - TermsAcceptanceModal blocks all features until terms are accepted
+ */
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { ProviderIdleView } from './Provider/ProviderIdleView';
