@@ -230,9 +230,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadActiveChamado();
   }, [authUser, profile?.active_profile, canAccessProviderFeatures]);
 
-  // Subscribe to chamado updates
+  // Subscribe to chamado updates + backup polling for reliability
   useEffect(() => {
     if (!chamado) return;
+    
+    let pollInterval: NodeJS.Timeout | null = null;
+    let isMounted = true;
+
+    // Backup polling function - ensures we catch updates even if realtime fails
+    const pollChamadoStatus = async () => {
+      if (!isMounted || !chamado?.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('chamados')
+          .select('*')
+          .eq('id', chamado.id)
+          .single();
+        
+        if (error || !data || !isMounted) return;
+        
+        const updated = mapDbChamadoToChamado(data);
+        
+        // Only update if status changed
+        if (updated.status !== chamado.status || updated.prestadorId !== chamado.prestadorId) {
+          console.log('[AppContext] Polling detected status change:', chamado.status, '->', updated.status);
+          
+          // Handle the update same as realtime
+          if (updated.status === 'canceled') {
+            setChamado(null);
+            setChatMessages([]);
+            setIncomingRequest(null);
+            if (profile?.active_profile === 'provider') {
+              toast.info('O cliente cancelou o chamado.');
+            } else {
+              toast.info('Chamado cancelado.');
+            }
+            return;
+          }
+          
+          setChamado(updated);
+          
+          // Notify client of provider acceptance
+          if (profile?.active_profile === 'client' && updated.status === 'negotiating' && chamado.status === 'searching') {
+            toast.success('Um prestador aceitou seu chamado!');
+            if (authUser?.id) {
+              sendClientNotification(
+                authUser.id,
+                'Prestador encontrado!',
+                'Um prestador aceitou seu chamado.',
+                { chamadoId: chamado.id, url: `/?chamado=${chamado.id}` }
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[AppContext] Polling error:', err);
+      }
+    };
+
+    // Start backup polling for 'searching' status (more critical)
+    // Poll every 3 seconds while searching, every 10 seconds for other statuses
+    const pollIntervalMs = chamado.status === 'searching' ? 3000 : 10000;
+    pollInterval = setInterval(pollChamadoStatus, pollIntervalMs);
+    
+    // Also poll immediately on visibility change
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pollChamadoStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const channel = supabase
       .channel(`chamado-${chamado.id}`)
@@ -249,6 +317,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const updated = mapDbChamadoToChamado(payload.new as DbChamado);
             const oldStatus = chamado.status;
             const newStatus = updated.status;
+            
+            console.log('[AppContext] Realtime update received:', oldStatus, '->', newStatus);
             
             // CRITICAL: If chamado was canceled, clear state so provider can receive new chamados
             if (newStatus === 'canceled') {
@@ -301,12 +371,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[AppContext] Realtime subscription status:', status);
+      });
 
     return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       supabase.removeChannel(channel);
     };
-  }, [chamado?.id, chamado?.status, profile?.active_profile, authUser]);
+  }, [chamado?.id, chamado?.status, chamado?.prestadorId, profile?.active_profile, authUser]);
 
   // Load chat messages for active chamado
   useEffect(() => {
@@ -529,6 +604,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      console.log('[AcceptChamado] Attempting to accept chamado:', chamadoId.substring(0, 8));
+      
+      // First, verify the chamado is still available
+      const { data: currentChamado, error: checkError } = await supabase
+        .from('chamados')
+        .select('status, prestador_id')
+        .eq('id', chamadoId)
+        .single();
+      
+      if (checkError) {
+        console.error('[AcceptChamado] Error checking chamado status:', checkError);
+        setIncomingRequest(null);
+        toast.error('Erro ao verificar chamado. Tente novamente.');
+        return;
+      }
+      
+      if (!currentChamado) {
+        console.log('[AcceptChamado] Chamado not found');
+        setIncomingRequest(null);
+        toast.error('Chamado não encontrado');
+        return;
+      }
+      
+      if (currentChamado.status !== 'searching') {
+        console.log('[AcceptChamado] Chamado already accepted, status:', currentChamado.status);
+        setIncomingRequest(null);
+        toast.error('Chamado já foi aceito por outro prestador');
+        return;
+      }
+      
+      if (currentChamado.prestador_id) {
+        console.log('[AcceptChamado] Chamado already has provider:', currentChamado.prestador_id);
+        setIncomingRequest(null);
+        toast.error('Chamado já foi aceito por outro prestador');
+        return;
+      }
+      
       // COMPETITIVE ACCEPT: Only update if chamado is still searching and has no provider
       // This prevents race conditions when multiple providers try to accept
       const { data, error } = await supabase
@@ -545,25 +657,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         // If error is "no rows returned", it means another provider already accepted
-        console.log('[AcceptChamado] Could not accept - likely already taken:', error);
+        console.error('[AcceptChamado] Update failed:', error.message, error.code, error.details);
         setIncomingRequest(null);
-        toast.error('Chamado já foi aceito por outro prestador');
+        
+        // Check if it's an RLS policy violation
+        if (error.code === 'PGRST116' || error.message.includes('0 rows')) {
+          toast.error('Chamado já foi aceito por outro prestador');
+        } else if (error.code === '42501' || error.message.toLowerCase().includes('policy')) {
+          toast.error('Erro de permissão. Tente novamente.');
+          console.error('[AcceptChamado] RLS Policy error - check provider_data and profiles');
+        } else {
+          toast.error('Erro ao aceitar chamado. Tente novamente.');
+        }
         return;
       }
 
       if (!data) {
+        console.log('[AcceptChamado] No data returned after update');
         setIncomingRequest(null);
         toast.error('Chamado já foi aceito por outro prestador');
         return;
       }
 
+      console.log('[AcceptChamado] SUCCESS - Chamado accepted:', data.id.substring(0, 8), 'status:', data.status);
       setChamado(mapDbChamadoToChamado(data));
       setIncomingRequest(null);
       toast.success('Chamado aceito! Inicie a negociação.');
     } catch (error) {
-      console.error('Error accepting chamado:', error);
+      console.error('[AcceptChamado] Exception:', error);
       setIncomingRequest(null);
-      toast.error('Chamado já foi aceito por outro prestador');
+      toast.error('Erro ao aceitar chamado. Tente novamente.');
     }
   }, [authUser, canAccessProviderFeatures]);
 
