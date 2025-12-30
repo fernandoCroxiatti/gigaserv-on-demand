@@ -1,9 +1,11 @@
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { GoogleMap, Marker, DirectionsRenderer, Circle } from '@react-google-maps/api';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { Location, ServiceType } from '@/types/chamado';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Navigation2 } from 'lucide-react';
 import { ProviderMarkers } from './ProviderMarkers';
+import { Button } from '../ui/button';
+import { cn } from '@/lib/utils';
 
 export interface MapProvider {
   id: string;
@@ -12,6 +14,14 @@ export interface MapProvider {
   services?: ServiceType[];
   distance?: number;
 }
+
+/**
+ * Map interaction modes:
+ * - 'free': User can move freely, GPS updates position marker but NOT map center
+ * - 'follow': Map follows user location automatically
+ * - 'navigation': During active ride, auto-follow with recenter option on interaction
+ */
+type MapMode = 'free' | 'follow' | 'navigation';
 
 interface RealMapViewProps {
   center?: Location | null;
@@ -26,6 +36,12 @@ interface RealMapViewProps {
   className?: string;
   zoom?: number;
   animateProviders?: boolean;
+  /** Map interaction mode - defaults to 'free' */
+  mode?: MapMode;
+  /** Callback when user interacts with map (drag/zoom) */
+  onUserInteraction?: () => void;
+  /** Show recenter button when in free mode */
+  showRecenterButton?: boolean;
 }
 
 const mapContainerStyle = {
@@ -39,6 +55,7 @@ const mapOptions: google.maps.MapOptions = {
   mapTypeControl: false,
   streetViewControl: false,
   fullscreenControl: false,
+  gestureHandling: 'greedy', // Allow all gestures
   styles: [
     {
       featureType: 'poi',
@@ -56,20 +73,17 @@ const mapOptions: google.maps.MapOptions = {
 const defaultCenter = { lat: -23.5505, lng: -46.6333 }; // São Paulo
 
 // Calculate zoom level based on radius (in km) to properly frame the circle
-// Uses logarithmic scale for smooth transitions across the 5-100km range
 function getZoomForRadius(radiusKm: number): number {
-  // Zoom levels calibrated to frame the full circle diameter on screen
-  // At equator: zoom 15 ≈ 1.5km view, each zoom level doubles the view area
-  if (radiusKm <= 5) return 12;      // ~5km radius fits well at zoom 12
-  if (radiusKm <= 10) return 11;     // ~10km radius
-  if (radiusKm <= 15) return 10.5;   // ~15km radius
-  if (radiusKm <= 20) return 10;     // ~20km radius
-  if (radiusKm <= 30) return 9.5;    // ~30km radius
-  if (radiusKm <= 40) return 9;      // ~40km radius
-  if (radiusKm <= 50) return 8.5;    // ~50km radius
-  if (radiusKm <= 70) return 8;      // ~70km radius
-  if (radiusKm <= 100) return 7.5;   // ~100km radius
-  return 7;                          // >100km
+  if (radiusKm <= 5) return 12;
+  if (radiusKm <= 10) return 11;
+  if (radiusKm <= 15) return 10.5;
+  if (radiusKm <= 20) return 10;
+  if (radiusKm <= 30) return 9.5;
+  if (radiusKm <= 40) return 9;
+  if (radiusKm <= 50) return 8.5;
+  if (radiusKm <= 70) return 8;
+  if (radiusKm <= 100) return 7.5;
+  return 7;
 }
 
 export function RealMapView({
@@ -85,11 +99,22 @@ export function RealMapView({
   className = '',
   zoom,
   animateProviders = true,
+  mode = 'free',
+  onUserInteraction,
+  showRecenterButton = true,
 }: RealMapViewProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [userLocation, setUserLocation] = useState<Location | null>(null);
+  
+  // Track user interaction state for map centering
+  const [isUserInteracting, setIsUserInteracting] = useState(false);
+  const userInteractionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasUserInteractedRef = useRef(false);
+  
+  // Track if initial center was set
+  const initialCenterSetRef = useRef(false);
 
   // Calculate dynamic zoom based on search radius
   const effectiveZoom = useMemo(() => {
@@ -98,23 +123,27 @@ export function RealMapView({
     return 15;
   }, [zoom, showSearchRadius, searchRadius]);
 
-  // Get user location
+  // Get user location - continuous update for marker, NOT for map center
   useEffect(() => {
-    if (showUserLocation && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            address: 'Sua localização',
-          });
-        },
-        (error) => console.error('Geolocation error:', error)
-      );
-    }
+    if (!showUserLocation || !navigator.geolocation) return;
+    
+    // Watch position for continuous updates
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          address: 'Sua localização',
+        });
+      },
+      (error) => console.error('Geolocation error:', error),
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+    
+    return () => navigator.geolocation.clearWatch(watchId);
   }, [showUserLocation]);
 
-  // Calculate route
+  // Calculate route - unchanged
   useEffect(() => {
     if (!showRoute || !origem || !destino || !isLoaded) {
       setDirections(null);
@@ -138,13 +167,89 @@ export function RealMapView({
     );
   }, [showRoute, origem, destino, isLoaded]);
 
-  const onLoad = useCallback((map: google.maps.Map) => {
-    setMap(map);
-  }, []);
+  // Handle user interaction - sets map to free mode temporarily
+  const handleInteractionStart = useCallback(() => {
+    setIsUserInteracting(true);
+    hasUserInteractedRef.current = true;
+    onUserInteraction?.();
+    
+    if (userInteractionTimeoutRef.current) {
+      clearTimeout(userInteractionTimeoutRef.current);
+    }
+  }, [onUserInteraction]);
+
+  const handleInteractionEnd = useCallback(() => {
+    // In navigation mode, auto-return to follow after 8 seconds
+    // In free mode, stay in free mode (no auto-return)
+    if (mode === 'navigation') {
+      userInteractionTimeoutRef.current = setTimeout(() => {
+        setIsUserInteracting(false);
+      }, 8000);
+    }
+  }, [mode]);
+
+  const onLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+    
+    // Track user interaction
+    mapInstance.addListener('dragstart', handleInteractionStart);
+    mapInstance.addListener('dragend', handleInteractionEnd);
+    mapInstance.addListener('zoom_changed', () => {
+      handleInteractionStart();
+      handleInteractionEnd();
+    });
+  }, [handleInteractionStart, handleInteractionEnd]);
 
   const onUnmount = useCallback(() => {
+    if (userInteractionTimeoutRef.current) {
+      clearTimeout(userInteractionTimeoutRef.current);
+    }
     setMap(null);
   }, []);
+
+  // Handle recenter button click
+  const handleRecenter = useCallback(() => {
+    setIsUserInteracting(false);
+    hasUserInteractedRef.current = false;
+    
+    if (userInteractionTimeoutRef.current) {
+      clearTimeout(userInteractionTimeoutRef.current);
+      userInteractionTimeoutRef.current = null;
+    }
+    
+    // Pan to center
+    if (map && center) {
+      map.panTo({ lat: center.lat, lng: center.lng });
+    } else if (map && userLocation) {
+      map.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+    }
+  }, [map, center, userLocation]);
+
+  // Auto-follow logic based on mode
+  useEffect(() => {
+    if (!map) return;
+    
+    const targetCenter = center || userLocation;
+    if (!targetCenter) return;
+    
+    // Only auto-center if:
+    // - Mode is 'follow' or 'navigation'
+    // - AND user is not currently interacting
+    // - AND (in navigation mode: hasn't interacted, or mode is follow)
+    const shouldAutoCenter = 
+      (mode === 'follow' || (mode === 'navigation' && !isUserInteracting)) &&
+      !isUserInteracting;
+    
+    if (shouldAutoCenter) {
+      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+    }
+    
+    // Set initial center once in free mode
+    if (mode === 'free' && !initialCenterSetRef.current && targetCenter) {
+      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+      initialCenterSetRef.current = true;
+    }
+  }, [map, center, userLocation, mode, isUserInteracting]);
 
   const handleMapClick = useCallback(
     async (e: google.maps.MapMouseEvent) => {
@@ -208,8 +313,11 @@ export function RealMapView({
       ? { lat: userLocation.lat, lng: userLocation.lng }
       : defaultCenter;
 
+  // Determine if we should show recenter button
+  const shouldShowRecenter = showRecenterButton && hasUserInteractedRef.current && isUserInteracting && mode !== 'follow';
+
   return (
-    <div className={className}>
+    <div className={cn("relative", className)}>
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={mapCenter}
@@ -223,7 +331,7 @@ export function RealMapView({
         {showSearchRadius && mapCenter && (
           <Circle
             center={mapCenter}
-            radius={searchRadius * 1000} // Convert km to meters (accurate conversion)
+            radius={searchRadius * 1000}
             options={{
               fillColor: '#2563EB',
               fillOpacity: 0.08,
@@ -235,7 +343,7 @@ export function RealMapView({
           />
         )}
 
-        {/* User location marker */}
+        {/* User location marker - always shows current GPS position */}
         {showUserLocation && userLocation && (
           <Marker
             position={{ lat: userLocation.lat, lng: userLocation.lng }}
@@ -298,6 +406,19 @@ export function RealMapView({
           />
         )}
       </GoogleMap>
+      
+      {/* Recenter button - shows when user has interacted with map */}
+      {shouldShowRecenter && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleRecenter}
+          className="absolute bottom-4 right-4 z-10 bg-card shadow-md gap-2"
+        >
+          <Navigation2 className="w-4 h-4" />
+          Centralizar
+        </Button>
+      )}
     </div>
   );
 }
