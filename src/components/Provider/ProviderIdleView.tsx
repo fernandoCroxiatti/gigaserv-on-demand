@@ -319,74 +319,69 @@ export function ProviderIdleView() {
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-4">
+        <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-3">
           
-          {!isOnline && (!isRegistrationComplete || !stripeVerified) && !checkingStripe && (
-            <div className="flex items-start gap-3 p-3 bg-status-searching/10 rounded-xl">
-              <AlertCircle className="w-4 h-4 text-status-searching flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-status-searching">
-                  {!isRegistrationComplete ? 'Finalize seu cadastro' : 'Ative os recebimentos'}
-                </p>
-                <Button variant="link" className="p-0 h-auto text-xs text-provider-primary" onClick={() => navigate(!isRegistrationComplete ? '/profile' : '/profile?tab=bank')}>
-                  {!isRegistrationComplete ? 'Completar cadastro' : 'Configurar recebimentos'}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Financial Alert Banner */}
-          {financialInfo && (financialInfo.pendingBalance > 0 || financialInfo.isBlocked) && (
-            <FinancialAlertBanner
-              pendingBalance={financialInfo.pendingBalance}
-              maxLimit={financialInfo.maxLimit}
-              isBlocked={financialInfo.isBlocked}
-              reason={financialInfo.reason}
-            />
-          )}
-
-          <div className="flex items-center justify-between gap-4">
+          {/* 1. STATUS - Highest priority: Online/Offline toggle */}
+          <div className={`flex items-center justify-between gap-3 p-3 rounded-xl ${
+            isOnline ? 'bg-provider-primary/10 ring-1 ring-provider-primary/30' : 'bg-secondary/50'
+          }`}>
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isOnline ? 'bg-provider-primary/10' : 'bg-muted'}`}>
-                <Power className={`w-5 h-5 ${isOnline ? 'text-provider-primary' : 'text-muted-foreground'}`} />
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                isOnline ? 'bg-provider-primary' : 'bg-muted'
+              }`}>
+                <Power className={`w-5 h-5 ${isOnline ? 'text-white' : 'text-muted-foreground'}`} />
               </div>
               <div>
                 <p className="font-semibold text-sm">{isOnline ? 'Você está online' : 'Você está offline'}</p>
-                <p className="text-xs text-muted-foreground">{isOnline ? 'Recebendo chamados' : 'Ative para receber'}</p>
+                <p className="text-xs text-muted-foreground">{isOnline ? 'Recebendo chamados' : 'Ative para receber chamados'}</p>
               </div>
             </div>
             <Button 
-              variant={isOnline ? 'provider' : 'outline'} 
+              variant={isOnline ? 'outline' : 'provider'} 
               onClick={handleToggleOnline} 
-              className="h-10 px-5 font-semibold" 
+              className={`h-10 px-5 font-semibold ${isOnline ? 'border-provider-primary text-provider-primary hover:bg-provider-primary/10' : ''}`}
               disabled={checkingStripe || locationLoading}
             >
               {locationLoading ? 'Obtendo GPS...' : isOnline ? 'Ficar offline' : 'Ficar online'}
             </Button>
           </div>
 
+          {/* 2. SEARCH RADIUS - Only when online */}
           {isOnline && (
-            <div className="space-y-3 animate-fade-in pt-2 border-t border-border/50">
+            <div className="space-y-2 px-1 animate-fade-in">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Radar className="w-4 h-4 text-provider-primary" />
                   <span className="text-sm text-muted-foreground">Raio de busca</span>
                 </div>
-                <span className="text-lg font-bold text-provider-primary">{radarRange} km</span>
+                <span className="text-base font-bold text-provider-primary">{radarRange} km</span>
               </div>
-              <Slider value={[radarRange]} onValueChange={(value) => setProviderRadarRange(value[0])} max={100} min={5} step={5} className="provider-theme" />
+              <Slider 
+                value={[radarRange]} 
+                onValueChange={(value) => setProviderRadarRange(value[0])} 
+                max={100} 
+                min={5} 
+                step={5} 
+                className="provider-theme" 
+              />
             </div>
           )}
 
+          {/* 3. SERVICES OFFERED - Only when online */}
           {isOnline && (
-            <div className="space-y-2 animate-fade-in">
-              <button onClick={() => setShowServiceConfig(!showServiceConfig)} className="w-full flex items-center justify-between py-2">
+            <div className="space-y-2 px-1 animate-fade-in">
+              <button 
+                onClick={() => setShowServiceConfig(!showServiceConfig)} 
+                className="w-full flex items-center justify-between py-1"
+              >
                 <div className="flex items-center gap-2">
                   <Settings2 className="w-4 h-4 text-provider-primary" />
                   <span className="text-sm font-medium">Serviços oferecidos</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{currentServices.length} selecionado{currentServices.length > 1 ? 's' : ''}</span>
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    {currentServices.length} selecionado{currentServices.length > 1 ? 's' : ''}
+                  </span>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showServiceConfig ? 'rotate-180' : ''}`} />
                 </div>
               </button>
@@ -396,9 +391,19 @@ export function ProviderIdleView() {
                     const config = SERVICE_CONFIG[service];
                     const isSelected = currentServices.includes(service);
                     return (
-                      <button key={service} onClick={() => toggleService(service)} className={`flex items-center gap-2 p-2.5 rounded-xl transition-all ${isSelected ? 'bg-provider-primary/10 ring-1 ring-provider-primary/30' : 'bg-secondary/50 hover:bg-secondary'}`}>
+                      <button 
+                        key={service} 
+                        onClick={() => toggleService(service)} 
+                        className={`flex items-center gap-2 p-2.5 rounded-xl transition-all ${
+                          isSelected 
+                            ? 'bg-provider-primary/10 ring-1 ring-provider-primary/30' 
+                            : 'bg-secondary/50 hover:bg-secondary'
+                        }`}
+                      >
                         <span className="text-lg">{config.icon}</span>
-                        <span className={`text-xs font-medium flex-1 text-left ${isSelected ? 'text-provider-primary' : ''}`}>{config.label}</span>
+                        <span className={`text-xs font-medium flex-1 text-left ${isSelected ? 'text-provider-primary' : ''}`}>
+                          {config.label}
+                        </span>
                         {isSelected && <Check className="w-3.5 h-3.5 text-provider-primary" />}
                       </button>
                     );
@@ -408,6 +413,36 @@ export function ProviderIdleView() {
             </div>
           )}
 
+          {/* 4. FINANCIAL NOTICE - Lower priority, informative tone */}
+          {financialInfo && (financialInfo.pendingBalance > 0 || financialInfo.isBlocked) && (
+            <FinancialAlertBanner
+              pendingBalance={financialInfo.pendingBalance}
+              maxLimit={financialInfo.maxLimit}
+              isBlocked={financialInfo.isBlocked}
+              reason={financialInfo.reason}
+            />
+          )}
+
+          {/* Registration/Stripe setup notice - only when offline */}
+          {!isOnline && (!isRegistrationComplete || !stripeVerified) && !checkingStripe && (
+            <div className="flex items-start gap-3 p-3 bg-status-searching/10 rounded-xl">
+              <AlertCircle className="w-4 h-4 text-status-searching flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-status-searching">
+                  {!isRegistrationComplete ? 'Finalize seu cadastro' : 'Ative os recebimentos'}
+                </p>
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto text-xs text-provider-primary" 
+                  onClick={() => navigate(!isRegistrationComplete ? '/profile' : '/profile?tab=bank')}
+                >
+                  {!isRegistrationComplete ? 'Completar cadastro' : 'Configurar recebimentos'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Tip for offline users ready to go online */}
           {!isOnline && isRegistrationComplete && stripeVerified && !financialInfo?.isBlocked && (
             <div className="bg-secondary/50 rounded-xl p-3 text-center">
               <p className="text-xs text-muted-foreground">💡 Fique online para receber chamados na sua região</p>
