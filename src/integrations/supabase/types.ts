@@ -433,6 +433,7 @@ export type Database = {
           email: string | null
           id: string
           is_blocked: boolean | null
+          last_activity: string | null
           name: string
           password_recovery_count: number | null
           password_recovery_last_at: string | null
@@ -458,6 +459,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_blocked?: boolean | null
+          last_activity?: string | null
           name: string
           password_recovery_count?: number | null
           password_recovery_last_at?: string | null
@@ -483,6 +485,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_blocked?: boolean | null
+          last_activity?: string | null
           name?: string
           password_recovery_count?: number | null
           password_recovery_last_at?: string | null
@@ -517,6 +520,7 @@ export type Database = {
           id: string
           is_blocked: boolean | null
           is_online: boolean | null
+          last_activity: string | null
           last_reliability_update: string | null
           max_debt_limit: number | null
           payout_enabled: boolean | null
@@ -575,6 +579,7 @@ export type Database = {
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
+          last_activity?: string | null
           last_reliability_update?: string | null
           max_debt_limit?: number | null
           payout_enabled?: boolean | null
@@ -635,6 +640,7 @@ export type Database = {
           id?: string
           is_blocked?: boolean | null
           is_online?: boolean | null
+          last_activity?: string | null
           last_reliability_update?: string | null
           max_debt_limit?: number | null
           payout_enabled?: boolean | null

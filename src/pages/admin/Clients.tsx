@@ -54,7 +54,7 @@ function formatCurrency(value: number) {
 
 export default function AdminClients() {
   const { user } = useAuth();
-  const { clients, loading, blockClient, unblockClient } = useAdminClients();
+  const { clients, loading, onlineNow, onlineToday, blockClient, unblockClient } = useAdminClients();
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; client?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
@@ -141,7 +141,7 @@ export default function AdminClients() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total de Clientes</CardTitle>
@@ -152,12 +152,24 @@ export default function AdminClients() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Clientes Ativos</CardTitle>
+            <CardTitle className="text-sm font-medium">Online Agora</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-status-finished">
-              {clients.filter(c => !c.is_blocked).length}
+              {onlineNow}
             </div>
+            <p className="text-xs text-muted-foreground">últimos 5 minutos</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Online Hoje</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">
+              {onlineToday}
+            </div>
+            <p className="text-xs text-muted-foreground">desde 00:00</p>
           </CardContent>
         </Card>
         <Card>

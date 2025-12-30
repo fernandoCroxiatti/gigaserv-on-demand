@@ -51,7 +51,7 @@ const PAGE_SIZE = 20;
 
 export default function AdminProviders() {
   const { user } = useAuth();
-  const { providers, loading, blockProvider, unblockProvider, togglePayout } = useAdminProviders();
+  const { providers, loading, onlineNow, onlineToday, blockProvider, unblockProvider, togglePayout } = useAdminProviders();
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
@@ -149,7 +149,7 @@ export default function AdminProviders() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total</CardTitle>
@@ -160,12 +160,24 @@ export default function AdminProviders() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Online</CardTitle>
+            <CardTitle className="text-sm font-medium">Online Agora</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-status-finished">
-              {providers.filter(p => p.is_online).length}
+              {onlineNow}
             </div>
+            <p className="text-xs text-muted-foreground">últimos 5 minutos</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Online Hoje</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">
+              {onlineToday}
+            </div>
+            <p className="text-xs text-muted-foreground">desde 00:00</p>
           </CardContent>
         </Card>
         <Card>
