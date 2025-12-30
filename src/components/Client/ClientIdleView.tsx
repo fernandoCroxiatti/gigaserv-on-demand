@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
+import { MapDestinationPicker } from '../Map/MapDestinationPicker';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { useAddressHistory } from '@/hooks/useAddressHistory';
 import { Button } from '../ui/button';
-import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car } from 'lucide-react';
+import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car, Map } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 import { VehicleType } from '@/types/vehicleTypes';
 import { VehicleTypeSelector } from './VehicleTypeSelector';
@@ -50,6 +51,9 @@ export function ClientIdleView() {
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Map destination picker state
+  const [showDestinationPicker, setShowDestinationPicker] = useState(false);
   
   // Permission modals
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -169,6 +173,19 @@ export function ClientIdleView() {
     setDestino(null);
   };
 
+  // Handle destination picker confirm
+  const handleDestinationPickerConfirm = (location: Location) => {
+    setDestino(location);
+    setDestinoText(location.address);
+    setShowDestinationPicker(false);
+    // Save to history
+    saveAddress(location);
+  };
+
+  const handleDestinationPickerCancel = () => {
+    setShowDestinationPicker(false);
+  };
+
   const handleSolicitar = async () => {
     // Double-click protection
     if (isSubmitting) return;
@@ -186,9 +203,21 @@ export function ClientIdleView() {
 
   const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType && !isSubmitting;
 
+  // If destination picker is open, show it fullscreen
+  if (showDestinationPicker) {
+    return (
+      <MapDestinationPicker
+        initialCenter={origem || userLocation}
+        onConfirm={handleDestinationPickerConfirm}
+        onCancel={handleDestinationPickerCancel}
+        className="h-full"
+      />
+    );
+  }
+
   return (
     <div className="relative h-full">
-      {/* Map */}
+      {/* Map - free mode, no auto-centering on user interaction */}
       <RealMapView 
         center={searchLocation}
         origem={origem}
@@ -199,6 +228,8 @@ export function ClientIdleView() {
         animateProviders={true}
         className="absolute inset-0" 
         zoom={origem ? 14 : 13}
+        mode="free"
+        showRecenterButton={true}
       />
       
       {/* Provider status - Compact floating card */}
@@ -343,6 +374,25 @@ export function ClientIdleView() {
                   showRecentOnFocus={true}
                 />
               </div>
+              
+              {/* Select destination on map button */}
+              <button
+                onClick={() => setShowDestinationPicker(true)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover:bg-secondary transition-all"
+              >
+                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
+                  <Map className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-medium text-sm text-foreground">
+                    Selecionar destino no mapa
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Arraste o mapa para escolher o local
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
             </div>
           )}
 
