@@ -255,73 +255,124 @@ export function ClientNegotiatingView() {
             </div>
           </div>
 
-          {/* Seção Negociação de valor */}
+          {/* Seção Negociação de valor - DESTAQUE PRINCIPAL */}
           <div className="px-4 pb-3">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-semibold">Negociação de valor</h3>
-              <span className="text-[10px] text-muted-foreground">{serviceConfig.estimatedTime}</span>
-            </div>
-            
-            {/* Sugestões de valor - Chips */}
-            <div className="flex gap-2 mb-3">
-              {suggestedValues.map((value) => (
-                <button
-                  key={value}
-                  onClick={() => handleSuggestionClick(value)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
-                    selectedSuggestion === value
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'bg-secondary hover:bg-secondary/80 text-foreground'
-                  }`}
-                >
-                  R$ {value}
-                </button>
-              ))}
-            </div>
-
-            {/* Campo propor valor */}
-            <div className="flex gap-2 mb-3">
-              <div className="flex-1 flex items-center bg-secondary rounded-xl px-3 border border-border/50 focus-within:border-primary/50 transition-colors">
-                <span className="text-muted-foreground text-sm">R$</span>
-                <input
-                  type="number"
-                  value={proposedValue}
-                  onChange={(e) => {
-                    setProposedValue(e.target.value);
-                    setSelectedSuggestion(null);
-                  }}
-                  placeholder="Proponha um valor"
-                  className="flex-1 bg-transparent py-2.5 px-2 focus:outline-none text-sm font-medium"
-                />
+            <div className="bg-gradient-to-b from-primary/5 to-transparent rounded-2xl p-4 border border-primary/10">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-bold text-foreground">Negociação de valor</h3>
+                <span className="text-[10px] text-muted-foreground bg-secondary px-2 py-1 rounded-full">{serviceConfig.estimatedTime}</span>
               </div>
+              
+              {/* Sugestões de valor - Chips */}
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                {suggestedValues.map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => handleSuggestionClick(value)}
+                    className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                      selectedSuggestion === value
+                        ? 'bg-primary text-primary-foreground shadow-md scale-[1.02]'
+                        : 'bg-secondary/80 hover:bg-secondary text-foreground hover:scale-[1.01]'
+                    }`}
+                  >
+                    R$ {value}
+                  </button>
+                ))}
+              </div>
+
+              {/* Campo propor valor */}
+              <div className="flex gap-2 mb-3">
+                <div className="flex-1 flex items-center bg-background rounded-xl px-3 border-2 border-border/50 focus-within:border-primary transition-colors">
+                  <span className="text-muted-foreground text-sm font-medium">R$</span>
+                  <input
+                    type="number"
+                    value={proposedValue}
+                    onChange={(e) => {
+                      setProposedValue(e.target.value);
+                      setSelectedSuggestion(null);
+                    }}
+                    placeholder="Ou digite um valor"
+                    className="flex-1 bg-transparent py-3 px-2 focus:outline-none text-sm font-semibold"
+                  />
+                </div>
+                <Button 
+                  onClick={handleProposeValue} 
+                  disabled={!proposedValue} 
+                  size="sm" 
+                  className="px-6 h-12 rounded-xl font-semibold"
+                >
+                  Propor
+                </Button>
+              </div>
+
+              {/* Valor acordado */}
+              {chamado.valorProposto && (
+                <div className="p-4 bg-primary/10 rounded-xl flex items-center justify-between border-2 border-primary/30">
+                  <span className="text-sm text-foreground font-medium">Valor acordado</span>
+                  <span className="text-2xl font-bold text-primary">
+                    R$ {chamado.valorProposto.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mensagem opcional - abaixo do valor */}
+          <div className="px-4 pb-3">
+            <p className="text-xs text-muted-foreground mb-2">Enviar mensagem ao prestador (opcional)</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                placeholder="Ex: Estou na rua principal, carro prata"
+                className="flex-1 bg-secondary rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 border border-border/50"
+              />
               <Button 
-                onClick={handleProposeValue} 
-                disabled={!proposedValue} 
-                size="sm" 
-                className="px-5 h-10 rounded-xl"
+                onClick={handleSendMessage} 
+                size="icon" 
+                variant="secondary"
+                className="h-11 w-11 rounded-xl"
+                disabled={!message.trim()}
               >
-                Propor
+                <Send className="w-4 h-4" />
               </Button>
             </div>
-
-            {/* Valor acordado */}
-            {chamado.valorProposto && (
-              <div className="p-3 bg-primary/10 rounded-xl flex items-center justify-between border border-primary/20 mb-3">
-                <span className="text-xs text-muted-foreground">Valor acordado</span>
-                <span className="text-lg font-bold text-primary">
-                  R$ {chamado.valorProposto.toFixed(2)}
-                </span>
+            
+            {/* Chat messages - compact */}
+            {chatMessages.length > 0 && (
+              <div className="mt-2 max-h-[60px] overflow-y-auto space-y-1">
+                {chatMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.senderType === 'client' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[80%] px-3 py-1.5 rounded-2xl ${
+                      msg.senderType === 'client'
+                        ? 'bg-primary text-primary-foreground rounded-br-md'
+                        : 'bg-secondary rounded-bl-md'
+                    }`}>
+                      <p className="text-xs">{msg.message}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
+          </div>
+
+          {/* Divider */}
+          <div className="mx-4 border-t border-border/50" />
             
-            {/* Direct payment toggle */}
+          {/* Direct payment toggle */}
+          <div className="px-4 py-3">
             <div className="p-3 bg-secondary/50 rounded-xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs font-medium">Pagamento direto ao prestador</p>
-                    <p className="text-[10px] text-muted-foreground">Pix ou dinheiro (fora do app)</p>
+                    <p className="text-[10px] text-muted-foreground">Combine Pix ou dinheiro diretamente</p>
                   </div>
                 </div>
                 <Switch
@@ -330,81 +381,40 @@ export function ClientNegotiatingView() {
                 />
               </div>
               {directPayment && (
-                <p className="mt-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg">
-                  ⚠️ O pagamento será realizado diretamente ao prestador.
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 p-2 rounded-lg">
+                  O pagamento será acertado diretamente com o prestador, sem intermediação do app.
                 </p>
               )}
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="mx-4 border-t border-border/50" />
-
-          {/* Chat messages - compact */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-[40px] max-h-[70px]">
-            {chatMessages.length === 0 ? (
-              <div className="text-center text-muted-foreground text-xs py-1">
-                <MessageCircle className="w-4 h-4 mx-auto mb-1 opacity-50" />
-                <p>Nenhuma mensagem ainda</p>
-              </div>
-            ) : (
-              chatMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.senderType === 'client' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`max-w-[80%] px-3 py-1.5 rounded-2xl ${
-                    msg.senderType === 'client'
-                      ? 'bg-primary text-primary-foreground rounded-br-md'
-                      : 'bg-secondary rounded-bl-md'
-                  }`}>
-                    <p className="text-xs">{msg.message}</p>
-                  </div>
-                </div>
-              ))
+          {/* Botões de ação - Rodapé */}
+          <div className="px-4 pt-2 pb-4 space-y-3">
+            {/* Confirmação psicológica */}
+            {chamado.valorProposto && (
+              <p className="text-center text-[11px] text-muted-foreground">
+                Ao continuar, você confirma o valor e o prestador será acionado.
+              </p>
             )}
-          </div>
-
-          {/* Campo de mensagem */}
-          <div className="px-4 py-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Mensagem opcional para o prestador"
-                className="flex-1 bg-secondary rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 border border-border/50"
-              />
+            
+            <div className="flex gap-3">
               <Button 
-                onClick={handleSendMessage} 
-                size="icon" 
-                className="h-10 w-10 rounded-xl"
-                disabled={!message.trim()}
+                variant="ghost" 
+                onClick={openCancellationDialog}
+                disabled={cancelling}
+                className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
               >
-                <Send className="w-4 h-4" />
+                {cancelling ? 'Cancelando...' : 'Cancelar'}
+              </Button>
+              <Button 
+                onClick={handleConfirmAndPay} 
+                disabled={!chamado.valorProposto}
+                className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
+              >
+                Ir para pagamento
+                <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
-          </div>
-
-          {/* Botões de ação - Rodapé */}
-          <div className="px-4 pt-2 pb-4 flex gap-3">
-            <Button 
-              variant="ghost" 
-              onClick={openCancellationDialog}
-              disabled={cancelling}
-              className="flex-1 h-12 text-sm font-medium bg-secondary/80 hover:bg-secondary text-muted-foreground rounded-xl"
-            >
-              {cancelling ? 'Cancelando...' : 'Cancelar'}
-            </Button>
-            <Button 
-              onClick={handleConfirmAndPay} 
-              disabled={!chamado.valorProposto}
-              className="flex-[2] h-12 text-sm font-semibold gap-2 rounded-xl shadow-md"
-            >
-              Ir para pagamento
-              <ArrowRight className="w-4 h-4" />
-            </Button>
           </div>
         </div>
       </div>

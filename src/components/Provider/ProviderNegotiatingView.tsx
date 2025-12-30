@@ -235,136 +235,140 @@ export function ProviderNegotiatingView() {
             </div>
           </div>
 
-          {/* Seção Negociação de valor */}
+          {/* Seção Negociação de valor - DESTAQUE PRINCIPAL */}
           <div className="px-4 pb-3">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-semibold">Negociação de valor</h3>
-              <span className="text-[10px] text-muted-foreground">{serviceConfig.estimatedTime}</span>
-            </div>
-            
-            {/* Sugestões de valor - Chips */}
-            <div className="flex gap-2 mb-3">
-              {suggestedValues.map((value) => (
-                <button
-                  key={value}
-                  onClick={() => handleSuggestionClick(value)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
-                    selectedSuggestion === value
-                      ? 'bg-provider-primary text-primary-foreground shadow-sm'
-                      : 'bg-secondary hover:bg-secondary/80 text-foreground'
-                  }`}
-                >
-                  R$ {value}
-                </button>
-              ))}
-            </div>
-
-            {/* Campo propor valor */}
-            <div className="flex gap-2 mb-3">
-              <div className="flex-1 flex items-center bg-secondary rounded-xl px-3 border border-border/50 focus-within:border-provider-primary/50 transition-colors">
-                <span className="text-muted-foreground text-sm">R$</span>
-                <input
-                  type="number"
-                  value={proposedValue}
-                  onChange={(e) => {
-                    setProposedValue(e.target.value);
-                    setSelectedSuggestion(null);
-                  }}
-                  placeholder="Proponha um valor"
-                  className="flex-1 bg-transparent py-2.5 px-2 focus:outline-none text-sm font-medium"
-                />
+            <div className="bg-gradient-to-b from-provider-primary/5 to-transparent rounded-2xl p-4 border border-provider-primary/10">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-bold text-foreground">Negociação de valor</h3>
+                <span className="text-[10px] text-muted-foreground bg-secondary px-2 py-1 rounded-full">{serviceConfig.estimatedTime}</span>
               </div>
-              <Button 
-                variant="provider" 
-                onClick={handleProposeValue} 
-                disabled={!proposedValue} 
-                size="sm" 
-                className="px-5 h-10 rounded-xl"
-              >
-                Propor
-              </Button>
-            </div>
-
-            {/* Valor acordado */}
-            {chamado.valorProposto && (
-              <div className="p-3 bg-provider-primary/10 rounded-xl flex items-center justify-between border border-provider-primary/20">
-                <span className="text-xs text-muted-foreground">Valor acordado</span>
-                <span className="text-lg font-bold text-provider-primary">
-                  R$ {chamado.valorProposto.toFixed(2)}
-                </span>
+              
+              {/* Sugestões de valor - Chips */}
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                {suggestedValues.map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => handleSuggestionClick(value)}
+                    className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                      selectedSuggestion === value
+                        ? 'bg-provider-primary text-primary-foreground shadow-md scale-[1.02]'
+                        : 'bg-secondary/80 hover:bg-secondary text-foreground hover:scale-[1.01]'
+                    }`}
+                  >
+                    R$ {value}
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
 
-          {/* Divider */}
-          <div className="mx-4 border-t border-border/50" />
-
-          {/* Chat messages - compact */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-[40px] max-h-[70px]">
-            {chatMessages.length === 0 ? (
-              <div className="text-center text-muted-foreground text-xs py-1">
-                <MessageCircle className="w-4 h-4 mx-auto mb-1 opacity-50" />
-                <p>Nenhuma mensagem ainda</p>
-              </div>
-            ) : (
-              chatMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.senderType === 'provider' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`max-w-[80%] px-3 py-1.5 rounded-2xl ${
-                    msg.senderType === 'provider'
-                      ? 'bg-provider-primary text-primary-foreground rounded-br-md'
-                      : 'bg-secondary rounded-bl-md'
-                  }`}>
-                    <p className="text-xs">{msg.message}</p>
-                  </div>
+              {/* Campo propor valor */}
+              <div className="flex gap-2 mb-3">
+                <div className="flex-1 flex items-center bg-background rounded-xl px-3 border-2 border-border/50 focus-within:border-provider-primary transition-colors">
+                  <span className="text-muted-foreground text-sm font-medium">R$</span>
+                  <input
+                    type="number"
+                    value={proposedValue}
+                    onChange={(e) => {
+                      setProposedValue(e.target.value);
+                      setSelectedSuggestion(null);
+                    }}
+                    placeholder="Ou digite um valor"
+                    className="flex-1 bg-transparent py-3 px-2 focus:outline-none text-sm font-semibold"
+                  />
                 </div>
-              ))
-            )}
+                <Button 
+                  variant="provider" 
+                  onClick={handleProposeValue} 
+                  disabled={!proposedValue} 
+                  size="sm" 
+                  className="px-6 h-12 rounded-xl font-semibold"
+                >
+                  Propor
+                </Button>
+              </div>
+
+              {/* Valor acordado */}
+              {chamado.valorProposto && (
+                <div className="p-4 bg-provider-primary/10 rounded-xl flex items-center justify-between border-2 border-provider-primary/30">
+                  <span className="text-sm text-foreground font-medium">Valor acordado</span>
+                  <span className="text-2xl font-bold text-provider-primary">
+                    R$ {chamado.valorProposto.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Campo de mensagem */}
-          <div className="px-4 py-2">
+          {/* Mensagem opcional - abaixo do valor */}
+          <div className="px-4 pb-3">
+            <p className="text-xs text-muted-foreground mb-2">Enviar mensagem ao cliente (opcional)</p>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Mensagem opcional para o cliente"
-                className="flex-1 bg-secondary rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-provider-primary/50 border border-border/50"
+                placeholder="Ex: Estou a caminho, chego em 10 min"
+                className="flex-1 bg-secondary rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-provider-primary/30 border border-border/50"
               />
               <Button 
-                variant="provider" 
+                variant="secondary" 
                 onClick={handleSendMessage} 
                 size="icon" 
-                className="h-10 w-10 rounded-xl"
+                className="h-11 w-11 rounded-xl"
                 disabled={!message.trim()}
               >
                 <Send className="w-4 h-4" />
               </Button>
             </div>
+            
+            {/* Chat messages - compact */}
+            {chatMessages.length > 0 && (
+              <div className="mt-2 max-h-[60px] overflow-y-auto space-y-1">
+                {chatMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.senderType === 'provider' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[80%] px-3 py-1.5 rounded-2xl ${
+                      msg.senderType === 'provider'
+                        ? 'bg-provider-primary text-primary-foreground rounded-br-md'
+                        : 'bg-secondary rounded-bl-md'
+                    }`}>
+                      <p className="text-xs">{msg.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Botões de ação - Rodapé */}
-          <div className="px-4 pt-2 pb-4 flex gap-3">
-            <Button 
-              variant="ghost" 
-              onClick={cancelChamado} 
-              className="flex-1 h-12 text-sm font-medium bg-secondary/80 hover:bg-secondary text-muted-foreground rounded-xl"
-            >
-              Cancelar
-            </Button>
-            <Button 
-              variant="provider"
-              onClick={handleConfirmValue} 
-              disabled={!chamado.valorProposto}
-              className="flex-[2] h-12 text-sm font-semibold gap-2 rounded-xl shadow-md"
-            >
-              Confirmar valor
-              <ArrowRight className="w-4 h-4" />
-            </Button>
+          <div className="px-4 pt-2 pb-4 space-y-3">
+            {/* Confirmação psicológica */}
+            {chamado.valorProposto && (
+              <p className="text-center text-[11px] text-muted-foreground">
+                Ao confirmar, você aceita realizar o serviço pelo valor acordado.
+              </p>
+            )}
+            
+            <div className="flex gap-3">
+              <Button 
+                variant="ghost" 
+                onClick={cancelChamado} 
+                className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                variant="provider"
+                onClick={handleConfirmValue} 
+                disabled={!chamado.valorProposto}
+                className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
+              >
+                Confirmar valor
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
