@@ -73,13 +73,16 @@ export function ClientNegotiatingView() {
     : '--';
 
   // Determine negotiation state for CLIENT
-  // State 1: Provider sent proposal, client can accept or counter-propose
+  // State 1: Provider sent proposal (or any proposal exists that client didn't send), client can accept or counter-propose
   // State 2: Client sent counter-proposal, waiting for provider response
   // State 3: Value accepted, client can proceed to payment
   const hasProposal = chamado.valorProposto !== null;
-  const lastProposalByProvider = chamado.lastProposalBy === 'provider';
   const lastProposalByClient = chamado.lastProposalBy === 'client';
   const valueAccepted = chamado.valueAccepted === true;
+  
+  // Client can act when: there's a proposal, it's not accepted yet, and client wasn't the last proposer
+  // This ensures client sees action buttons when provider sends proposal (regardless of lastProposalBy value)
+  const clientCanAct = hasProposal && !valueAccepted && !lastProposalByClient;
 
   const handleSendMessage = () => {
     if (!message.trim()) return;
@@ -303,8 +306,8 @@ export function ClientNegotiatingView() {
                 </div>
               )}
 
-              {/* Estado 1: Prestador enviou proposta - Cliente pode aceitar ou contra-propor */}
-              {!valueAccepted && lastProposalByProvider && hasProposal && (
+              {/* Estado 1: Proposta disponível para cliente aceitar ou contra-propor */}
+              {clientCanAct && (
                 <>
                   {/* Valor proposto pelo prestador */}
                   <div className="p-4 bg-secondary/50 rounded-xl flex items-center justify-between mb-3">
@@ -474,8 +477,8 @@ export function ClientNegotiatingView() {
               </>
             )}
 
-            {/* Estado 1: Proposta do prestador - Botões aceitar/recusar */}
-            {!valueAccepted && lastProposalByProvider && hasProposal && (
+            {/* Estado 1: Proposta disponível - Botões aceitar/recusar */}
+            {clientCanAct && (
               <div className="flex gap-3">
                 <Button 
                   variant="ghost" 
