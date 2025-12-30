@@ -29,6 +29,7 @@ import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { safeLocalStorage } from '@/lib/safeStorage';
 import { calculateFee, createFeeAuditLog, canFinalizeWithFee } from '@/lib/feeCalculator';
 import { parseSettingNumber } from '@/lib/appSettings';
 import {
@@ -66,6 +67,9 @@ function normalizePhase(phase: string | null): NavigationPhase {
   if (phase === 'going_to_destination') return 'to_destination';
   return phase as NavigationPhase;
 }
+
+// Local storage key for phase persistence fallback (prevents regression on unexpected reload)
+const PHASE_STORAGE_KEY_PREFIX = 'nav_phase_';
 
 export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const { chamado, finishService, profile, availableProviders, cancelChamado, chatMessages } = useApp();
@@ -247,14 +251,25 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   // Track last phase to detect changes (avoid stale closure issues)
   const lastReceivedPhaseRef = useRef<string>(navigationPhase);
   
-  // Sync ref when local phase changes
+  // Sync ref and persist phase to local storage when it changes (fallback for reload recovery)
   useEffect(() => {
     lastReceivedPhaseRef.current = navigationPhase;
-  }, [navigationPhase]);
+    
+    // Persist phase to local storage for reload recovery
+    if (chamado?.id) {
+      const storageKey = `${PHASE_STORAGE_KEY_PREFIX}${chamado.id}`;
+      safeLocalStorage.setItem(storageKey, navigationPhase);
+    }
+  }, [navigationPhase, chamado?.id]);
 
   // Load navigation state from database on mount (ONCE)
+  // FALLBACK: Check local storage first for phase recovery after unexpected reload
   useEffect(() => {
     const loadNavigationState = async () => {
+      // Check local storage for cached phase (fallback for reload recovery)
+      const storageKey = `${PHASE_STORAGE_KEY_PREFIX}${chamado.id}`;
+      const cachedPhase = safeLocalStorage.getItem(storageKey);
+      
       const { data, error } = await supabase
         .from('chamados')
         .select('navigation_phase, route_polyline, route_distance_meters, route_duration_seconds')
@@ -263,16 +278,37 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
       if (error) {
         console.error('[Navigation] Error loading state:', error);
+        // If DB fails but we have cached phase, use it as fallback
+        if (cachedPhase) {
+          const normalizedPhase = normalizePhase(cachedPhase);
+          console.log('[Navigation] Using cached phase as fallback:', normalizedPhase);
+          setNavigationPhase(normalizedPhase);
+          lastReceivedPhaseRef.current = normalizedPhase;
+        }
         return;
       }
 
       if (data) {
-        if (data.navigation_phase) {
-          // Normalize old phase names to new
-          const normalizedPhase = normalizePhase(data.navigation_phase);
-          setNavigationPhase(normalizedPhase);
-          lastReceivedPhaseRef.current = normalizedPhase;
+        // Determine the phase: prefer DB, but use local cache if DB is behind
+        // This handles the race condition where DB hasn't synced yet
+        const dbPhase = normalizePhase(data.navigation_phase);
+        const localPhase = cachedPhase ? normalizePhase(cachedPhase) : null;
+        
+        // If local storage has 'to_destination' but DB has 'to_client', trust local
+        // This is the critical recovery scenario - DB may be stale after reload
+        const phaseOrder: NavigationPhase[] = ['to_client', 'at_client', 'to_destination', 'finished'];
+        const dbIndex = phaseOrder.indexOf(dbPhase);
+        const localIndex = localPhase ? phaseOrder.indexOf(localPhase) : -1;
+        
+        const finalPhase = localIndex > dbIndex ? localPhase! : dbPhase;
+        
+        if (localIndex > dbIndex) {
+          console.log('[Navigation] Local phase ahead of DB, using local:', localPhase, 'vs DB:', dbPhase);
         }
+        
+        setNavigationPhase(finalPhase);
+        lastReceivedPhaseRef.current = finalPhase;
+        
         if (data.route_polyline) {
           setRoutePolyline(data.route_polyline);
           routeCalculatedRef.current = `${chamado.id}-${data.navigation_phase}`;
@@ -589,6 +625,10 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         })
         .eq('id', chamado.id);
 
+      // Clean up local storage phase cache on service finish
+      const storageKey = `${PHASE_STORAGE_KEY_PREFIX}${chamado.id}`;
+      safeLocalStorage.removeItem(storageKey);
+
       await finishService();
       toast.success('Pagamento confirmado! Serviço finalizado.');
     } catch (error) {
@@ -616,6 +656,10 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           provider_arrived_at_destination: true,
         })
         .eq('id', chamado.id);
+
+      // Clean up local storage phase cache on service finish
+      const storageKey = `${PHASE_STORAGE_KEY_PREFIX}${chamado.id}`;
+      safeLocalStorage.removeItem(storageKey);
 
       await finishService();
     } catch (error) {
