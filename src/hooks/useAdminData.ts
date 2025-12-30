@@ -373,6 +373,8 @@ export function useAdminProviders() {
   const { user } = useAuth();
   const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [onlineNow, setOnlineNow] = useState(0);
+  const [onlineToday, setOnlineToday] = useState(0);
 
   const fetchProviders = useCallback(async () => {
     if (!user) return;
@@ -387,6 +389,29 @@ export function useAdminProviders() {
         .eq('perfil_principal', 'provider');
 
       if (profilesError) throw profilesError;
+
+      const now = new Date();
+      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+      // Calculate online stats from provider_data
+      let countOnlineNow = 0;
+      let countOnlineToday = 0;
+
+      (providerData || []).forEach((pd) => {
+        if (pd.last_activity) {
+          const lastActivity = new Date(pd.last_activity);
+          if (lastActivity >= new Date(fiveMinutesAgo)) {
+            countOnlineNow++;
+          }
+          if (lastActivity >= new Date(todayStart)) {
+            countOnlineToday++;
+          }
+        }
+      });
+
+      setOnlineNow(countOnlineNow);
+      setOnlineToday(countOnlineToday);
 
       const combined =
         providerData?.map((pd) => ({
@@ -493,13 +518,15 @@ export function useAdminProviders() {
     }
   };
 
-  return { providers, loading, blockProvider, unblockProvider, togglePayout, refetch: fetchProviders };
+  return { providers, loading, onlineNow, onlineToday, blockProvider, unblockProvider, togglePayout, refetch: fetchProviders };
 }
 
 export function useAdminClients() {
   const { user } = useAuth();
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [onlineNow, setOnlineNow] = useState(0);
+  const [onlineToday, setOnlineToday] = useState(0);
 
   const fetchClients = useCallback(async () => {
     if (!user) return;
@@ -511,6 +538,29 @@ export function useAdminClients() {
         .eq('perfil_principal', 'client');
 
       if (error) throw error;
+
+      const now = new Date();
+      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+      // Calculate online stats
+      let countOnlineNow = 0;
+      let countOnlineToday = 0;
+
+      (profiles || []).forEach((profile) => {
+        if (profile.last_activity) {
+          const lastActivity = new Date(profile.last_activity);
+          if (lastActivity >= new Date(fiveMinutesAgo)) {
+            countOnlineNow++;
+          }
+          if (lastActivity >= new Date(todayStart)) {
+            countOnlineToday++;
+          }
+        }
+      });
+
+      setOnlineNow(countOnlineNow);
+      setOnlineToday(countOnlineToday);
 
       const clientsWithStats = await Promise.all(
         (profiles || []).map(async (profile) => {
@@ -606,7 +656,7 @@ export function useAdminClients() {
     }
   };
 
-  return { clients, loading, blockClient, unblockClient, refetch: fetchClients };
+  return { clients, loading, onlineNow, onlineToday, blockClient, unblockClient, refetch: fetchClients };
 }
 
 export function useAdminChamados(filters?: {

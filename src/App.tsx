@@ -12,6 +12,7 @@ import { SafeSplashScreen } from "./components/SafeSplashScreen";
 import { ProfileSelectionScreen } from "./components/ProfileSelectionScreen";
 import { useSafeInitialization } from "./hooks/useSafeInitialization";
 import { useAudioUnlock } from "./hooks/useAudioUnlock";
+import { useActivityTracker } from "./hooks/useActivityTracker";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
@@ -49,6 +50,7 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  useActivityTracker();
 
   if (loading) {
     return (
