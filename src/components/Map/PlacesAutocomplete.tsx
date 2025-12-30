@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { Location } from '@/types/chamado';
-import { MapPin, Loader2, X } from 'lucide-react';
+import { MapPin, Loader2, X, Clock } from 'lucide-react';
+import { AddressHistoryItem } from '@/hooks/useAddressHistory';
 
 interface PlacesAutocompleteProps {
   value: string;
@@ -10,6 +11,8 @@ interface PlacesAutocompleteProps {
   placeholder?: string;
   icon?: React.ReactNode;
   className?: string;
+  recentAddresses?: AddressHistoryItem[];
+  showRecentOnFocus?: boolean;
 }
 
 export function PlacesAutocomplete({
@@ -19,10 +22,13 @@ export function PlacesAutocomplete({
   placeholder = 'Digite um endereço',
   icon,
   className = '',
+  recentAddresses = [],
+  showRecentOnFocus = false,
 }: PlacesAutocompleteProps) {
   const { isLoaded } = useGoogleMaps();
   const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [showRecent, setShowRecent] = useState(false);
   const [loading, setLoading] = useState(false);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
@@ -43,6 +49,7 @@ export function PlacesAutocomplete({
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setShowRecent(false);
       }
     };
 
@@ -53,6 +60,7 @@ export function PlacesAutocomplete({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
     onChange(inputValue);
+    setShowRecent(false);
 
     if (!inputValue.trim() || !autocompleteService.current) {
       latestRequestId.current += 1; // invalidate pending callbacks
@@ -91,6 +99,14 @@ export function PlacesAutocomplete({
     );
   };
 
+  const handleFocus = () => {
+    if (predictions.length > 0) {
+      setIsOpen(true);
+    } else if (showRecentOnFocus && recentAddresses.length > 0 && !value.trim()) {
+      setShowRecent(true);
+    }
+  };
+
   const handleSelect = async (prediction: google.maps.places.AutocompletePrediction) => {
     if (!placesService.current) return;
 
@@ -111,6 +127,7 @@ export function PlacesAutocomplete({
             setPredictions([]);
           }
           setIsOpen(false);
+          setShowRecent(false);
           setLoading(false);
         }
       );
@@ -120,9 +137,23 @@ export function PlacesAutocomplete({
     }
   };
 
+  const handleSelectRecent = (item: AddressHistoryItem) => {
+    const location: Location = {
+      lat: item.lat,
+      lng: item.lng,
+      address: item.address,
+      placeId: item.placeId,
+    };
+    onChange(location.address);
+    onSelect(location);
+    setShowRecent(false);
+    setIsOpen(false);
+  };
+
   const handleClear = () => {
     onChange('');
     setPredictions([]);
+    setShowRecent(false);
     inputRef.current?.focus();
   };
 
@@ -135,7 +166,7 @@ export function PlacesAutocomplete({
           type="text"
           value={value}
           onChange={handleInputChange}
-          onFocus={() => predictions.length > 0 && setIsOpen(true)}
+          onFocus={handleFocus}
           placeholder={placeholder}
           className="flex-1 bg-transparent text-sm font-medium focus:outline-none placeholder:text-muted-foreground"
         />
@@ -147,6 +178,28 @@ export function PlacesAutocomplete({
         )}
       </div>
 
+      {/* Recent addresses dropdown */}
+      {showRecent && recentAddresses.length > 0 && (
+        <div className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] max-h-60 overflow-y-auto">
+          <div className="px-3 py-2 border-b border-border">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Endereços recentes</p>
+          </div>
+          {recentAddresses.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => handleSelectRecent(item)}
+              className="w-full flex items-start gap-3 p-3 hover:bg-secondary transition-colors text-left border-b border-border last:border-0"
+            >
+              <Clock className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{item.address}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Google Places predictions */}
       {isOpen && predictions.length > 0 && (
         <div className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] max-h-60 overflow-y-auto">
           {predictions.map((prediction) => (

@@ -6,7 +6,7 @@ import { useProgressiveSearch } from '@/hooks/useProgressiveSearch';
 import { useCancellationWithReason } from '@/hooks/useCancellationWithReason';
 import { CancellationReasonDialog } from '../CancellationReasonDialog';
 import { Button } from '../ui/button';
-import { X, MapPin, Navigation } from 'lucide-react';
+import { X, MapPin, Navigation, RefreshCw, Loader2 } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ export function ClientSearchingView() {
   const { chamado, cancelChamado, resetChamado } = useApp();
   const previousDeclinedRef = useRef<string[]>([]);
   const [declinedProviderIdsFromDb, setDeclinedProviderIdsFromDb] = useState<string[]>([]);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Cancellation with reason
   const {
@@ -59,12 +60,42 @@ export function ClientSearchingView() {
     totalRadii,
     forceExpandRadius,
     cooldownRemaining,
+    resetSearch,
   } = useProgressiveSearch({
     userLocation: chamado?.origem || null,
     serviceType: chamado?.tipoServico || 'guincho',
     enabled: !!chamado && chamado.status === 'searching',
     excludedProviderIds: declinedProviderIdsFromDb,
   });
+
+  // Handle retry search
+  const handleRetry = async () => {
+    if (!chamado?.id || isRetrying) return;
+    
+    setIsRetrying(true);
+    try {
+      // Clear declined providers to restart search
+      await supabase
+        .from('chamados')
+        .update({ declined_provider_ids: [] })
+        .eq('id', chamado.id);
+      
+      setDeclinedProviderIdsFromDb([]);
+      previousDeclinedRef.current = [];
+      
+      // Reset search state
+      if (resetSearch) {
+        resetSearch();
+      }
+      
+      toast.info('Buscando prestadores novamente...');
+    } catch (error) {
+      console.error('[ClientSearching] Error retrying:', error);
+      toast.error('Erro ao tentar novamente');
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   // Subscribe to chamado updates to detect when providers decline
   useEffect(() => {
@@ -206,27 +237,52 @@ export function ClientSearchingView() {
             </div>
           </div>
 
-          {/* Loading animation - compact */}
-          <div className="flex items-center justify-center gap-2 py-2">
-            <div className="flex gap-1">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
-                  style={{ animationDelay: `${i * 0.15}s` }}
-                />
-              ))}
+          {/* Status and retry button */}
+          {searchState === 'timeout' ? (
+            <div className="space-y-3 py-2">
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Nenhum prestador encontrado
+                </span>
+              </div>
+              <Button 
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="w-full h-11"
+              >
+                {isRetrying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Buscando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Tentar novamente
+                  </>
+                )}
+              </Button>
             </div>
-            <span className="text-xs text-muted-foreground">
-              {searchState === 'timeout' 
-                ? 'Nenhum prestador encontrado'
-                : searchState === 'waiting_cooldown'
+          ) : (
+            <div className="flex items-center justify-center gap-2 py-2">
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: `${i * 0.15}s` }}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {searchState === 'waiting_cooldown'
                   ? `Aguardando (${Math.floor(cooldownRemaining / 60)}:${String(cooldownRemaining % 60).padStart(2, '0')})`
                   : searchState === 'expanding_radius'
                     ? `Expandindo para ${currentRadius}km...`
                     : 'Aguardando resposta'}
-            </span>
-          </div>
+              </span>
+            </div>
+          )}
 
           {/* Cancel button - wider */}
           <Button 

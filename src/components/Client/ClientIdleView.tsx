@@ -5,6 +5,7 @@ import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
+import { useAddressHistory } from '@/hooks/useAddressHistory';
 import { Button } from '../ui/button';
 import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
@@ -37,6 +38,9 @@ export function ClientIdleView() {
     requestPermission: requestNotifPermission,
     dismissCTA: dismissNotifCTA,
   } = useNotificationPermission('client');
+  
+  // Address history for destination field
+  const { addresses: recentAddresses, saveAddress } = useAddressHistory();
   
   const [selectedService, setSelectedService] = useState<ServiceType>('guincho');
   const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType>('carro_passeio');
@@ -156,6 +160,8 @@ export function ClientIdleView() {
   const handleDestinoSelect = (location: Location) => {
     setDestino(location);
     setDestinoText(location.address);
+    // Save to history
+    saveAddress(location);
   };
 
   const handleDestinoTextChange = (text: string) => {
@@ -390,6 +396,8 @@ export function ClientIdleView() {
                   onSelect={handleDestinoSelect}
                   placeholder="Oficina, casa ou outro destino"
                   icon={<MapPin className="w-4 h-4 text-muted-foreground" />}
+                  recentAddresses={recentAddresses}
+                  showRecentOnFocus={true}
                 />
               </div>
             )}
