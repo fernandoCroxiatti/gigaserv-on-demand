@@ -198,7 +198,7 @@ export function DirectPaymentConfirmationDialog({
             disabled={isLoading || !canFinalize}
             className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-12 text-base font-semibold"
           >
-            {isLoading ? (
+          {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 Finalizando...
@@ -206,7 +206,7 @@ export function DirectPaymentConfirmationDialog({
             ) : (
               <>
                 <CheckCircle className="w-5 h-5 mr-2" />
-                Recebi o pagamento
+                Finalizar corrida
               </>
             )}
           </AlertDialogAction>

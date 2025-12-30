@@ -5,6 +5,7 @@ import { TurnByTurnDisplay } from './TurnByTurnDisplay';
 import { ClientStatusDisplay } from './ClientStatusDisplay';
 import { useNavigationRoute } from '@/hooks/useNavigationRoute';
 import { useNavigationInstructions } from '@/hooks/useNavigationInstructions';
+import { useRemainingDistance } from '@/hooks/useRemainingDistance';
 import { useRealtimeGPS } from '@/hooks/useRealtimeGPS';
 import { useProviderTracking } from '@/hooks/useProviderTracking';
 import { useOtherPartyContact } from '@/hooks/useOtherPartyContact';
@@ -72,6 +73,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const [routePolyline, setRoutePolyline] = useState<string>('');
   const [eta, setEta] = useState<string>('');
   const [distance, setDistance] = useState<string>('');
+  const [initialDistanceMeters, setInitialDistanceMeters] = useState<number>(0);
+  const [initialDurationSeconds, setInitialDurationSeconds] = useState<number>(0);
   const [isConfirming, setIsConfirming] = useState(false);
   const [showArrivalDialog, setShowArrivalDialog] = useState(false);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
@@ -232,6 +235,15 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     isProvider: mode === 'provider',
   });
 
+  // Calculate remaining distance dynamically based on current position (NO extra API calls)
+  const remainingDistance = useRemainingDistance(
+    providerLocation,
+    routePolyline,
+    initialDistanceMeters,
+    initialDurationSeconds,
+    navigationPhase
+  );
+
   // Track last phase to detect changes (avoid stale closure issues)
   const lastReceivedPhaseRef = useRef<string>(navigationPhase);
   
@@ -267,9 +279,11 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         }
         if (data.route_distance_meters) {
           setDistance(formatDistance(data.route_distance_meters));
+          setInitialDistanceMeters(data.route_distance_meters);
         }
         if (data.route_duration_seconds) {
           setEta(formatDuration(data.route_duration_seconds));
+          setInitialDurationSeconds(data.route_duration_seconds);
         }
       }
     };
@@ -333,11 +347,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           if (typeof route_distance_meters === 'number' && route_distance_meters > 0) {
             console.log('[Navigation] Distance received via realtime:', route_distance_meters);
             setDistance(formatDistance(route_distance_meters));
+            setInitialDistanceMeters(route_distance_meters);
           }
           
           if (typeof route_duration_seconds === 'number' && route_duration_seconds > 0) {
             console.log('[Navigation] Duration received via realtime:', route_duration_seconds);
             setEta(formatDuration(route_duration_seconds));
+            setInitialDurationSeconds(route_duration_seconds);
           }
         }
       )
@@ -403,6 +419,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       setDistance(routeData.distanceText);
       setEta(routeData.durationText);
       setRoutePolyline(routeData.polyline);
+      // Store initial values for remaining distance calculation
+      if (routeData.distanceMeters && routeData.distanceMeters > 0) {
+        setInitialDistanceMeters(routeData.distanceMeters);
+      }
+      if (routeData.durationSeconds && routeData.durationSeconds > 0) {
+        setInitialDurationSeconds(routeData.durationSeconds);
+      }
     }
   }, [routeData]);
 
@@ -700,16 +723,16 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
           <TurnByTurnDisplay
             currentInstruction={navigationState.currentInstruction}
             nextInstruction={navigationState.nextInstruction}
-            eta={eta || navigationState.eta}
-            distance={distance || navigationState.distance}
+            eta={remainingDistance.remainingTimeText || eta || navigationState.eta}
+            distance={remainingDistance.remainingDistanceText || distance || navigationState.distance}
           />
         ) : (
           /* Client status display - Uber style */
           <ClientStatusDisplay
             status={navigationState.clientStatus}
-            eta={eta || navigationState.eta}
-            distance={distance || navigationState.distance}
-            progress={navigationState.progress}
+            eta={remainingDistance.remainingTimeText || eta || navigationState.eta}
+            distance={remainingDistance.remainingDistanceText || distance || navigationState.distance}
+            progress={remainingDistance.progress || navigationState.progress}
             phase={navigationPhase}
             serviceType={chamado.tipoServico}
             providerName={provider?.name}
