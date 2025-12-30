@@ -161,6 +161,7 @@ export type Database = {
           direct_payment_receipt_confirmed: boolean | null
           direct_payment_to_provider: boolean | null
           id: string
+          last_proposal_by: string | null
           navigation_phase: string | null
           origem_address: string
           origem_lat: number
@@ -186,6 +187,7 @@ export type Database = {
           updated_at: string
           valor: number | null
           valor_proposto: number | null
+          value_accepted: boolean | null
           vehicle_type: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Insert: {
@@ -205,6 +207,7 @@ export type Database = {
           direct_payment_receipt_confirmed?: boolean | null
           direct_payment_to_provider?: boolean | null
           id?: string
+          last_proposal_by?: string | null
           navigation_phase?: string | null
           origem_address: string
           origem_lat: number
@@ -230,6 +233,7 @@ export type Database = {
           updated_at?: string
           valor?: number | null
           valor_proposto?: number | null
+          value_accepted?: boolean | null
           vehicle_type?: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Update: {
@@ -249,6 +253,7 @@ export type Database = {
           direct_payment_receipt_confirmed?: boolean | null
           direct_payment_to_provider?: boolean | null
           id?: string
+          last_proposal_by?: string | null
           navigation_phase?: string | null
           origem_address?: string
           origem_lat?: number
@@ -274,6 +279,7 @@ export type Database = {
           updated_at?: string
           valor?: number | null
           valor_proposto?: number | null
+          value_accepted?: boolean | null
           vehicle_type?: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Relationships: []

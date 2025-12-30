@@ -40,6 +40,11 @@ function mapDbChamadoToChamado(db: DbChamado): Chamado {
     valor: db.valor ? Number(db.valor) : null,
     valorProposto: db.valor_proposto ? Number(db.valor_proposto) : null,
     vehicleType: (db as any).vehicle_type || null,
+    
+    // Negotiation tracking
+    lastProposalBy: (db as any).last_proposal_by as 'client' | 'provider' | null,
+    valueAccepted: (db as any).value_accepted === true,
+    
     payment: db.payment_status ? {
       id: db.stripe_payment_intent_id || `payment-${db.id}`,
       status: db.payment_status,

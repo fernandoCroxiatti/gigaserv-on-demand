@@ -38,6 +38,7 @@ interface AppContextType {
   createChamado: (tipoServico: ServiceType, origem: Location, destino: Location | null, vehicleType?: string) => Promise<void>;
   acceptChamado: (chamadoId: string) => Promise<void>;
   proposeValue: (value: number) => Promise<void>;
+  acceptValue: () => Promise<void>;
   confirmValue: () => Promise<void>;
   cancelChamado: () => Promise<void>;
   finishService: () => Promise<void>;
@@ -85,6 +86,11 @@ function mapDbChamadoToChamado(db: DbChamado): Chamado {
     valor: db.valor ? Number(db.valor) : null,
     valorProposto: db.valor_proposto ? Number(db.valor_proposto) : null,
     vehicleType: (db as any).vehicle_type || null,
+    
+    // Negotiation tracking
+    lastProposalBy: (db as any).last_proposal_by as 'client' | 'provider' | null,
+    valueAccepted: (db as any).value_accepted === true,
+    
     payment: db.payment_status ? {
       id: db.stripe_payment_intent_id || `payment-${db.id}`,
       status: db.payment_status,
@@ -693,10 +699,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const proposeValue = useCallback(async (value: number) => {
     if (!chamado || !authUser) return;
 
+    const senderType = profile?.active_profile || 'client';
+
     try {
       const { error } = await supabase
         .from('chamados')
-        .update({ valor_proposto: value })
+        .update({ 
+          valor_proposto: value,
+          last_proposal_by: senderType,
+          value_accepted: false, // Reset acceptance when new proposal is made
+        })
         .eq('id', chamado.id);
 
       if (error) throw error;
@@ -704,7 +716,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await supabase.from('chat_messages').insert({
         chamado_id: chamado.id,
         sender_id: authUser.id,
-        sender_type: profile?.active_profile || 'client',
+        sender_type: senderType,
         message: `Valor proposto: R$ ${value.toFixed(2)}`,
       });
       // Removed toast - value proposal is visible in chat
@@ -714,9 +726,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [chamado, authUser, profile?.active_profile]);
 
+  // Accept the current proposed value (the other party accepts what was proposed)
+  const acceptValue = useCallback(async () => {
+    if (!chamado?.valorProposto || !authUser) {
+      toast.error('Nenhum valor proposto para aceitar');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('chamados')
+        .update({
+          value_accepted: true,
+          valor: chamado.valorProposto,
+        })
+        .eq('id', chamado.id);
+
+      if (error) throw error;
+
+      await supabase.from('chat_messages').insert({
+        chamado_id: chamado.id,
+        sender_id: authUser.id,
+        sender_type: profile?.active_profile || 'client',
+        message: `Valor aceito: R$ ${chamado.valorProposto.toFixed(2)}`,
+      });
+
+      toast.success('Valor aceito!');
+    } catch (error) {
+      console.error('Error accepting value:', error);
+      toast.error('Erro ao aceitar valor');
+    }
+  }, [chamado, authUser, profile?.active_profile]);
+
   const confirmValue = useCallback(async () => {
     if (!chamado?.valorProposto) {
       toast.error('Nenhum valor proposto');
+      return;
+    }
+
+    // Only allow confirm if value is accepted
+    if (!chamado.valueAccepted) {
+      toast.error('O valor ainda não foi aceito por ambas as partes');
       return;
     }
 
@@ -1256,6 +1306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createChamado,
       acceptChamado,
       proposeValue,
+      acceptValue,
       confirmValue,
       cancelChamado,
       finishService,

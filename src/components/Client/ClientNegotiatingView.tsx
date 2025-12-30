@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MapView } from '../Map/MapView';
 import { Button } from '../ui/button';
-import { Star, Send, ArrowRight, MessageCircle, Clock, Phone, Truck, Wallet, Navigation, Route, MapPin } from 'lucide-react';
+import { Star, Send, ArrowRight, Clock, Phone, Truck, Wallet, Navigation, Route, MapPin, Check, Loader2 } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { useProviderInfo } from '@/hooks/useProviderInfo';
 import { useCancellationWithReason } from '@/hooks/useCancellationWithReason';
@@ -14,7 +14,7 @@ import { calculateDistance } from '@/lib/distance';
 import { toast } from 'sonner';
 
 export function ClientNegotiatingView() {
-  const { chamado, chatMessages, sendChatMessage, confirmValue, cancelChamado, proposeValue, resetChamado } = useApp();
+  const { chamado, chatMessages, sendChatMessage, confirmValue, proposeValue, acceptValue, resetChamado } = useApp();
   const [message, setMessage] = useState('');
   const [proposedValue, setProposedValue] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
@@ -72,6 +72,15 @@ export function ClientNegotiatingView() {
       : `${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}min`
     : '--';
 
+  // Determine negotiation state for CLIENT
+  // State 1: Provider sent proposal, client can accept or counter-propose
+  // State 2: Client sent counter-proposal, waiting for provider response
+  // State 3: Value accepted, client can proceed to payment
+  const hasProposal = chamado.valorProposto !== null;
+  const lastProposalByProvider = chamado.lastProposalBy === 'provider';
+  const lastProposalByClient = chamado.lastProposalBy === 'client';
+  const valueAccepted = chamado.valueAccepted === true;
+
   const handleSendMessage = () => {
     if (!message.trim()) return;
     sendChatMessage(message);
@@ -91,7 +100,11 @@ export function ClientNegotiatingView() {
     setSelectedSuggestion(value);
   };
 
-  const handleConfirmAndPay = async () => {
+  const handleAcceptValue = () => {
+    acceptValue();
+  };
+
+  const handleGoToPayment = async () => {
     if (!chamado.valorProposto) return;
     
     // Update chamado with direct payment flag before confirming
@@ -262,56 +275,98 @@ export function ClientNegotiatingView() {
                 <h3 className="text-base font-bold text-foreground">Negociação de valor</h3>
                 <span className="text-[10px] text-muted-foreground bg-secondary px-2 py-1 rounded-full">{serviceConfig.estimatedTime}</span>
               </div>
-              
-              {/* Sugestões de valor - Chips */}
-              <div className="grid grid-cols-4 gap-2 mb-3">
-                {suggestedValues.map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => handleSuggestionClick(value)}
-                    className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                      selectedSuggestion === value
-                        ? 'bg-primary text-primary-foreground shadow-md scale-[1.02]'
-                        : 'bg-secondary/80 hover:bg-secondary text-foreground hover:scale-[1.01]'
-                    }`}
-                  >
-                    R$ {value}
-                  </button>
-                ))}
-              </div>
 
-              {/* Campo propor valor */}
-              <div className="flex gap-2 mb-3">
-                <div className="flex-1 flex items-center bg-background rounded-xl px-3 border-2 border-border/50 focus-within:border-primary transition-colors">
-                  <span className="text-muted-foreground text-sm font-medium">R$</span>
-                  <input
-                    type="number"
-                    value={proposedValue}
-                    onChange={(e) => {
-                      setProposedValue(e.target.value);
-                      setSelectedSuggestion(null);
-                    }}
-                    placeholder="Ou digite um valor"
-                    className="flex-1 bg-transparent py-3 px-2 focus:outline-none text-sm font-semibold"
-                  />
-                </div>
-                <Button 
-                  onClick={handleProposeValue} 
-                  disabled={!proposedValue} 
-                  size="sm" 
-                  className="px-6 h-12 rounded-xl font-semibold"
-                >
-                  Propor
-                </Button>
-              </div>
-
-              {/* Valor acordado */}
-              {chamado.valorProposto && (
+              {/* Estado 3: Valor Aceito - Mostrar apenas o valor */}
+              {valueAccepted && hasProposal && (
                 <div className="p-4 bg-primary/10 rounded-xl flex items-center justify-between border-2 border-primary/30">
-                  <span className="text-sm text-foreground font-medium">Valor acordado</span>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-5 h-5 text-primary" />
+                    <span className="text-sm text-foreground font-medium">Valor acordado</span>
+                  </div>
                   <span className="text-2xl font-bold text-primary">
-                    R$ {chamado.valorProposto.toFixed(2)}
+                    R$ {chamado.valorProposto?.toFixed(2)}
                   </span>
+                </div>
+              )}
+
+              {/* Estado 2: Cliente enviou contra-proposta - Aguardando prestador */}
+              {!valueAccepted && lastProposalByClient && hasProposal && (
+                <div className="p-4 bg-secondary/50 rounded-xl flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Sua proposta</p>
+                    <p className="text-2xl font-bold text-primary">R$ {chamado.valorProposto?.toFixed(2)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs">Aguardando resposta</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Estado 1: Prestador enviou proposta - Cliente pode aceitar ou contra-propor */}
+              {!valueAccepted && lastProposalByProvider && hasProposal && (
+                <>
+                  {/* Valor proposto pelo prestador */}
+                  <div className="p-4 bg-secondary/50 rounded-xl flex items-center justify-between mb-3">
+                    <span className="text-sm text-foreground font-medium">Proposta do prestador</span>
+                    <span className="text-2xl font-bold text-primary">
+                      R$ {chamado.valorProposto?.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Campo contra-proposta */}
+                  <div className="mb-3">
+                    <p className="text-xs text-muted-foreground mb-2">Enviar contra-proposta:</p>
+                    <div className="grid grid-cols-4 gap-2 mb-2">
+                      {suggestedValues.map((value) => (
+                        <button
+                          key={value}
+                          onClick={() => handleSuggestionClick(value)}
+                          className={`py-2 rounded-xl text-sm font-semibold transition-all ${
+                            selectedSuggestion === value
+                              ? 'bg-primary text-primary-foreground shadow-md scale-[1.02]'
+                              : 'bg-secondary/80 hover:bg-secondary text-foreground hover:scale-[1.01]'
+                          }`}
+                        >
+                          R$ {value}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1 flex items-center bg-background rounded-xl px-3 border-2 border-border/50 focus-within:border-primary transition-colors">
+                        <span className="text-muted-foreground text-sm font-medium">R$</span>
+                        <input
+                          type="number"
+                          value={proposedValue}
+                          onChange={(e) => {
+                            setProposedValue(e.target.value);
+                            setSelectedSuggestion(null);
+                          }}
+                          placeholder="Ou digite um valor"
+                          className="flex-1 bg-transparent py-3 px-2 focus:outline-none text-sm font-semibold"
+                        />
+                      </div>
+                      <Button 
+                        onClick={handleProposeValue} 
+                        disabled={!proposedValue} 
+                        variant="secondary"
+                        size="sm" 
+                        className="px-4 h-12 rounded-xl font-semibold"
+                      >
+                        Propor
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Sem proposta ainda - Aguardando prestador */}
+              {!hasProposal && (
+                <div className="p-4 bg-secondary/50 rounded-xl flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Aguardando proposta do prestador...</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -364,57 +419,114 @@ export function ClientNegotiatingView() {
           {/* Divider */}
           <div className="mx-4 border-t border-border/50" />
             
-          {/* Direct payment toggle */}
-          <div className="px-4 py-3">
-            <div className="p-3 bg-secondary/50 rounded-xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium">Pagamento direto ao prestador</p>
-                    <p className="text-[10px] text-muted-foreground">Combine Pix ou dinheiro diretamente</p>
+          {/* Direct payment toggle - only show when value accepted */}
+          {valueAccepted && (
+            <div className="px-4 py-3">
+              <div className="p-3 bg-secondary/50 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs font-medium">Pagamento direto ao prestador</p>
+                      <p className="text-[10px] text-muted-foreground">Combine Pix ou dinheiro diretamente</p>
+                    </div>
                   </div>
+                  <Switch
+                    checked={directPayment}
+                    onCheckedChange={setDirectPayment}
+                  />
                 </div>
-                <Switch
-                  checked={directPayment}
-                  onCheckedChange={setDirectPayment}
-                />
+                {directPayment && (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 p-2 rounded-lg">
+                    O pagamento será acertado diretamente com o prestador, sem intermediação do app.
+                  </p>
+                )}
               </div>
-              {directPayment && (
-                <p className="mt-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 p-2 rounded-lg">
-                  O pagamento será acertado diretamente com o prestador, sem intermediação do app.
-                </p>
-              )}
             </div>
-          </div>
+          )}
 
           {/* Botões de ação - Rodapé */}
           <div className="px-4 pt-2 pb-4 space-y-3">
-            {/* Confirmação psicológica */}
-            {chamado.valorProposto && (
-              <p className="text-center text-[11px] text-muted-foreground">
-                Ao continuar, você confirma o valor e o prestador será acionado.
-              </p>
-            )}
             
-            <div className="flex gap-3">
+            {/* Estado 3: Valor aceito - Botão para pagamento */}
+            {valueAccepted && (
+              <>
+                <p className="text-center text-[11px] text-muted-foreground">
+                  Ao continuar, você confirma o valor e o prestador será acionado.
+                </p>
+                <div className="flex gap-3">
+                  <Button 
+                    variant="ghost" 
+                    onClick={openCancellationDialog}
+                    disabled={cancelling}
+                    className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+                  >
+                    {cancelling ? 'Cancelando...' : 'Cancelar'}
+                  </Button>
+                  <Button 
+                    onClick={handleGoToPayment} 
+                    className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
+                  >
+                    Pagar agora
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Estado 1: Proposta do prestador - Botões aceitar/recusar */}
+            {!valueAccepted && lastProposalByProvider && hasProposal && (
+              <div className="flex gap-3">
+                <Button 
+                  variant="ghost" 
+                  onClick={openCancellationDialog}
+                  disabled={cancelling}
+                  className="h-12 px-4 text-sm font-medium text-destructive hover:text-destructive hover:bg-destructive/10 rounded-xl"
+                >
+                  Recusar
+                </Button>
+                <Button 
+                  onClick={handleAcceptValue} 
+                  className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
+                >
+                  Aceitar valor
+                  <Check className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+
+            {/* Estado 2: Aguardando resposta - Botão desabilitado */}
+            {!valueAccepted && lastProposalByClient && hasProposal && (
+              <div className="flex gap-3">
+                <Button 
+                  variant="ghost" 
+                  onClick={openCancellationDialog}
+                  disabled={cancelling}
+                  className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  disabled
+                  className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Aguardando resposta do prestador
+                </Button>
+              </div>
+            )}
+
+            {/* Sem proposta - Apenas cancelar */}
+            {!hasProposal && (
               <Button 
                 variant="ghost" 
                 onClick={openCancellationDialog}
                 disabled={cancelling}
-                className="h-12 px-6 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
+                className="w-full h-12 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl"
               >
                 {cancelling ? 'Cancelando...' : 'Cancelar'}
               </Button>
-              <Button 
-                onClick={handleConfirmAndPay} 
-                disabled={!chamado.valorProposto}
-                className="flex-1 h-12 text-sm font-semibold gap-2 rounded-xl shadow-lg"
-              >
-                Ir para pagamento
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
+            )}
           </div>
         </div>
       </div>
