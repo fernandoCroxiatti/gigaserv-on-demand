@@ -269,7 +269,99 @@ export function ClientIdleView() {
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
         <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-4 max-h-[65vh] overflow-y-auto">
           
-          {/* Service type selector - Compact grid */}
+          {/* 1. ORIGEM - Location inputs */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Onde está seu veículo?
+            </p>
+
+            {/* GPS Button */}
+            <button
+              onClick={handleUseMyLocation}
+              disabled={locationLoading || locationDenied}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                usingGpsLocation 
+                  ? 'bg-primary/10 ring-1 ring-primary/30' 
+                  : locationDenied
+                    ? 'bg-muted/50 opacity-60 cursor-not-allowed'
+                    : 'bg-secondary/50 hover:bg-secondary'
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                usingGpsLocation ? 'bg-primary' : 'bg-muted'
+              }`}>
+                {locationLoading ? (
+                  <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+                ) : (
+                  <Crosshair className={`w-4 h-4 ${usingGpsLocation ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                )}
+              </div>
+              <div className="flex-1 text-left">
+                <p className={`font-medium text-sm ${usingGpsLocation ? 'text-primary' : 'text-foreground'}`}>
+                  {locationDenied ? 'Localização desativada' : 'Usar minha localização'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {usingGpsLocation ? 'GPS ativo' : locationDenied ? 'Ative nas configurações' : 'Detectar via GPS'}
+                </p>
+              </div>
+              {usingGpsLocation && (
+                <Check className="w-4 h-4 text-primary" />
+              )}
+            </button>
+
+            {/* Address input */}
+            <PlacesAutocomplete
+              value={origemText}
+              onChange={handleOrigemTextChange}
+              onSelect={handleOrigemSelect}
+              placeholder="Ou digite o endereço"
+              icon={<Search className="w-4 h-4 text-muted-foreground" />}
+            />
+            
+            {locationError && !locationDenied && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {locationError}
+              </p>
+            )}
+          </div>
+
+          {/* 2. DESTINO */}
+          {needsDestination && (
+            <div className="space-y-2 animate-fade-in">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Para onde levar?
+              </p>
+              <div className="ring-1 ring-border/50 rounded-xl">
+                <PlacesAutocomplete
+                  value={destinoText}
+                  onChange={handleDestinoTextChange}
+                  onSelect={handleDestinoSelect}
+                  placeholder="Oficina, casa ou outro destino"
+                  icon={<MapPin className="w-4 h-4 text-primary" />}
+                  recentAddresses={recentAddresses}
+                  showRecentOnFocus={true}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Local service info - when destination not needed */}
+          {!needsDestination && origem && (
+            <div className="flex items-center gap-2.5 p-3 bg-primary/5 rounded-xl animate-fade-in">
+              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                <Check className="w-4 h-4 text-primary" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O prestador irá até você. Destino não necessário.
+              </p>
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="h-px bg-border/50" />
+
+          {/* 3. TIPO DE SERVIÇO */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tipo de serviço</p>
             <div className="grid grid-cols-2 gap-2">
@@ -318,104 +410,13 @@ export function ClientIdleView() {
             </div>
           </div>
 
-          {/* Vehicle type selector */}
+          {/* 4. TIPO DE VEÍCULO */}
           <VehicleTypeSelector 
             value={selectedVehicleType} 
             onChange={setSelectedVehicleType} 
           />
 
-          {/* Location inputs - Clean design */}
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Localização do veículo
-              </p>
-
-              {/* GPS Button - Primary action */}
-              <button
-                onClick={handleUseMyLocation}
-                disabled={locationLoading || locationDenied}
-                className={`w-full flex items-center gap-3 p-3 mb-2 rounded-xl transition-all ${
-                  usingGpsLocation 
-                    ? 'bg-primary/10 ring-1 ring-primary/30' 
-                    : locationDenied
-                      ? 'bg-muted/50 opacity-60 cursor-not-allowed'
-                      : 'bg-secondary/50 hover:bg-secondary'
-                }`}
-              >
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                  usingGpsLocation ? 'bg-primary' : 'bg-muted'
-                }`}>
-                  {locationLoading ? (
-                    <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-                  ) : (
-                    <Crosshair className={`w-4 h-4 ${usingGpsLocation ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                  )}
-                </div>
-                <div className="flex-1 text-left">
-                  <p className={`font-medium text-sm ${usingGpsLocation ? 'text-primary' : 'text-foreground'}`}>
-                    {locationDenied ? 'Localização desativada' : 'Usar minha localização'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {usingGpsLocation ? 'GPS ativo' : locationDenied ? 'Ative nas configurações' : 'Detectar via GPS'}
-                  </p>
-                </div>
-                {usingGpsLocation && (
-                  <Check className="w-4 h-4 text-primary" />
-                )}
-              </button>
-
-              {/* Address input */}
-              <div className="relative">
-                <PlacesAutocomplete
-                  value={origemText}
-                  onChange={handleOrigemTextChange}
-                  onSelect={handleOrigemSelect}
-                  placeholder="Ou digite o endereço"
-                  icon={<Search className="w-4 h-4 text-muted-foreground" />}
-                />
-              </div>
-              
-              {locationError && !locationDenied && (
-                <p className="text-xs text-destructive mt-1.5 flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
-                  {locationError}
-                </p>
-              )}
-            </div>
-
-            {/* Destination */}
-            {needsDestination && (
-              <div className="animate-fade-in">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  Destino
-                </p>
-                <PlacesAutocomplete
-                  value={destinoText}
-                  onChange={handleDestinoTextChange}
-                  onSelect={handleDestinoSelect}
-                  placeholder="Oficina, casa ou outro destino"
-                  icon={<MapPin className="w-4 h-4 text-muted-foreground" />}
-                  recentAddresses={recentAddresses}
-                  showRecentOnFocus={true}
-                />
-              </div>
-            )}
-
-            {/* Local service info */}
-            {!needsDestination && origem && (
-              <div className="flex items-center gap-2.5 p-3 bg-primary/5 rounded-xl animate-fade-in">
-                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-4 h-4 text-primary" />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  O prestador irá até você. Destino não necessário.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Submit button */}
+          {/* 5. BOTÃO CTA */}
           <Button 
             onClick={handleSolicitar}
             className="w-full h-12 text-base font-semibold rounded-xl shadow-sm"
