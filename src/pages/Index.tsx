@@ -1,3 +1,16 @@
+/**
+ * Index Page - Main entry point for authenticated users
+ * 
+ * ARCHITECTURE NOTES:
+ * - Determines which view to show based on user's activeProfile
+ * - CRITICAL: canAccessProviderFeatures enforces backend permission check
+ * - Users without provider permissions are ALWAYS shown ClientView
+ * - useWakeLock prevents screen from sleeping during active sessions
+ * 
+ * SECURITY: 
+ * - Never trust activeProfile alone - always check canAccessProviderFeatures
+ * - This is a frontend optimization; backend RLS enforces real permissions
+ */
 import React from 'react';
 import { Header } from '@/components/Header';
 import { ClientView } from '@/components/ClientView';

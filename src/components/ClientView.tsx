@@ -1,3 +1,16 @@
+/**
+ * ClientView - State-driven UI controller for client-side experience
+ * 
+ * ARCHITECTURE NOTES:
+ * - This component acts as a router based on chamado.status
+ * - All state transitions are driven by database changes, never by UI clicks
+ * - Each status maps to a dedicated view component
+ * 
+ * STATUS FLOW:
+ * idle → searching → negotiating → awaiting_payment → in_service → pending_client_confirmation → finished
+ * 
+ * IMPORTANT: Do not add business logic here. This is purely a view dispatcher.
+ */
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { ClientIdleView } from './Client/ClientIdleView';
