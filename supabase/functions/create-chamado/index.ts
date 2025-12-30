@@ -139,6 +139,45 @@ serve(async (req) => {
       origemLng: body.origem_lng,
     });
 
+    // ===== DOUBLE-CLICK PROTECTION =====
+    // Check if client already has an active chamado (searching or in progress)
+    const { data: existingChamado, error: existingErr } = await supabaseClient
+      .from("chamados")
+      .select("id, status, created_at")
+      .eq("cliente_id", user.id)
+      .in("status", ["searching", "accepted", "negotiating", "awaiting_payment", "in_service", "pending_client_confirmation"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingErr) {
+      logStep("WARN checking existing chamado", { message: existingErr.message });
+    }
+
+    if (existingChamado) {
+      logStep("Client already has active chamado", { 
+        existingId: existingChamado.id, 
+        status: existingChamado.status,
+        createdAt: existingChamado.created_at
+      });
+      
+      // Return the existing chamado instead of creating a new one
+      const { data: fullChamado } = await supabaseClient
+        .from("chamados")
+        .select("*")
+        .eq("id", existingChamado.id)
+        .single();
+      
+      return new Response(JSON.stringify({ 
+        chamado: fullChamado, 
+        eligibleProvidersCount: 0,
+        reused: true 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
     // Insert chamado
     const insertData: Record<string, unknown> = {
       cliente_id: user.id,
