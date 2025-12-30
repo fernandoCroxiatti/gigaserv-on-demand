@@ -848,7 +848,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
               ) : (
                 <Flag className="w-4 h-4 mr-1.5" />
               )}
-              {isDirectPaymentToProvider ? 'Recebi o pagamento' : 'Finalizar corrida'}
+              Finalizar corrida
             </Button>
           )
         ) : (
