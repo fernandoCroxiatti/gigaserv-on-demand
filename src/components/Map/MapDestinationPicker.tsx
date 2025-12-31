@@ -43,8 +43,16 @@ const defaultCenter = { lat: -23.5505, lng: -46.6333 }; // São Paulo
 
 /**
  * MapDestinationPicker - Fullscreen overlay for selecting destination on map
- * Renders as a portal to ensure maximum z-index priority over all app elements
- * Uses a fixed center pin, reverse geocodes only on confirm to minimize API calls
+ * 
+ * ISOLATION RULES (Maximum Priority):
+ * - Creates completely NEW, INDEPENDENT GoogleMap instance (not shared with main map)
+ * - Rendered via portal at document.body level to bypass all parent components
+ * - NO auto-centering, NO follow-user, NO GPS listeners affecting map center
+ * - Map center controlled EXCLUSIVELY by user gestures (drag, pinch, zoom)
+ * - Ignores any previous map state, "Use my location" actions, or navigation state
+ * - Uses reverse geocoding ONLY on confirm to minimize API calls
+ * 
+ * On exit (confirm/cancel): Parent component restores normal map behavior
  */
 export function MapDestinationPicker({
   initialCenter,
@@ -53,29 +61,42 @@ export function MapDestinationPicker({
 }: MapDestinationPickerProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>(
-    initialCenter 
-      ? { lat: initialCenter.lat, lng: initialCenter.lng }
-      : defaultCenter
-  );
+  
+  // ISOLATED STATE - completely independent from any parent/global map state
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>(() => {
+    // Compute initial center ONCE on mount, then user controls everything
+    if (initialCenter) {
+      return { lat: initialCenter.lat, lng: initialCenter.lng };
+    }
+    return defaultCenter;
+  });
+  
   const [isConfirming, setIsConfirming] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
-  // Refs to track map movement
+  // Flag to ensure we don't process any external updates after mount
+  const isActiveRef = useRef(true);
   const dragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Prevent body scroll while overlay is open
+  // Prevent body scroll and mark picker as active
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    isActiveRef.current = true;
+    
+    console.log('[MapDestinationPicker] Activated - map control isolated from all external state');
+    
     return () => {
       document.body.style.overflow = originalOverflow;
+      isActiveRef.current = false;
+      console.log('[MapDestinationPicker] Deactivated - restoring normal map behavior');
     };
   }, []);
 
-  // Update center when map is idle (after drag/zoom)
+  // Update center when map is idle (after drag/zoom) - ONLY from user gestures
   const handleIdle = useCallback(() => {
-    if (!map) return;
+    if (!map || !isActiveRef.current) return;
+    
     const center = map.getCenter();
     if (center) {
       setMapCenter({ lat: center.lat(), lng: center.lng() });
@@ -86,21 +107,30 @@ export function MapDestinationPicker({
       clearTimeout(dragTimeoutRef.current);
     }
     dragTimeoutRef.current = setTimeout(() => {
-      setIsDragging(false);
+      if (isActiveRef.current) {
+        setIsDragging(false);
+      }
     }, 100);
   }, [map]);
 
   const handleDragStart = useCallback(() => {
+    if (!isActiveRef.current) return;
     setIsDragging(true);
     if (dragTimeoutRef.current) {
       clearTimeout(dragTimeoutRef.current);
     }
   }, []);
 
+  // On map load - set up isolated instance with NO external listeners
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
+    
+    // Only listen to user-initiated events (drag, idle)
+    // NO geolocation watchers, NO auto-center logic
     mapInstance.addListener('idle', handleIdle);
     mapInstance.addListener('dragstart', handleDragStart);
+    
+    console.log('[MapDestinationPicker] Map loaded - user gesture control only');
   }, [handleIdle, handleDragStart]);
 
   const onUnmount = useCallback(() => {
