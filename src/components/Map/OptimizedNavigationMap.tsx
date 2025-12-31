@@ -415,11 +415,30 @@ export function OptimizedNavigationMap({
     }
   }, []);
 
+  /**
+   * Map Load Handler with Interaction Tracking
+   * 
+   * NAVIGATION-SPECIFIC BEHAVIOR:
+   * This component is used ONLY during active rides (in_service status).
+   * It intentionally has an 8-second auto-return timer after user interaction.
+   * This is the CORRECT behavior for navigation - matching Uber/Waze UX.
+   * 
+   * Why 8 seconds?
+   * - Allows user to briefly explore the map
+   * - Returns to following provider automatically for navigation continuity
+   * - Essential for hands-free navigation during driving
+   * 
+   * This is DIFFERENT from RealMapView which has NO timer and requires explicit recenter.
+   * Each component serves a different UX purpose:
+   * - OptimizedNavigationMap: Active navigation with auto-return (driver focus)
+   * - RealMapView: Free exploration with manual recenter (browsing focus)
+   * - MapDestinationPicker: Isolated selection with no external interference
+   */
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
     mapInstance.setZoom(followProvider ? 17 : 16);
     
-    // Track user interaction
+    // Track user interaction with auto-return timer (navigation mode only)
     const startInteraction = () => {
       setIsUserInteracting(true);
       if (userInteractionTimeoutRef.current) {
@@ -428,7 +447,7 @@ export function OptimizedNavigationMap({
     };
     
     const endInteraction = () => {
-      // Re-enable follow after 8 seconds of no interaction
+      // Re-enable follow after 8 seconds of no interaction (navigation UX)
       userInteractionTimeoutRef.current = setTimeout(() => {
         setIsUserInteracting(false);
       }, 8000);

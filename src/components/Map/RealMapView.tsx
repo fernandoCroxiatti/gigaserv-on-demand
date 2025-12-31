@@ -16,10 +16,31 @@ export interface MapProvider {
 }
 
 /**
- * Map interaction modes:
- * - 'free': User can move freely, GPS updates position marker but NOT map center
- * - 'follow': Map follows user location automatically
- * - 'navigation': During active ride, auto-follow with recenter option on interaction
+ * Map interaction modes - CRITICAL separation of GPS position vs camera control:
+ * 
+ * GPS Position Updates (ALWAYS):
+ * - GPS continuously updates user/provider MARKER position
+ * - Marker position reflects real-time location regardless of mode
+ * 
+ * Camera Movement (MODE-DEPENDENT):
+ * - 'free': Camera controlled EXCLUSIVELY by user gestures. GPS updates marker only.
+ *           NO auto-centering, NO timers, NO GPS-driven camera movement.
+ *           User must explicitly click "Recenter" button to re-enable follow.
+ *           Used by: destination picker, idle browsing
+ * 
+ * - 'follow': Camera automatically follows user location.
+ *             GPS updates trigger both marker AND camera movement.
+ *             Used by: initial map view, after explicit recenter
+ * 
+ * - 'navigation': Active ride navigation with auto-follow.
+ *                 Uses separate OptimizedNavigationMap component with its own logic.
+ *                 Has 8s auto-return timer after user interaction (intentional for navigation UX).
+ *                 Used by: ProviderInServiceView, ClientInServiceView
+ * 
+ * DESTINATION PICKER ISOLATION:
+ * MapDestinationPicker creates a completely INDEPENDENT map instance via portal.
+ * It ignores ALL external state, modes, and GPS-driven camera updates.
+ * The picker's map is controlled SOLELY by user gestures.
  */
 type MapMode = 'free' | 'follow' | 'navigation';
 
@@ -122,13 +143,23 @@ export function RealMapView({
     return 15;
   }, [zoom, showSearchRadius, searchRadius]);
 
-  // Get user location - continuous update for marker, NOT for map center
+  /**
+   * GPS Location Updates - MARKER ONLY
+   * 
+   * This effect updates the user's MARKER position continuously.
+   * It does NOT move the map camera - that's controlled by mode and auto-follow logic.
+   * 
+   * Separation principle:
+   * - userLocation state = marker position (always updated by GPS)
+   * - map.panTo = camera movement (only in follow/navigation mode, or explicit recenter)
+   */
   useEffect(() => {
     if (!showUserLocation || !navigator.geolocation) return;
     
-    // Watch position for continuous updates
+    // Watch position for continuous marker updates
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
+        // Update marker position state - camera movement handled separately
         setUserLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
@@ -208,29 +239,47 @@ export function RealMapView({
     }
   }, [map, center, userLocation]);
 
-  // Auto-follow logic based on mode
+  /**
+   * Camera Auto-Follow Logic - MODE-BASED
+   * 
+   * CRITICAL: This is the ONLY place that moves the map camera based on location.
+   * 
+   * Rules:
+   * - 'free' mode: Set initial center ONCE, then NEVER auto-center again.
+   *                User must click recenter button to restore follow.
+   * - 'follow' mode: Always auto-center on location updates.
+   * - 'navigation' mode: Auto-center unless user is interacting.
+   *                      (Navigation uses OptimizedNavigationMap with its own logic)
+   * 
+   * NOTE: MapDestinationPicker is COMPLETELY ISOLATED - it creates its own map
+   * instance and is unaffected by this effect or any mode changes.
+   */
   useEffect(() => {
     if (!map) return;
     
     const targetCenter = center || userLocation;
     if (!targetCenter) return;
     
-    // Only auto-center if:
-    // - Mode is 'follow' or 'navigation'
-    // - AND user is not currently interacting
-    // - AND (in navigation mode: hasn't interacted, or mode is follow)
-    const shouldAutoCenter = 
-      (mode === 'follow' || (mode === 'navigation' && !isUserInteracting)) &&
-      !isUserInteracting;
-    
-    if (shouldAutoCenter) {
-      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+    // FREE MODE: Only set initial center once, never auto-center after
+    if (mode === 'free') {
+      if (!initialCenterSetRef.current) {
+        map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+        initialCenterSetRef.current = true;
+      }
+      // In free mode, GPS updates marker but NEVER moves camera
+      return;
     }
     
-    // Set initial center once in free mode
-    if (mode === 'free' && !initialCenterSetRef.current && targetCenter) {
+    // FOLLOW MODE: Always auto-center
+    if (mode === 'follow' && !isUserInteracting) {
       map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
-      initialCenterSetRef.current = true;
+      return;
+    }
+    
+    // NAVIGATION MODE: Auto-center unless user is interacting
+    // Note: Active navigation typically uses OptimizedNavigationMap, not this component
+    if (mode === 'navigation' && !isUserInteracting) {
+      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
     }
   }, [map, center, userLocation, mode, isUserInteracting]);
 
