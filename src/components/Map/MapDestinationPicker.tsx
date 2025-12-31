@@ -44,13 +44,31 @@ const defaultCenter = { lat: -23.5505, lng: -46.6333 }; // São Paulo
 /**
  * MapDestinationPicker - Fullscreen overlay for selecting destination on map
  * 
- * ISOLATION RULES (Maximum Priority):
- * - Creates completely NEW, INDEPENDENT GoogleMap instance (not shared with main map)
- * - Rendered via portal at document.body level to bypass all parent components
- * - NO auto-centering, NO follow-user, NO GPS listeners affecting map center
- * - Map center controlled EXCLUSIVELY by user gestures (drag, pinch, zoom)
- * - Ignores any previous map state, "Use my location" actions, or navigation state
- * - Uses reverse geocoding ONLY on confirm to minimize API calls
+ * CAMERA LOCK RULES (MAXIMUM PRIORITY):
+ * =====================================
+ * This component implements a complete "camera lock" that blocks ALL automatic
+ * camera movement from ANY source while the picker is active.
+ * 
+ * BLOCKED sources of camera movement:
+ * - GPS location updates (user or provider)
+ * - Origin field changes
+ * - Address validation changes
+ * - Form re-renders or state updates
+ * - "Use my location" triggers from parent
+ * - Navigation state changes
+ * - Any prop changes from parent component
+ * 
+ * ALLOWED camera movement:
+ * - User gestures (drag, pinch, zoom)
+ * - Explicit "Recenter" button click (user-initiated)
+ * 
+ * IMPLEMENTATION:
+ * - Creates completely NEW, INDEPENDENT GoogleMap instance
+ * - Uses STATIC center computed ONCE on mount (stored in ref, never updated by props)
+ * - Rendered via portal at document.body level to bypass all parent re-renders
+ * - NO auto-centering, NO follow-user, NO GPS listeners
+ * - Map center controlled EXCLUSIVELY by user gestures
+ * - Ignores ALL prop updates after initial mount
  * 
  * On exit (confirm/cancel): Parent component restores normal map behavior
  */
@@ -62,14 +80,21 @@ export function MapDestinationPicker({
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
   
-  // ISOLATED STATE - completely independent from any parent/global map state
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>(() => {
-    // Compute initial center ONCE on mount, then user controls everything
-    if (initialCenter) {
-      return { lat: initialCenter.lat, lng: initialCenter.lng };
-    }
-    return defaultCenter;
-  });
+  // CAMERA LOCK: Static center computed ONCE on mount, stored in ref
+  // This ref NEVER changes after mount, ensuring complete isolation from prop updates
+  const staticCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+  
+  // Initialize static center on first render only (lazy initialization)
+  if (staticCenterRef.current === null) {
+    staticCenterRef.current = initialCenter 
+      ? { lat: initialCenter.lat, lng: initialCenter.lng }
+      : defaultCenter;
+  }
+  
+  // Current map center (updated by user gestures, NOT by props)
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>(
+    () => staticCenterRef.current || defaultCenter
+  );
   
   const [isConfirming, setIsConfirming] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -228,11 +253,11 @@ export function MapDestinationPicker({
 
       {isLoaded && !loadError && (
         <>
-          {/* Fullscreen Map */}
+          {/* Fullscreen Map - CAMERA LOCK: center uses static ref, NOT props */}
           <div className="flex-1 relative">
             <GoogleMap
               mapContainerStyle={mapContainerStyle}
-              center={initialCenter ? { lat: initialCenter.lat, lng: initialCenter.lng } : defaultCenter}
+              center={staticCenterRef.current}
               zoom={15}
               onLoad={onLoad}
               onUnmount={onUnmount}
