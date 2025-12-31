@@ -108,9 +108,8 @@ export function RealMapView({
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [userLocation, setUserLocation] = useState<Location | null>(null);
   
-  // Track user interaction state for map centering
+  // Track user interaction state for map centering - NO TIMERS
   const [isUserInteracting, setIsUserInteracting] = useState(false);
-  const userInteractionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUserInteractedRef = useRef(false);
   
   // Track if initial center was set
@@ -167,26 +166,18 @@ export function RealMapView({
     );
   }, [showRoute, origem, destino, isLoaded]);
 
-  // Handle user interaction - sets map to free mode temporarily
+  // Handle user interaction - sets map to free mode
+  // NO TIMERS - user must explicitly click recenter to restore follow
   const handleInteractionStart = useCallback(() => {
     setIsUserInteracting(true);
     hasUserInteractedRef.current = true;
     onUserInteraction?.();
-    
-    if (userInteractionTimeoutRef.current) {
-      clearTimeout(userInteractionTimeoutRef.current);
-    }
   }, [onUserInteraction]);
 
   const handleInteractionEnd = useCallback(() => {
-    // In navigation mode, auto-return to follow after 8 seconds
-    // In free mode, stay in free mode (no auto-return)
-    if (mode === 'navigation') {
-      userInteractionTimeoutRef.current = setTimeout(() => {
-        setIsUserInteracting(false);
-      }, 8000);
-    }
-  }, [mode]);
+    // NO auto-return timer - user must explicitly recenter
+    // This prevents any automatic recentering that could interfere with destination selection
+  }, []);
 
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
@@ -201,21 +192,13 @@ export function RealMapView({
   }, [handleInteractionStart, handleInteractionEnd]);
 
   const onUnmount = useCallback(() => {
-    if (userInteractionTimeoutRef.current) {
-      clearTimeout(userInteractionTimeoutRef.current);
-    }
     setMap(null);
   }, []);
 
-  // Handle recenter button click
+  // Handle recenter button click - explicit user action to restore follow
   const handleRecenter = useCallback(() => {
     setIsUserInteracting(false);
     hasUserInteractedRef.current = false;
-    
-    if (userInteractionTimeoutRef.current) {
-      clearTimeout(userInteractionTimeoutRef.current);
-      userInteractionTimeoutRef.current = null;
-    }
     
     // Pan to center
     if (map && center) {
