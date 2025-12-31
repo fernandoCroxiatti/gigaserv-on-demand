@@ -1,14 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
-import { MapDestinationPicker } from '../Map/MapDestinationPicker';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { useAddressHistory } from '@/hooks/useAddressHistory';
 import { Button } from '../ui/button';
-import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car, Map } from 'lucide-react';
+import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 import { VehicleType } from '@/types/vehicleTypes';
 import { VehicleTypeSelector } from './VehicleTypeSelector';
@@ -50,12 +49,7 @@ export function ClientIdleView() {
   const [usingGpsLocation, setUsingGpsLocation] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
-  // Track destination source: "map" when selected via picker, "autocomplete" when typed, null when empty
-  const [destinationSource, setDestinationSource] = useState<'map' | 'autocomplete' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Map destination picker state
-  const [showDestinationPicker, setShowDestinationPicker] = useState(false);
   
   // Permission modals
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -166,7 +160,6 @@ export function ClientIdleView() {
   const handleDestinoSelect = (location: Location) => {
     setDestino(location);
     setDestinoText(location.address);
-    setDestinationSource('autocomplete');
     // Save to history
     saveAddress(location);
   };
@@ -174,65 +167,13 @@ export function ClientIdleView() {
   const handleDestinoTextChange = (text: string) => {
     setDestinoText(text);
     setDestino(null);
-    // Clear source when user types manually (destination not yet confirmed)
-    setDestinationSource(null);
-  };
-
-  /**
-   * Handle destination picker confirmation
-   * 
-   * CRITICAL: The location parameter contains the coordinates from the MAP PIN,
-   * obtained via reverse geocoding. This is the user's selected destination,
-   * NOT the user's current GPS location or the origin.
-   * 
-   * Flow:
-   * 1. User drags map to desired destination
-   * 2. User taps "Confirmar destino"
-   * 3. MapDestinationPicker reverse geocodes the map center
-   * 4. This callback receives the geocoded location
-   * 5. We set ONLY the destination fields (destino, destinoText)
-   * 6. Origin (origem, origemText) remains UNCHANGED
-   */
-  const handleDestinationPickerConfirm = (location: Location) => {
-    console.log('[ClientIdleView] Destination selected from map:', {
-      lat: location.lat,
-      lng: location.lng,
-      address: location.address,
-    });
-    
-    // Set destination state - this is the flagged point from the map
-    setDestino(location);
-    setDestinoText(location.address);
-    // CRITICAL: Mark destination source as "map" - this takes priority
-    setDestinationSource('map');
-    setShowDestinationPicker(false);
-    
-    // Save to address history for future suggestions
-    saveAddress(location);
-  };
-
-  const handleDestinationPickerCancel = () => {
-    setShowDestinationPicker(false);
   };
 
   const handleSolicitar = async () => {
     // Double-click protection
     if (isSubmitting) return;
     if (!origem) return;
-    
-    // For services that need destination, validate we have a valid destination
-    // A destination is valid if:
-    // 1. destino object exists (has coordinates)
-    // 2. OR destinationSource === 'map' (explicitly selected from map)
-    const hasValidDestination = destino !== null || destinationSource === 'map';
-    if (needsDestination && !hasValidDestination) return;
-    
-    console.log('[ClientIdleView] Submitting chamado:', {
-      destinationSource,
-      hasDestino: !!destino,
-      destinoLat: destino?.lat,
-      destinoLng: destino?.lng,
-    });
+    if (needsDestination && !destino) return;
     
     setIsSubmitting(true);
     try {
@@ -243,24 +184,10 @@ export function ClientIdleView() {
     }
   };
 
-  // Destination is valid when:
-  // - Service doesn't need destination, OR
-  // - We have a destino object (coordinates from autocomplete or map)
-  // Note: When destinationSource === 'map', destino is always set by handleDestinationPickerConfirm
-  const hasValidDestination = !needsDestination || destino !== null;
-  const canSubmit = origem && hasValidDestination && selectedVehicleType && !isSubmitting;
+  const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType && !isSubmitting;
 
   return (
     <>
-      {/* Destination picker rendered as portal overlay - above all UI including Header */}
-      {showDestinationPicker && (
-        <MapDestinationPicker
-          initialCenter={origem || userLocation}
-          onConfirm={handleDestinationPickerConfirm}
-          onCancel={handleDestinationPickerCancel}
-        />
-      )}
-      
       <div className="relative h-full">
       {/* Map - free mode, no auto-centering on user interaction */}
       <RealMapView 
@@ -419,25 +346,6 @@ export function ClientIdleView() {
                   showRecentOnFocus={true}
                 />
               </div>
-              
-              {/* Select destination on map button */}
-              <button
-                onClick={() => setShowDestinationPicker(true)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover:bg-secondary transition-all"
-              >
-                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
-                  <Map className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="font-medium text-sm text-foreground">
-                    Selecionar destino no mapa
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Arraste o mapa para escolher o local
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              </button>
             </div>
           )}
 
