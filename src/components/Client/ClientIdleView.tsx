@@ -173,12 +173,34 @@ export function ClientIdleView() {
     setDestino(null);
   };
 
-  // Handle destination picker confirm
+  /**
+   * Handle destination picker confirmation
+   * 
+   * CRITICAL: The location parameter contains the coordinates from the MAP PIN,
+   * obtained via reverse geocoding. This is the user's selected destination,
+   * NOT the user's current GPS location or the origin.
+   * 
+   * Flow:
+   * 1. User drags map to desired destination
+   * 2. User taps "Confirmar destino"
+   * 3. MapDestinationPicker reverse geocodes the map center
+   * 4. This callback receives the geocoded location
+   * 5. We set ONLY the destination fields (destino, destinoText)
+   * 6. Origin (origem, origemText) remains UNCHANGED
+   */
   const handleDestinationPickerConfirm = (location: Location) => {
+    console.log('[ClientIdleView] Destination selected from map:', {
+      lat: location.lat,
+      lng: location.lng,
+      address: location.address,
+    });
+    
+    // Set destination state - this is the flagged point from the map
     setDestino(location);
     setDestinoText(location.address);
     setShowDestinationPicker(false);
-    // Save to history
+    
+    // Save to address history for future suggestions
     saveAddress(location);
   };
 
