@@ -50,6 +50,8 @@ export function ClientIdleView() {
   const [usingGpsLocation, setUsingGpsLocation] = useState(false);
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
+  // Track destination source: "map" when selected via picker, "autocomplete" when typed, null when empty
+  const [destinationSource, setDestinationSource] = useState<'map' | 'autocomplete' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Map destination picker state
@@ -164,6 +166,7 @@ export function ClientIdleView() {
   const handleDestinoSelect = (location: Location) => {
     setDestino(location);
     setDestinoText(location.address);
+    setDestinationSource('autocomplete');
     // Save to history
     saveAddress(location);
   };
@@ -171,6 +174,8 @@ export function ClientIdleView() {
   const handleDestinoTextChange = (text: string) => {
     setDestinoText(text);
     setDestino(null);
+    // Clear source when user types manually (destination not yet confirmed)
+    setDestinationSource(null);
   };
 
   /**
@@ -198,6 +203,8 @@ export function ClientIdleView() {
     // Set destination state - this is the flagged point from the map
     setDestino(location);
     setDestinoText(location.address);
+    // CRITICAL: Mark destination source as "map" - this takes priority
+    setDestinationSource('map');
     setShowDestinationPicker(false);
     
     // Save to address history for future suggestions
@@ -212,7 +219,20 @@ export function ClientIdleView() {
     // Double-click protection
     if (isSubmitting) return;
     if (!origem) return;
-    if (needsDestination && !destino) return;
+    
+    // For services that need destination, validate we have a valid destination
+    // A destination is valid if:
+    // 1. destino object exists (has coordinates)
+    // 2. OR destinationSource === 'map' (explicitly selected from map)
+    const hasValidDestination = destino !== null || destinationSource === 'map';
+    if (needsDestination && !hasValidDestination) return;
+    
+    console.log('[ClientIdleView] Submitting chamado:', {
+      destinationSource,
+      hasDestino: !!destino,
+      destinoLat: destino?.lat,
+      destinoLng: destino?.lng,
+    });
     
     setIsSubmitting(true);
     try {
@@ -223,7 +243,12 @@ export function ClientIdleView() {
     }
   };
 
-  const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType && !isSubmitting;
+  // Destination is valid when:
+  // - Service doesn't need destination, OR
+  // - We have a destino object (coordinates from autocomplete or map)
+  // Note: When destinationSource === 'map', destino is always set by handleDestinationPickerConfirm
+  const hasValidDestination = !needsDestination || destino !== null;
+  const canSubmit = origem && hasValidDestination && selectedVehicleType && !isSubmitting;
 
   return (
     <>
