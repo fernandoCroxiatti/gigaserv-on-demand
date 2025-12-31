@@ -300,7 +300,7 @@ export function ProviderBankTab({
           <div className="space-y-2 text-sm">
             <p className="font-medium">ℹ️ Primeiro pagamento</p>
             <p className="text-muted-foreground">
-              O primeiro pagamento da Stripe pode levar até 7 dias para ser processado, 
+              O primeiro pagamento da Stripe pode levar até 30 dias para ser processado, 
               conforme regras de segurança bancária.
             </p>
             <p className="text-muted-foreground">
