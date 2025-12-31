@@ -203,20 +203,18 @@ export function ClientIdleView() {
 
   const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType && !isSubmitting;
 
-  // If destination picker is open, show it fullscreen
-  if (showDestinationPicker) {
-    return (
-      <MapDestinationPicker
-        initialCenter={origem || userLocation}
-        onConfirm={handleDestinationPickerConfirm}
-        onCancel={handleDestinationPickerCancel}
-        className="h-full"
-      />
-    );
-  }
-
   return (
-    <div className="relative h-full">
+    <>
+      {/* Destination picker rendered as portal overlay - above all UI including Header */}
+      {showDestinationPicker && (
+        <MapDestinationPicker
+          initialCenter={origem || userLocation}
+          onConfirm={handleDestinationPickerConfirm}
+          onCancel={handleDestinationPickerCancel}
+        />
+      )}
+      
+      <div className="relative h-full">
       {/* Map - free mode, no auto-centering on user interaction */}
       <RealMapView 
         center={searchLocation}
@@ -499,5 +497,6 @@ export function ClientIdleView() {
       />
 
     </div>
+    </>
   );
 }
