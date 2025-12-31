@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { Location } from '@/types/chamado';
 import { MapPin, Loader2, X, Clock } from 'lucide-react';
@@ -15,6 +15,16 @@ interface PlacesAutocompleteProps {
   showRecentOnFocus?: boolean;
 }
 
+/**
+ * PlacesAutocomplete with dynamic dropdown positioning
+ * 
+ * LAYOUT FEATURES:
+ * - Dropdown appears ABOVE input field (bottom-full)
+ * - Max height is calculated dynamically based on available space
+ * - Considers: header height (~64px), safe-area, and visual padding
+ * - Internal scroll when list exceeds available space
+ * - Works properly with virtual keyboard on mobile
+ */
 export function PlacesAutocomplete({
   value,
   onChange,
@@ -30,11 +40,50 @@ export function PlacesAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const [showRecent, setShowRecent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dropdownMaxHeight, setDropdownMaxHeight] = useState<number>(240);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const latestRequestId = useRef(0);
+
+  // Calculate available space for dropdown (above input)
+  const calculateDropdownHeight = useCallback(() => {
+    if (!containerRef.current) return;
+    
+    const containerRect = containerRef.current.getBoundingClientRect();
+    
+    // Space above the input: top of container minus header (~64px) and safe-area padding
+    const headerHeight = 64; // Approximate header height
+    const safeAreaTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sat') || '0', 10) || 0;
+    const padding = 16; // Visual padding from top
+    
+    // Available space = distance from top of container to top of viewport, minus header and padding
+    const availableSpace = containerRect.top - headerHeight - safeAreaTop - padding;
+    
+    // Clamp between minimum (120px) and maximum (400px for very tall screens)
+    const calculatedHeight = Math.max(120, Math.min(availableSpace, 400));
+    
+    setDropdownMaxHeight(calculatedHeight);
+  }, []);
+
+  // Recalculate on open and on resize
+  useEffect(() => {
+    if (isOpen || showRecent) {
+      calculateDropdownHeight();
+      
+      // Also listen for resize (e.g., keyboard appearing/disappearing)
+      window.addEventListener('resize', calculateDropdownHeight);
+      
+      // Recalculate after a short delay to catch keyboard animations
+      const timeoutId = setTimeout(calculateDropdownHeight, 300);
+      
+      return () => {
+        window.removeEventListener('resize', calculateDropdownHeight);
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [isOpen, showRecent, calculateDropdownHeight]);
 
   useEffect(() => {
     if (isLoaded && !autocompleteService.current) {
@@ -178,47 +227,57 @@ export function PlacesAutocomplete({
         )}
       </div>
 
-      {/* Recent addresses dropdown */}
+      {/* Recent addresses dropdown - positioned above input with dynamic height */}
       {showRecent && recentAddresses.length > 0 && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] max-h-60 overflow-y-auto">
-          <div className="px-3 py-2 border-b border-border">
+        <div 
+          className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] overflow-hidden"
+          style={{ maxHeight: dropdownMaxHeight }}
+        >
+          <div className="px-3 py-2 border-b border-border bg-card sticky top-0 z-10">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Endereços recentes</p>
           </div>
-          {recentAddresses.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleSelectRecent(item)}
-              className="w-full flex items-start gap-3 p-3 hover:bg-secondary transition-colors text-left border-b border-border last:border-0"
-            >
-              <Clock className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{item.address}</p>
-              </div>
-            </button>
-          ))}
+          <div className="overflow-y-auto" style={{ maxHeight: dropdownMaxHeight - 40 }}>
+            {recentAddresses.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => handleSelectRecent(item)}
+                className="w-full flex items-start gap-3 p-3 hover:bg-secondary transition-colors text-left border-b border-border last:border-0"
+              >
+                <Clock className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{item.address}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Google Places predictions */}
+      {/* Google Places predictions - positioned above input with dynamic height */}
       {isOpen && predictions.length > 0 && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] max-h-60 overflow-y-auto">
-          {predictions.map((prediction) => (
-            <button
-              key={prediction.place_id}
-              onClick={() => handleSelect(prediction)}
-              className="w-full flex items-start gap-3 p-3 hover:bg-secondary transition-colors text-left border-b border-border last:border-0"
-            >
-              <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">
-                  {prediction.structured_formatting.main_text}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {prediction.structured_formatting.secondary_text}
-                </p>
-              </div>
-            </button>
-          ))}
+        <div 
+          className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] overflow-hidden"
+          style={{ maxHeight: dropdownMaxHeight }}
+        >
+          <div className="overflow-y-auto" style={{ maxHeight: dropdownMaxHeight }}>
+            {predictions.map((prediction) => (
+              <button
+                key={prediction.place_id}
+                onClick={() => handleSelect(prediction)}
+                className="w-full flex items-start gap-3 p-3 hover:bg-secondary transition-colors text-left border-b border-border last:border-0"
+              >
+                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {prediction.structured_formatting.main_text}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {prediction.structured_formatting.secondary_text}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
