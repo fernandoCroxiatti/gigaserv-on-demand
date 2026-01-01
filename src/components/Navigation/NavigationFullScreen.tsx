@@ -983,6 +983,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         onOpenChange={setShowDirectPaymentDialog}
         amount={serviceValue}
         chamadoId={chamado.id}
+        providerId={chamado.prestadorId}
         onConfirmReceived={handleConfirmDirectPayment}
         onNotReceived={handleNotReceivedPayment}
         isLoading={isConfirming}

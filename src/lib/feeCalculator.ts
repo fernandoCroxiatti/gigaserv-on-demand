@@ -7,15 +7,17 @@
  * - Proper financial rounding (2 decimal places)
  * - Invariant validation (valorTaxa + valorLiquidoPrestador === valorCorrida)
  * - Audit-ready calculations
+ * - Fee exemption support (promotional periods)
  */
 
 export interface FeeCalculation {
   serviceValue: number;      // valorCorrida
-  feePercentage: number;     // taxaAppPercentual
+  feePercentage: number;     // taxaAppPercentual (effective after exemption check)
   feeAmount: number;         // valorTaxa
   providerNetAmount: number; // valorLiquidoPrestador
   isValid: boolean;          // Whether the calculation passed all validations
   validationError: string | null; // Error message if validation failed
+  feeSource?: 'exemption' | 'individual' | 'global'; // Source of the fee percentage
 }
 
 export interface FeeAuditLog {
@@ -26,6 +28,32 @@ export interface FeeAuditLog {
   forma_pagamento: 'pagamento_direto';
   data_hora_confirmacao_pagamento: string;
   invariant_check_passed: boolean;
+  fee_source?: 'exemption' | 'individual' | 'global';
+}
+
+/**
+ * Parameters for determining effective fee rate
+ * Follows priority: exemption > individual > global
+ */
+export interface EffectiveFeeParams {
+  /** Provider's fee exemption end date (if any) */
+  exemptionUntil?: Date | null;
+  /** Provider's individual fee rate (if configured) */
+  individualRate?: number | null;
+  /** Global commission rate (default) */
+  globalRate: number;
+}
+
+/**
+ * Result of effective fee determination
+ */
+export interface EffectiveFeeResult {
+  /** The fee percentage to apply */
+  percentage: number;
+  /** Source of this percentage */
+  source: 'exemption' | 'individual' | 'global';
+  /** If exemption, when it expires */
+  exemptionUntil?: Date;
 }
 
 /**
@@ -159,6 +187,69 @@ export function calculateFee(
 }
 
 /**
+ * DETERMINE EFFECTIVE FEE RATE
+ * 
+ * Priority order:
+ * 1. Exemption (if active) → 0%
+ * 2. Individual rate (if configured) → use it
+ * 3. Global rate (default) → use it
+ * 
+ * This function is PURE and does not modify any state.
+ */
+export function getEffectiveFeeRate(params: EffectiveFeeParams): EffectiveFeeResult {
+  const { exemptionUntil, individualRate, globalRate } = params;
+  
+  // Priority 1: Active fee exemption
+  if (exemptionUntil) {
+    const now = new Date();
+    if (exemptionUntil > now) {
+      console.log('[FeeCalculator] Provider has active fee exemption until:', exemptionUntil);
+      return {
+        percentage: 0,
+        source: 'exemption',
+        exemptionUntil,
+      };
+    }
+  }
+  
+  // Priority 2: Individual rate (if configured and valid)
+  if (typeof individualRate === 'number' && individualRate >= 0 && individualRate <= 100) {
+    console.log('[FeeCalculator] Using provider individual rate:', individualRate);
+    return {
+      percentage: individualRate,
+      source: 'individual',
+    };
+  }
+  
+  // Priority 3: Global rate (default)
+  console.log('[FeeCalculator] Using global rate:', globalRate);
+  return {
+    percentage: globalRate,
+    source: 'global',
+  };
+}
+
+/**
+ * CALCULATE FEE WITH EXEMPTION CHECK
+ * 
+ * Extended version of calculateFee that first determines the effective
+ * fee rate based on exemption/individual/global priority.
+ */
+export function calculateFeeWithExemption(
+  serviceValue: number | null | undefined,
+  params: EffectiveFeeParams
+): FeeCalculation {
+  const effectiveRate = getEffectiveFeeRate(params);
+  const result = calculateFee(serviceValue, effectiveRate.percentage);
+  
+  // Add fee source to result
+  return {
+    ...result,
+    feeSource: effectiveRate.source,
+  };
+}
+
+/**
  * Creates an audit log entry for financial records
  */
 export function createFeeAuditLog(calculation: FeeCalculation): FeeAuditLog {
@@ -170,6 +261,7 @@ export function createFeeAuditLog(calculation: FeeCalculation): FeeAuditLog {
     forma_pagamento: 'pagamento_direto',
     data_hora_confirmacao_pagamento: new Date().toISOString(),
     invariant_check_passed: calculation.isValid,
+    fee_source: calculation.feeSource,
   };
 }
 
