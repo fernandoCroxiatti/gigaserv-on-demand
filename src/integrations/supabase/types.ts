@@ -470,6 +470,7 @@ export type Database = {
           cpf: string | null
           created_at: string
           email: string | null
+          first_service_coupon_used: boolean | null
           id: string
           is_blocked: boolean | null
           last_activity: string | null
@@ -496,6 +497,7 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           email?: string | null
+          first_service_coupon_used?: boolean | null
           id?: string
           is_blocked?: boolean | null
           last_activity?: string | null
@@ -522,6 +524,7 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           email?: string | null
+          first_service_coupon_used?: boolean | null
           id?: string
           is_blocked?: boolean | null
           last_activity?: string | null
@@ -547,6 +550,7 @@ export type Database = {
           current_lng: number | null
           device_id: string | null
           device_id_registered_at: string | null
+          fee_exemption_until: string | null
           financial_block_reason: string | null
           financial_blocked: boolean | null
           financial_status:
@@ -606,6 +610,7 @@ export type Database = {
           current_lng?: number | null
           device_id?: string | null
           device_id_registered_at?: string | null
+          fee_exemption_until?: string | null
           financial_block_reason?: string | null
           financial_blocked?: boolean | null
           financial_status?:
@@ -667,6 +672,7 @@ export type Database = {
           current_lng?: number | null
           device_id?: string | null
           device_id_registered_at?: string | null
+          fee_exemption_until?: string | null
           financial_block_reason?: string | null
           financial_blocked?: boolean | null
           financial_status?:
