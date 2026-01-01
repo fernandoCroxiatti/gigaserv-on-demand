@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Loader2, DollarSign, AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react';
-import { getAppCommissionPercentage } from '@/lib/appSettings';
+import React from 'react';
+import { Loader2, DollarSign, AlertTriangle, AlertCircle, CheckCircle, Gift } from 'lucide-react';
 import { calculateFee, formatCurrency, formatPercentage, canFinalizeWithFee, createFeeAuditLog } from '@/lib/feeCalculator';
+import { useProviderFeeRate } from '@/hooks/useProviderFeeRate';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +18,7 @@ interface DirectPaymentConfirmationDialogProps {
   onOpenChange: (open: boolean) => void;
   amount: number;
   chamadoId?: string;
+  providerId: string | null;
   onConfirmReceived: () => void;
   onNotReceived: () => void;
   isLoading?: boolean;
@@ -39,49 +40,24 @@ interface DirectPaymentConfirmationDialogProps {
  * - ❌ Ainda não recebi → return to ride
  * 
  * Cannot be dismissed without explicit action.
+ * 
+ * FEE PRIORITY: exemption > individual > global
  */
 export function DirectPaymentConfirmationDialog({
   open,
   onOpenChange,
   amount,
   chamadoId,
+  providerId,
   onConfirmReceived,
   onNotReceived,
   isLoading = false,
 }: DirectPaymentConfirmationDialogProps) {
-  const [feePercentage, setFeePercentage] = useState<number | null>(null);
-  const [loadingFee, setLoadingFee] = useState(true);
-  const [fetchError, setFetchError] = useState(false);
-
-  // Fetch commission percentage when dialog opens
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchCommission = async () => {
-      setLoadingFee(true);
-      setFetchError(false);
-
-      const pct = await getAppCommissionPercentage();
-      if (cancelled) return;
-
-      if (pct === null) {
-        setFeePercentage(null);
-        setFetchError(true);
-      } else {
-        setFeePercentage(pct);
-      }
-
-      setLoadingFee(false);
-    };
-
-    if (open) {
-      fetchCommission();
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  const { effectiveRate, loading: loadingFee, error: fetchError } = useProviderFeeRate(providerId);
+  
+  // Determine fee percentage from effective rate
+  const feePercentage = effectiveRate?.percentage ?? null;
+  const hasExemption = effectiveRate?.source === 'exemption';
 
   // Calculate fee using safe utility with invariant checks
   const feeCalc = calculateFee(amount, feePercentage);
@@ -115,8 +91,8 @@ export function DirectPaymentConfirmationDialog({
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2 text-lg">
-            <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-amber-500" />
+            <div className={`w-10 h-10 rounded-full ${hasExemption ? 'bg-green-500/10' : 'bg-amber-500/10'} flex items-center justify-center`}>
+              {hasExemption ? <Gift className="w-5 h-5 text-green-500" /> : <DollarSign className="w-5 h-5 text-amber-500" />}
             </div>
             Confirmação de Recebimento
           </AlertDialogTitle>
@@ -157,12 +133,23 @@ export function DirectPaymentConfirmationDialog({
                   <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Taxa do app:</span>
-                      <span className="font-medium">{formatPercentage(feeCalc.feePercentage)} (R$ {formatCurrency(feeCalc.feeAmount)})</span>
+                      <span className="font-medium">
+                        {hasExemption ? (
+                          <span className="text-green-600 dark:text-green-400">ISENTO 🎉</span>
+                        ) : (
+                          `${formatPercentage(feeCalc.feePercentage)} (R$ ${formatCurrency(feeCalc.feeAmount)})`
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm border-t border-border/50 pt-2">
                       <span className="text-muted-foreground">Valor líquido para você:</span>
                       <span className="font-bold text-primary">R$ {formatCurrency(feeCalc.providerNetAmount)}</span>
                     </div>
+                    {hasExemption && effectiveRate?.exemptionUntil && (
+                      <div className="text-xs text-green-600 dark:text-green-400 text-center pt-1">
+                        Promoção ativa até {effectiveRate.exemptionUntil.toLocaleDateString('pt-BR')}
+                      </div>
+                    )}
                   </div>
                   
                   {/* REQUIRED instruction */}
@@ -170,13 +157,15 @@ export function DirectPaymentConfirmationDialog({
                     Clique em "Recebi o pagamento" apenas se o cliente já pagou.
                   </p>
                   
-                  {/* Warning about fee registration */}
-                  <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
-                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      A taxa de R$ {formatCurrency(feeCalc.feeAmount)} será registrada como devida ao GIGA S.O.S conforme os Termos de Uso.
-                    </p>
-                  </div>
+                  {/* Warning about fee registration - only show if NOT exempt */}
+                  {!hasExemption && (
+                    <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        A taxa de R$ {formatCurrency(feeCalc.feeAmount)} será registrada como devida ao GIGA S.O.S conforme os Termos de Uso.
+                      </p>
+                    </div>
+                  )}
                   
                   {/* Validation error if any */}
                   {!feeCalc.isValid && (

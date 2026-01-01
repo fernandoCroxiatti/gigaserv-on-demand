@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { DollarSign, AlertTriangle, AlertCircle } from 'lucide-react';
+import React from 'react';
+import { DollarSign, AlertTriangle, AlertCircle, Gift } from 'lucide-react';
 import { calculateFee, formatCurrency, formatPercentage, canFinalizeWithFee } from '@/lib/feeCalculator';
-import { getAppCommissionPercentage } from '@/lib/appSettings';
+import { useProviderFeeRate } from '@/hooks/useProviderFeeRate';
+import { useApp } from '@/contexts/AppContext';
 
 interface DirectPaymentBannerProps {
   amount: number;
@@ -11,43 +12,20 @@ interface DirectPaymentBannerProps {
  * Sticky banner shown to provider during service when payment is direct to provider.
  * Shows:
  * - Amount to receive from client
- * - App fee percentage and value
+ * - App fee percentage and value (considering exemption)
  * - Net amount for provider
  * 
  * This banner is ALWAYS visible and cannot be dismissed.
  * BLOCKS display if fee calculation is invalid.
+ * 
+ * FEE PRIORITY: exemption > individual > global
  */
 export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
-  const [feePercentage, setFeePercentage] = useState<number | null>(null);
-  const [loadingFee, setLoadingFee] = useState(true);
-  const [fetchError, setFetchError] = useState(false);
+  const { user } = useApp();
+  const { effectiveRate, loading: loadingFee, error: fetchError } = useProviderFeeRate(user?.id ?? null);
 
-  // Fetch commission percentage on mount
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchCommission = async () => {
-      setLoadingFee(true);
-      setFetchError(false);
-
-      const pct = await getAppCommissionPercentage();
-      if (cancelled) return;
-
-      if (pct === null) {
-        setFetchError(true);
-        setFeePercentage(null);
-      } else {
-        setFeePercentage(pct);
-      }
-
-      setLoadingFee(false);
-    };
-
-    fetchCommission();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Determine fee percentage from effective rate
+  const feePercentage = effectiveRate?.percentage ?? null;
 
   // Show loading state
   if (loadingFee) {
@@ -95,33 +73,48 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
       </div>
     );
   }
+  // Check if provider has exemption
+  const hasExemption = effectiveRate?.source === 'exemption';
   
   return (
-    <div className="bg-amber-500 text-white px-4 py-3 shadow-lg">
+    <div className={`${hasExemption ? 'bg-green-500' : 'bg-amber-500'} text-white px-4 py-3 shadow-lg`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="bg-white/20 rounded-full p-2">
-            <DollarSign className="w-6 h-6" />
+            {hasExemption ? <Gift className="w-6 h-6" /> : <DollarSign className="w-6 h-6" />}
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-medium opacity-90">Receba do cliente</span>
             <span className="text-xl font-bold">R$ {formatCurrency(feeCalc.serviceValue)}</span>
           </div>
         </div>
-        <AlertTriangle className="w-6 h-6 animate-bounce flex-shrink-0" />
+        {!hasExemption && <AlertTriangle className="w-6 h-6 animate-bounce flex-shrink-0" />}
       </div>
       
       {/* Fee breakdown - always shows valid numbers */}
       <div className="mt-2 pt-2 border-t border-white/30 grid grid-cols-2 gap-2 text-xs">
         <div>
           <span className="opacity-80">Taxa do app:</span>
-          <span className="font-semibold ml-1">{formatPercentage(feeCalc.feePercentage)} (R$ {formatCurrency(feeCalc.feeAmount)})</span>
+          <span className="font-semibold ml-1">
+            {hasExemption ? (
+              <span className="bg-white/20 px-1 rounded">ISENTO</span>
+            ) : (
+              `${formatPercentage(feeCalc.feePercentage)} (R$ ${formatCurrency(feeCalc.feeAmount)})`
+            )}
+          </span>
         </div>
         <div className="text-right">
           <span className="opacity-80">Líquido p/ você:</span>
           <span className="font-bold ml-1">R$ {formatCurrency(feeCalc.providerNetAmount)}</span>
         </div>
       </div>
+      
+      {/* Exemption badge */}
+      {hasExemption && effectiveRate?.exemptionUntil && (
+        <div className="mt-2 text-xs text-center opacity-90">
+          🎉 Promoção ativa até {effectiveRate.exemptionUntil.toLocaleDateString('pt-BR')}
+        </div>
+      )}
     </div>
   );
 }
