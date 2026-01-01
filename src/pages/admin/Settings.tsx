@@ -17,6 +17,7 @@ import {
   Building
 } from 'lucide-react';
 import { format } from 'date-fns';
+import PromotionsSettings from '@/components/Admin/PromotionsSettings';
 import { ptBR } from 'date-fns/locale';
 import {
   Table,
@@ -381,6 +382,9 @@ export default function AdminSettings() {
           )}
         </CardContent>
       </Card>
+
+      {/* Promotions Section - All DISABLED by default */}
+      <PromotionsSettings />
     </div>
   );
 }
