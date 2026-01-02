@@ -21,6 +21,54 @@ export function useProviderVehicles(providerId: string | undefined) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Auto-migrate legacy vehicle_plate from provider_data to provider_vehicles
+  const migrateExistingVehicle = useCallback(async () => {
+    if (!providerId) return;
+
+    try {
+      // Check if provider_vehicles already has entries
+      const { count, error: countError } = await supabase
+        .from('provider_vehicles')
+        .select('*', { count: 'exact', head: true })
+        .eq('provider_id', providerId);
+
+      if (countError) throw countError;
+
+      // If vehicles already exist, no migration needed
+      if (count && count > 0) return;
+
+      // Fetch legacy vehicle_plate from provider_data
+      const { data: providerData, error: providerError } = await supabase
+        .from('provider_data')
+        .select('vehicle_plate, vehicle_type')
+        .eq('user_id', providerId)
+        .single();
+
+      if (providerError || !providerData?.vehicle_plate) return;
+
+      // Create vehicle entry from legacy data
+      const cleanPlate = providerData.vehicle_plate.replace(/-/g, '').toUpperCase();
+      
+      const { error: insertError } = await supabase
+        .from('provider_vehicles')
+        .insert({
+          provider_id: providerId,
+          plate: cleanPlate,
+          vehicle_type: providerData.vehicle_type || null,
+          is_primary: true,
+          is_active: true,
+        });
+
+      if (insertError && insertError.code !== '23505') {
+        console.error('[useProviderVehicles] Migration error:', insertError);
+      } else if (!insertError) {
+        console.log('[useProviderVehicles] Auto-migrated legacy vehicle:', cleanPlate);
+      }
+    } catch (err) {
+      console.error('[useProviderVehicles] Migration check error:', err);
+    }
+  }, [providerId]);
+
   const fetchVehicles = useCallback(async () => {
     if (!providerId) {
       setVehicles([]);
@@ -30,6 +78,10 @@ export function useProviderVehicles(providerId: string | undefined) {
 
     try {
       setLoading(true);
+      
+      // First, ensure legacy vehicle is migrated
+      await migrateExistingVehicle();
+      
       const { data, error: fetchError } = await supabase
         .from('provider_vehicles')
         .select('*')
@@ -46,7 +98,7 @@ export function useProviderVehicles(providerId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [providerId]);
+  }, [providerId, migrateExistingVehicle]);
 
   useEffect(() => {
     fetchVehicles();
