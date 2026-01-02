@@ -463,7 +463,7 @@ export function ClientIdleView() {
                     Destino do veículo
                   </p>
                   
-                  <div className="ring-1 ring-border/50 rounded-xl overflow-hidden">
+                  <div className="ring-1 ring-border/50 rounded-xl overflow-visible">
                     <PlacesAutocomplete
                       value={destinoText}
                       onChange={handleDestinoTextChange}
