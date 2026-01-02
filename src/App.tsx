@@ -22,6 +22,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfUse from "./pages/TermsOfUse";
 import Settings from "./pages/Settings";
 import Support from "./pages/Support";
+import InternalNotificationsPage from "./pages/InternalNotifications";
 import { AdminLayout } from "./components/Admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminSettings from "./pages/admin/Settings";
@@ -30,6 +31,7 @@ import AdminProviders from "./pages/admin/Providers";
 import AdminClients from "./pages/admin/Clients";
 import AdminChamados from "./pages/admin/Chamados";
 import AdminNotifications from "./pages/admin/Notifications";
+import InternalNotificationsAdmin from "./pages/admin/InternalNotificationsAdmin";
 import StripeAuditReport from "./pages/StripeAuditReport";
 import ProviderFinances from "./pages/admin/ProviderFinances";
 import AdminAntiFraud from "./pages/admin/AntiFraud";
@@ -193,6 +195,15 @@ function AppRoutes() {
           </ProtectedRoute>
         } 
       />
+      {/* Internal Notifications page */}
+      <Route 
+        path="/notifications" 
+        element={
+          <ProtectedRoute>
+            <InternalNotificationsPage />
+          </ProtectedRoute>
+        } 
+      />
       {/* Admin Routes */}
       <Route 
         path="/admin" 
@@ -205,6 +216,7 @@ function AppRoutes() {
         <Route index element={<AdminDashboard />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="notifications" element={<AdminNotifications />} />
+        <Route path="internal-notifications" element={<InternalNotificationsAdmin />} />
         <Route path="reports" element={<AdminReports />} />
         <Route path="providers" element={<AdminProviders />} />
         <Route path="clients" element={<AdminClients />} />

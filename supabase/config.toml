@@ -74,3 +74,9 @@ verify_jwt = false
 
 [functions.notify-admin-suspicious]
 verify_jwt = true
+
+[functions.generate-notification-text]
+verify_jwt = true
+
+[functions.generate-notification-image]
+verify_jwt = true

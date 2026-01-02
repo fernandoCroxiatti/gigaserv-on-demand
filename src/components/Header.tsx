@@ -5,6 +5,7 @@ import { useWakeLock } from '@/hooks/useWakeLock';
 import { usePwaInstallPrompt } from '@/hooks/usePwaInstallPrompt';
 import { ProfileSwitch } from './ProfileSwitch';
 import { GlobalDrawer } from './GlobalDrawer';
+import { NotificationBell } from './Notifications/NotificationBell';
 import { Button } from './ui/button';
 import { Download, Sun } from 'lucide-react';
 import { toast } from 'sonner';
@@ -68,6 +69,7 @@ export function Header() {
 
         {/* Actions */}
         <div className="flex items-center gap-2 pointer-events-auto flex-shrink-0">
+          <NotificationBell />
           {!isNative && !standalone && (
             <Button
               type="button"

@@ -346,6 +346,71 @@ export type Database = {
         }
         Relationships: []
       }
+      internal_notification_reads: {
+        Row: {
+          id: string
+          lida_em: string
+          notificacao_id: string
+          usuario_id: string
+        }
+        Insert: {
+          id?: string
+          lida_em?: string
+          notificacao_id: string
+          usuario_id: string
+        }
+        Update: {
+          id?: string
+          lida_em?: string
+          notificacao_id?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "internal_notification_reads_notificacao_id_fkey"
+            columns: ["notificacao_id"]
+            isOneToOne: false
+            referencedRelation: "internal_notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      internal_notifications: {
+        Row: {
+          criada_em: string
+          criada_por: string | null
+          id: string
+          imagem_url: string | null
+          publicada: boolean
+          publicada_em: string | null
+          publico: string
+          texto: string
+          titulo: string
+        }
+        Insert: {
+          criada_em?: string
+          criada_por?: string | null
+          id?: string
+          imagem_url?: string | null
+          publicada?: boolean
+          publicada_em?: string | null
+          publico?: string
+          texto: string
+          titulo: string
+        }
+        Update: {
+          criada_em?: string
+          criada_por?: string | null
+          id?: string
+          imagem_url?: string | null
+          publicada?: boolean
+          publicada_em?: string | null
+          publico?: string
+          texto?: string
+          titulo?: string
+        }
+        Relationships: []
+      }
       notification_history: {
         Row: {
           body: string
