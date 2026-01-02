@@ -54,7 +54,7 @@ interface NotificationDraft {
   titulo: string;
   texto: string;
   image_concept: NotificationConcept;
-  publico: 'cliente' | 'prestador' | 'ambos';
+  publico: 'clientes' | 'prestadores' | 'todos';
   destaque: boolean;
 }
 
@@ -62,7 +62,7 @@ const initialDraft: NotificationDraft = {
   titulo: '',
   texto: '',
   image_concept: DEFAULT_CONCEPT,
-  publico: 'ambos',
+  publico: 'todos',
   destaque: false,
 };
 
@@ -213,16 +213,16 @@ export default function InternalNotificationsAdmin() {
 
   const getPublicoLabel = (publico: string) => {
     switch (publico) {
-      case 'cliente': return 'Clientes';
-      case 'prestador': return 'Prestadores';
+      case 'clientes': return 'Clientes';
+      case 'prestadores': return 'Prestadores';
       default: return 'Todos';
     }
   };
 
   const getPublicoIcon = (publico: string) => {
     switch (publico) {
-      case 'cliente': return <Users className="h-4 w-4" />;
-      case 'prestador': return <UserCog className="h-4 w-4" />;
+      case 'clientes': return <Users className="h-4 w-4" />;
+      case 'prestadores': return <UserCog className="h-4 w-4" />;
       default: return <UsersRound className="h-4 w-4" />;
     }
   };
@@ -323,22 +323,22 @@ export default function InternalNotificationsAdmin() {
                   className="flex gap-4"
                 >
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="ambos" id="ambos" />
-                    <Label htmlFor="ambos" className="flex items-center gap-1.5 cursor-pointer">
+                    <RadioGroupItem value="todos" id="todos" />
+                    <Label htmlFor="todos" className="flex items-center gap-1.5 cursor-pointer">
                       <UsersRound className="h-4 w-4" />
                       Todos
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="cliente" id="cliente" />
-                    <Label htmlFor="cliente" className="flex items-center gap-1.5 cursor-pointer">
+                    <RadioGroupItem value="clientes" id="clientes" />
+                    <Label htmlFor="clientes" className="flex items-center gap-1.5 cursor-pointer">
                       <Users className="h-4 w-4" />
                       Clientes
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="prestador" id="prestador" />
-                    <Label htmlFor="prestador" className="flex items-center gap-1.5 cursor-pointer">
+                    <RadioGroupItem value="prestadores" id="prestadores" />
+                    <Label htmlFor="prestadores" className="flex items-center gap-1.5 cursor-pointer">
                       <UserCog className="h-4 w-4" />
                       Prestadores
                     </Label>
