@@ -13,6 +13,7 @@ interface PlacesAutocompleteProps {
   className?: string;
   recentAddresses?: AddressHistoryItem[];
   showRecentOnFocus?: boolean;
+  dropdownPosition?: 'above' | 'below';
 }
 
 /**
@@ -34,6 +35,7 @@ export function PlacesAutocomplete({
   className = '',
   recentAddresses = [],
   showRecentOnFocus = false,
+  dropdownPosition = 'above',
 }: PlacesAutocompleteProps) {
   const { isLoaded } = useGoogleMaps();
   const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
@@ -227,10 +229,12 @@ export function PlacesAutocomplete({
         )}
       </div>
 
-      {/* Recent addresses dropdown - positioned above input with dynamic height */}
+      {/* Recent addresses dropdown - positioned based on dropdownPosition */}
       {showRecent && recentAddresses.length > 0 && (
         <div 
-          className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] overflow-hidden"
+          className={`absolute left-0 right-0 bg-card rounded-xl shadow-uber-lg border border-border z-[100] overflow-hidden ${
+            dropdownPosition === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'
+          }`}
           style={{ maxHeight: dropdownMaxHeight }}
         >
           <div className="px-3 py-2 border-b border-border bg-card sticky top-0 z-10">
@@ -253,10 +257,12 @@ export function PlacesAutocomplete({
         </div>
       )}
 
-      {/* Google Places predictions - positioned above input with dynamic height */}
+      {/* Google Places predictions - positioned based on dropdownPosition */}
       {isOpen && predictions.length > 0 && (
         <div 
-          className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-xl shadow-uber-lg border border-border z-[100] overflow-hidden"
+          className={`absolute left-0 right-0 bg-card rounded-xl shadow-uber-lg border border-border z-[100] overflow-hidden ${
+            dropdownPosition === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'
+          }`}
           style={{ maxHeight: dropdownMaxHeight }}
         >
           <div className="overflow-y-auto" style={{ maxHeight: dropdownMaxHeight }}>

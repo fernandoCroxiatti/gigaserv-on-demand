@@ -472,6 +472,7 @@ export function ClientIdleView() {
                       icon={<MapPin className="w-4 h-4 text-primary" />}
                       recentAddresses={recentAddresses}
                       showRecentOnFocus={true}
+                      dropdownPosition="below"
                     />
                   </div>
                 </motion.div>
