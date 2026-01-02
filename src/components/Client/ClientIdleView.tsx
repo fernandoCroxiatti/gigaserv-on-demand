@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
 import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
@@ -16,6 +17,49 @@ import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
 import { NotificationCTA } from '../Notifications/NotificationCTA';
 
 const NEARBY_RADIUS_KM = 15;
+
+// Animation variants for progressive steps
+const stepVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 20,
+    height: 0,
+    marginTop: 0,
+  },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    height: 'auto',
+    marginTop: 20,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 300,
+      damping: 30,
+      opacity: { duration: 0.2 },
+    }
+  },
+  exit: { 
+    opacity: 0, 
+    y: -10,
+    height: 0,
+    marginTop: 0,
+    transition: {
+      duration: 0.2,
+    }
+  }
+};
+
+const panelVariants = {
+  hidden: { y: '100%' },
+  visible: { 
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 300,
+      damping: 30,
+    }
+  }
+};
 
 export function ClientIdleView() {
   const { createChamado } = useApp();
@@ -283,14 +327,19 @@ export function ClientIdleView() {
       </div>
 
       {/* Bottom panel - Progressive UX */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
+      <motion.div 
+        className="absolute bottom-0 left-0 right-0 z-10"
+        initial="hidden"
+        animate="visible"
+        variants={panelVariants}
+      >
         <div className="bg-card rounded-t-3xl shadow-2xl border-t border-border/20">
           {/* Handle indicator */}
           <div className="flex justify-center pt-3 pb-2">
             <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
           </div>
           
-          <div className="px-5 pb-6 space-y-5 max-h-[60vh] overflow-y-auto">
+          <div className="px-5 pb-6 max-h-[60vh] overflow-y-auto">
           
             {/* 1. ORIGEM - Always visible */}
             <div className="space-y-3">
@@ -355,148 +404,208 @@ export function ClientIdleView() {
             </div>
 
             {/* 2. TIPO DE SERVIÇO - Progressive: show after origem */}
-            {showServiceType && (
-              <div className="space-y-3 animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-primary">2</span>
+            <AnimatePresence mode="wait">
+              {showServiceType && (
+                <motion.div 
+                  key="service-type"
+                  variants={stepVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="space-y-3 overflow-hidden"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="text-xs font-bold text-primary">2</span>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Qual assistência você precisa?
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-foreground">
-                    Qual assistência você precisa?
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType) => {
-                    const config = SERVICE_CONFIG[serviceType];
-                    const isSelected = selectedService === serviceType;
-                    const typeProviderCount = nearbyProviders.filter(p => 
-                      p.services.includes(serviceType)
-                    ).length;
-                    
-                    return (
-                      <button
-                        key={serviceType}
-                        onClick={() => {
-                          setSelectedService(serviceType);
-                          if (!serviceRequiresDestination(serviceType)) {
-                            setDestino(null);
-                            setDestinoText('');
-                          }
-                        }}
-                        className={`flex items-center gap-2.5 p-3.5 rounded-xl transition-all ${
-                          isSelected 
-                            ? 'bg-primary/10 ring-2 ring-primary/40 shadow-sm' 
-                            : 'bg-secondary hover:bg-secondary/80'
-                        }`}
-                      >
-                        <span className="text-xl">{config.icon}</span>
-                        <div className="flex-1 min-w-0 text-left">
-                          <p className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                            {config.label}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {typeProviderCount > 0 
-                              ? `${typeProviderCount} disponíve${typeProviderCount > 1 ? 'is' : 'l'}` 
-                              : config.estimatedTime}
-                          </p>
-                        </div>
-                        {isSelected && (
-                          <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                            <Check className="w-3 h-3 text-primary-foreground" />
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType, index) => {
+                      const config = SERVICE_CONFIG[serviceType];
+                      const isSelected = selectedService === serviceType;
+                      const typeProviderCount = nearbyProviders.filter(p => 
+                        p.services.includes(serviceType)
+                      ).length;
+                      
+                      return (
+                        <motion.button
+                          key={serviceType}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.05 }}
+                          onClick={() => {
+                            setSelectedService(serviceType);
+                            if (!serviceRequiresDestination(serviceType)) {
+                              setDestino(null);
+                              setDestinoText('');
+                            }
+                          }}
+                          className={`flex items-center gap-2.5 p-3.5 rounded-xl transition-all ${
+                            isSelected 
+                              ? 'bg-primary/10 ring-2 ring-primary/40 shadow-sm' 
+                              : 'bg-secondary hover:bg-secondary/80'
+                          }`}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <span className="text-xl">{config.icon}</span>
+                          <div className="flex-1 min-w-0 text-left">
+                            <p className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                              {config.label}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {typeProviderCount > 0 
+                                ? `${typeProviderCount} disponíve${typeProviderCount > 1 ? 'is' : 'l'}` 
+                                : config.estimatedTime}
+                            </p>
                           </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                          {isSelected && (
+                            <motion.div 
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0"
+                            >
+                              <Check className="w-3 h-3 text-primary-foreground" />
+                            </motion.div>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* 3. DESTINO - Progressive: show after service type, only for guincho */}
-            {showDestination && (
-              <div className="space-y-3 animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-primary">3</span>
+            <AnimatePresence mode="wait">
+              {showDestination && (
+                <motion.div 
+                  key="destination"
+                  variants={stepVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="space-y-3 overflow-hidden"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="text-xs font-bold text-primary">3</span>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Para onde o veículo será levado?
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-foreground">
-                    Para onde o veículo será levado?
-                  </p>
-                </div>
-                
-                <div className="ring-1 ring-border/50 rounded-xl overflow-hidden">
-                  <PlacesAutocomplete
-                    value={destinoText}
-                    onChange={handleDestinoTextChange}
-                    onSelect={handleDestinoSelect}
-                    placeholder="Oficina, casa ou outro destino"
-                    icon={<MapPin className="w-4 h-4 text-primary" />}
-                    recentAddresses={recentAddresses}
-                    showRecentOnFocus={true}
-                  />
-                </div>
-              </div>
-            )}
+                  
+                  <div className="ring-1 ring-border/50 rounded-xl overflow-hidden">
+                    <PlacesAutocomplete
+                      value={destinoText}
+                      onChange={handleDestinoTextChange}
+                      onSelect={handleDestinoSelect}
+                      placeholder="Oficina, casa ou outro destino"
+                      icon={<MapPin className="w-4 h-4 text-primary" />}
+                      recentAddresses={recentAddresses}
+                      showRecentOnFocus={true}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Local service info - when destination not needed */}
-            {showLocalInfo && (
-              <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-xl animate-fade-in border border-primary/10">
-                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Wrench className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Atendimento no local do veículo</p>
-                  <p className="text-xs text-muted-foreground">O prestador irá até você para realizar o serviço.</p>
-                </div>
-              </div>
-            )}
+            <AnimatePresence mode="wait">
+              {showLocalInfo && (
+                <motion.div 
+                  key="local-info"
+                  variants={stepVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="flex items-center gap-3 p-4 bg-primary/5 rounded-xl border border-primary/10 overflow-hidden"
+                >
+                  <motion.div 
+                    initial={{ rotate: -180, opacity: 0 }}
+                    animate={{ rotate: 0, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0"
+                  >
+                    <Wrench className="w-5 h-5 text-primary" />
+                  </motion.div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Atendimento no local do veículo</p>
+                    <p className="text-xs text-muted-foreground">O prestador irá até você para realizar o serviço.</p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* 4. TIPO DE VEÍCULO - Progressive */}
-            {showVehicleType && (
-              <div className="animate-fade-in">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-primary">{needsDestination ? '4' : '3'}</span>
+            <AnimatePresence mode="wait">
+              {showVehicleType && (
+                <motion.div 
+                  key="vehicle-type"
+                  variants={stepVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="text-xs font-bold text-primary">{needsDestination ? '4' : '3'}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Qual é o tipo do veículo?
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-foreground">
-                    Qual é o tipo do veículo?
-                  </p>
-                </div>
-                <VehicleTypeSelector 
-                  value={selectedVehicleType} 
-                  onChange={setSelectedVehicleType} 
-                />
-              </div>
-            )}
+                  <VehicleTypeSelector 
+                    value={selectedVehicleType} 
+                    onChange={setSelectedVehicleType} 
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* 5. BOTÃO CTA - Progressive */}
-            {showCTA && (
-              <div className="pt-2 animate-fade-in">
-                <Button 
-                  onClick={handleSolicitar}
-                  className="w-full h-14 text-base font-semibold rounded-xl shadow-lg"
-                  size="lg"
-                  disabled={!canSubmit}
+            <AnimatePresence mode="wait">
+              {showCTA && (
+                <motion.div 
+                  key="cta-button"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  className="pt-2"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                      Solicitando...
-                    </>
-                  ) : (
-                    <>
-                      <span className="mr-2">{serviceConfig.icon}</span>
-                      {getCtaText()}
-                      <ChevronRight className="w-5 h-5 ml-1" />
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
+                  <motion.div whileTap={{ scale: 0.98 }}>
+                    <Button 
+                      onClick={handleSolicitar}
+                      className="w-full h-14 text-base font-semibold rounded-xl shadow-lg"
+                      size="lg"
+                      disabled={!canSubmit}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                          Solicitando...
+                        </>
+                      ) : (
+                        <>
+                          <span className="mr-2">{serviceConfig.icon}</span>
+                          {getCtaText()}
+                          <ChevronRight className="w-5 h-5 ml-1" />
+                        </>
+                      )}
+                    </Button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Location Permission Modal */}
       <LocationPermissionModal 
