@@ -21,7 +21,8 @@ import {
   UsersRound,
   Trash2,
   Check,
-  Clock
+  Clock,
+  Star
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -41,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { 
   NOTIFICATION_CONCEPTS, 
   DEFAULT_CONCEPT,
@@ -53,6 +55,7 @@ interface NotificationDraft {
   texto: string;
   image_concept: NotificationConcept;
   publico: 'cliente' | 'prestador' | 'ambos';
+  destaque: boolean;
 }
 
 const initialDraft: NotificationDraft = {
@@ -60,6 +63,7 @@ const initialDraft: NotificationDraft = {
   texto: '',
   image_concept: DEFAULT_CONCEPT,
   publico: 'ambos',
+  destaque: false,
 };
 
 export default function InternalNotificationsAdmin() {
@@ -90,13 +94,14 @@ export default function InternalNotificationsAdmin() {
       const { data: userData } = await supabase.auth.getUser();
       
       // Map image_concept to imagem_url field for DB compatibility
-      const { image_concept, ...rest } = notification;
+      const { image_concept, destaque, ...rest } = notification;
       
       const { error } = await supabase
         .from('internal_notifications')
         .insert({
           ...rest,
           imagem_url: image_concept, // Store concept as string in imagem_url
+          destaque: destaque,
           criada_por: userData.user?.id,
           publicada_em: notification.publicada ? new Date().toISOString() : null,
         });
@@ -372,6 +377,26 @@ export default function InternalNotificationsAdmin() {
                   A IA sugere automaticamente o ícone baseado no tema, mas você pode alterar manualmente.
                 </p>
               </div>
+
+              {/* Destaque Toggle */}
+              <div className="p-4 rounded-lg border bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-950/20 dark:to-amber-900/10 border-amber-200 dark:border-amber-800/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Star className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <Label htmlFor="destaque" className="font-medium">Notificação Destaque</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Exibe em tela cheia ao abrir o app (uma vez por usuário)
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="destaque"
+                    checked={draft.destaque}
+                    onCheckedChange={(checked) => setDraft(prev => ({ ...prev, destaque: checked }))}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Preview */}
@@ -486,6 +511,12 @@ export default function InternalNotificationsAdmin() {
                         {getPublicoIcon(notification.publico)}
                         {getPublicoLabel(notification.publico)}
                       </Badge>
+                      {notification.destaque && (
+                        <Badge variant="outline" className="gap-1 border-amber-400 text-amber-600 dark:text-amber-400">
+                          <Star className="h-3 w-3" />
+                          Destaque
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-2">
                       {notification.texto}

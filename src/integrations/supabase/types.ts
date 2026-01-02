@@ -380,6 +380,7 @@ export type Database = {
           agendada_para: string | null
           criada_em: string
           criada_por: string | null
+          destaque: boolean
           id: string
           imagem_url: string | null
           publicada: boolean
@@ -393,6 +394,7 @@ export type Database = {
           agendada_para?: string | null
           criada_em?: string
           criada_por?: string | null
+          destaque?: boolean
           id?: string
           imagem_url?: string | null
           publicada?: boolean
@@ -406,6 +408,7 @@ export type Database = {
           agendada_para?: string | null
           criada_em?: string
           criada_por?: string | null
+          destaque?: boolean
           id?: string
           imagem_url?: string | null
           publicada?: boolean
