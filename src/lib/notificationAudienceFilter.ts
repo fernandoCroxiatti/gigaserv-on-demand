@@ -4,73 +4,84 @@
  * This module provides the ONLY allowed way to filter notifications by audience.
  * All notification rendering, badge counting, and state updates MUST use these functions.
  * 
- * CANONICAL VALUES (IMMUTABLE):
- * - "cliente" → notifications for clients
- * - "prestador" → notifications for providers  
- * - "ambos" → notifications for everyone
+ * CANONICAL VALUES (IMMUTABLE - DO NOT CHANGE):
+ * - "clientes" → notifications for clients
+ * - "prestadores" → notifications for providers  
+ * - "todos" → notifications for everyone
  * 
- * Any other value is INVALID and will be silently discarded.
+ * INVALID VALUES (silently discarded):
+ * - "cliente" (wrong - missing 's')
+ * - "prestador" (wrong - missing 'es')
+ * - "ambos" (wrong - use "todos")
+ * - "Sr." or any abbreviation
+ * - null, undefined, empty string
+ * - Any other value
  */
 
-export type NotificationAudience = 'cliente' | 'prestador' | 'ambos';
+export type NotificationAudience = 'clientes' | 'prestadores' | 'todos';
 export type UserRole = 'client' | 'provider' | 'admin';
 
-// Canonical valid audience values - LOCKED
-const VALID_AUDIENCES: readonly string[] = ['cliente', 'prestador', 'ambos'] as const;
+// Canonical valid audience values - LOCKED - DO NOT MODIFY
+const VALID_AUDIENCES: readonly NotificationAudience[] = ['clientes', 'prestadores', 'todos'] as const;
 
 /**
  * Validates if a notification audience value is canonical
  * Returns false for null, undefined, empty, typos, or any non-canonical value
+ * 
+ * REJECTS: "cliente", "prestador", "ambos", "Sr.", etc.
+ * ACCEPTS ONLY: "clientes", "prestadores", "todos"
  */
 export function isValidAudience(audience: unknown): audience is NotificationAudience {
   if (typeof audience !== 'string') return false;
   if (!audience || audience.trim() === '') return false;
-  return VALID_AUDIENCES.includes(audience);
+  return (VALID_AUDIENCES as readonly string[]).includes(audience);
 }
 
 /**
  * CORE FILTER: Determines if a notification is visible to a specific role
  * 
  * Rules:
- * - client → audience === "cliente" OR audience === "ambos"
- * - provider → audience === "prestador" OR audience === "ambos"
- * - admin → sees everything (no filter)
+ * - client → audience === "clientes" OR audience === "todos"
+ * - provider → audience === "prestadores" OR audience === "todos"
+ * - admin → sees everything with valid audience
  * 
  * FAIL-SAFE: If audience is invalid, returns false (block notification)
+ * NO FALLBACK: Invalid values are silently discarded
+ * NO CONVERSION: "cliente" does NOT become "clientes"
  */
 export function isNotificationVisibleToRole(
   audience: unknown,
   role: UserRole
 ): boolean {
-  // Admin sees everything
-  if (role === 'admin') {
-    // Even admin should not see notifications with completely invalid audience
-    // but we allow them for debugging purposes
-    return isValidAudience(audience) || audience === null || audience === undefined;
-  }
-
-  // FAIL-SAFE: Invalid audience = block notification
+  // FAIL-SAFE: Invalid audience = block notification (no exceptions)
   if (!isValidAudience(audience)) {
-    console.warn('[NotificationFilter] Blocking notification with invalid audience:', audience);
+    if (audience !== null && audience !== undefined) {
+      console.warn('[NotificationFilter] BLOCKED - Invalid audience value:', JSON.stringify(audience));
+    }
     return false;
   }
 
-  // "ambos" is visible to everyone
-  if (audience === 'ambos') {
+  // Admin sees everything with valid audience
+  if (role === 'admin') {
     return true;
   }
 
-  // Client can only see "cliente" notifications
-  if (role === 'client' && audience === 'cliente') {
+  // "todos" is visible to everyone
+  if (audience === 'todos') {
     return true;
   }
 
-  // Provider can only see "prestador" notifications
-  if (role === 'provider' && audience === 'prestador') {
+  // Client can only see "clientes" notifications
+  if (role === 'client' && audience === 'clientes') {
     return true;
   }
 
-  // Block all other cases (e.g., client trying to see "prestador")
+  // Provider can only see "prestadores" notifications
+  if (role === 'provider' && audience === 'prestadores') {
+    return true;
+  }
+
+  // Block all other cases
   return false;
 }
 
@@ -98,12 +109,10 @@ export function filterNotificationsByAudience<T extends { publico?: string | nul
     return isNotificationVisibleToRole(audience, role);
   });
 
-  // Log filtering results for debugging (only in dev)
-  if (process.env.NODE_ENV === 'development') {
-    const blocked = notifications.length - filtered.length;
-    if (blocked > 0) {
-      console.log(`[NotificationFilter] Filtered ${notifications.length} → ${filtered.length} (blocked ${blocked}) for role: ${role}`);
-    }
+  // Log filtering results
+  const blocked = notifications.length - filtered.length;
+  if (blocked > 0) {
+    console.log(`[NotificationFilter] ${notifications.length} → ${filtered.length} (blocked ${blocked}) for role: ${role}`);
   }
 
   return filtered;
@@ -132,7 +141,7 @@ export function filterExpiredNotifications<T extends { expira_em?: string | null
  * COMPLETE NOTIFICATION PIPELINE - Apply all filters in correct order
  * 
  * Pipeline order:
- * 1. Filter by audience (role-based)
+ * 1. Filter by audience (role-based) - MUST BE FIRST
  * 2. Filter by expiration
  * 3. Return filtered notifications
  * 
@@ -142,7 +151,7 @@ export function applyNotificationPipeline<T extends { publico?: string | null; e
   notifications: T[],
   role: UserRole
 ): T[] {
-  // Step 1: Filter by audience (MUST be first)
+  // Step 1: Filter by audience (MUST be first - no exceptions)
   const audienceFiltered = filterNotificationsByAudience(notifications, role);
   
   // Step 2: Filter expired notifications
@@ -161,7 +170,7 @@ export function validateIncomingNotification(
   notification: { publico?: string | null; expira_em?: string | null },
   role: UserRole
 ): boolean {
-  // Check audience
+  // Check audience FIRST
   if (!isNotificationVisibleToRole(notification.publico, role)) {
     return false;
   }
@@ -187,4 +196,12 @@ export function mapProfileToRole(
   if (isAdmin) return 'admin';
   if (perfilPrincipal === 'provider') return 'provider';
   return 'client'; // Default to client for safety
+}
+
+/**
+ * Returns the list of valid canonical audience values
+ * Use this in admin forms for dropdown options
+ */
+export function getCanonicalAudienceValues(): readonly NotificationAudience[] {
+  return VALID_AUDIENCES;
 }
