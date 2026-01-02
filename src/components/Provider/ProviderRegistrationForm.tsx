@@ -12,13 +12,16 @@ import {
   Truck,
   AlertCircle,
   CreditCard,
-  ShieldAlert
+  ShieldAlert,
+  Plus
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAntiFraud } from '@/hooks/useAntiFraud';
 import { getDeviceId } from '@/lib/deviceFingerprint';
 import { NativeImagePicker } from '@/components/NativeImagePicker';
+import { AddVehicleModal } from '@/components/Provider/Vehicles/AddVehicleModal';
+import { useProviderVehicles, ProviderVehicle } from '@/hooks/useProviderVehicles';
 
 interface ProviderRegistrationFormProps {
   userId: string;
@@ -110,9 +113,11 @@ export function ProviderRegistrationForm({
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [fraudBlock, setFraudBlock] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { performPreRegistrationCheck, registerDeviceId, isChecking } = useAntiFraud();
+  const { vehicles, addVehicle } = useProviderVehicles(userId);
   
   // If CPF is already set, it cannot be changed
   const cpfLocked = !!currentCpf;
@@ -322,10 +327,11 @@ export function ProviderRegistrationForm({
       }
 
       // Update provider_data with device ID
+      const cleanPlate = vehiclePlate.replace(/-/g, '').toUpperCase();
       const { error: providerError } = await supabase
         .from('provider_data')
         .update({
-          vehicle_plate: vehiclePlate.replace(/-/g, ''),
+          vehicle_plate: cleanPlate,
           vehicle_type: vehicleType,
           terms_accepted: true,
           terms_accepted_at: new Date().toISOString(),
@@ -336,6 +342,22 @@ export function ProviderRegistrationForm({
         .eq('user_id', userId);
 
       if (providerError) throw providerError;
+
+      // Also create the first vehicle in provider_vehicles table
+      const { error: vehicleError } = await supabase
+        .from('provider_vehicles')
+        .insert({
+          provider_id: userId,
+          plate: cleanPlate,
+          vehicle_type: vehicleType,
+          is_primary: true,
+          is_active: true,
+        });
+
+      if (vehicleError) {
+        console.error('Error creating vehicle:', vehicleError);
+        // Don't block registration, just log the error
+      }
 
       toast.success('Cadastro concluído com sucesso!');
       onComplete();
@@ -470,6 +492,28 @@ export function ProviderRegistrationForm({
                   maxLength={8}
                 />
               </div>
+              
+              {/* Additional vehicles info */}
+              <div className="mt-3 p-3 bg-secondary/50 rounded-xl">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Possui mais de um veículo?
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddVehicleModal(true)}
+                  className="w-full"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar outro veículo
+                </Button>
+                {vehicles.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    {vehicles.length} veículo(s) adicional(is) cadastrado(s)
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Terms */}
@@ -511,6 +555,13 @@ export function ProviderRegistrationForm({
           </form>
         </div>
       </div>
+      
+      {/* Add Vehicle Modal */}
+      <AddVehicleModal
+        open={showAddVehicleModal}
+        onClose={() => setShowAddVehicleModal(false)}
+        onSave={addVehicle}
+      />
     </div>
   );
 }

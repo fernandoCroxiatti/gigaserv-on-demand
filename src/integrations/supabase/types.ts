@@ -930,6 +930,39 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_vehicles: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          plate: string
+          provider_id: string
+          updated_at: string
+          vehicle_type: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          plate: string
+          provider_id: string
+          updated_at?: string
+          vehicle_type?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          plate?: string
+          provider_id?: string
+          updated_at?: string
+          vehicle_type?: string | null
+        }
+        Relationships: []
+      }
       reviews: {
         Row: {
           chamado_id: string

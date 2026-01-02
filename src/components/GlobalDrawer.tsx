@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
-import { Menu, User, Landmark, FileText, Shield, Scale, LogOut, Trash2, Star, AlertTriangle, Loader2, CreditCard, HelpCircle, Receipt } from 'lucide-react';
+import { Menu, User, Landmark, FileText, Shield, Scale, LogOut, Trash2, Star, AlertTriangle, Loader2, CreditCard, HelpCircle, Receipt, Car } from 'lucide-react';
 import { Button } from './ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -116,6 +116,13 @@ export function GlobalDrawer() {
                 >
                   <Landmark className="w-5 h-5" />
                   <span className="font-medium">Informações Bancárias</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/vehicles')}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors"
+                >
+                  <Car className="w-5 h-5" />
+                  <span className="font-medium">Veículos</span>
                 </button>
               </div>
 
