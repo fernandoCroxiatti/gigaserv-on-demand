@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { Navigation, Clock, DollarSign, X, Check, Route, Ban } from 'lucide-react';
+import { Navigation, Clock, DollarSign, X, Check, Route, MapPin, Truck } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
 import { calculateDistance } from '@/lib/distance';
 import { VEHICLE_TYPES, VehicleType } from '@/types/vehicleTypes';
@@ -17,6 +17,7 @@ export function IncomingRequestCard() {
   const { user } = useAuth();
   const [timeLeft, setTimeLeft] = useState(30);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { checkProviderCanAccept } = useAntiFraud();
   const navigate = useNavigate();
 
@@ -70,8 +71,10 @@ export function IncomingRequestCard() {
       return;
     }
     
+    // Reset collapsed state when new request arrives
+    setIsCollapsed(false);
+    
     // Tocar som de notificação in-app (fallback se OneSignal não tocar)
-    // Usa o AudioManager centralizado - ignora silenciosamente se áudio não desbloqueado
     playNotificationSound();
     
     setTimeLeft(30);
@@ -157,6 +160,11 @@ export function IncomingRequestCard() {
     declineIncomingRequest();
   };
 
+  // Handle drag to collapse
+  const handleDragDown = () => {
+    setIsCollapsed(true);
+  };
+
   if (!incomingRequest) return null;
 
   const serviceConfig = SERVICE_CONFIG[incomingRequest.tipoServico];
@@ -165,137 +173,222 @@ export function IncomingRequestCard() {
     ? VEHICLE_TYPES[incomingRequest.vehicleType as VehicleType] 
     : null;
 
+  // Collapsed compact view
+  if (isCollapsed) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-50 p-4 pointer-events-none">
+        <div 
+          className="bg-card rounded-2xl shadow-uber-lg pointer-events-auto provider-theme cursor-pointer"
+          onClick={() => setIsCollapsed(false)}
+        >
+          {/* Timer bar */}
+          <div className="h-1 bg-secondary rounded-t-2xl overflow-hidden">
+            <div 
+              className="h-full bg-provider-primary transition-all duration-1000"
+              style={{ width: `${(timeLeft / 30) * 100}%` }}
+            />
+          </div>
+          
+          <div className="p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 bg-provider-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-2xl">{serviceConfig.icon}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-base">NOVO CHAMADO</p>
+                <p className="text-sm text-muted-foreground truncate">
+                  {serviceConfig.label} • {timeLeft}s
+                </p>
+              </div>
+            </div>
+            <Button 
+              variant="provider"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAccept();
+              }}
+              disabled={isAccepting}
+              className="flex-shrink-0"
+            >
+              Aceitar
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded full view (default)
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 flex flex-col pointer-events-none">
+      {/* Backdrop with blur */}
       <div 
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
         onClick={handleDecline}
       />
 
-      {/* Card - compact and premium */}
-      <div className="relative w-full max-w-lg bg-card rounded-t-2xl shadow-uber-lg animate-slide-up pointer-events-auto provider-theme">
+      {/* Spacer to push card down (map visible area ~15-20%) */}
+      <div className="flex-shrink-0 h-[15%]" />
+
+      {/* Card - 80-85% height, expanded by default */}
+      <div 
+        className="relative flex-1 bg-card rounded-t-3xl shadow-uber-lg pointer-events-auto provider-theme flex flex-col overflow-hidden"
+        style={{ minHeight: '80%' }}
+      >
+        {/* Drag handle */}
+        <div 
+          className="py-3 flex justify-center cursor-grab active:cursor-grabbing"
+          onClick={handleDragDown}
+        >
+          <div className="w-12 h-1.5 bg-muted-foreground/30 rounded-full" />
+        </div>
+
         {/* Timer bar */}
-        <div className="h-0.5 bg-secondary rounded-t-2xl overflow-hidden">
+        <div className="h-1.5 bg-secondary mx-4 rounded-full overflow-hidden">
           <div 
-            className="h-full bg-provider-primary transition-all duration-1000"
+            className="h-full bg-provider-primary transition-all duration-1000 rounded-full"
             style={{ width: `${(timeLeft / 30) * 100}%` }}
           />
         </div>
 
-        {/* Header - compact */}
-        <div className="p-3 border-b border-border/50 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-provider-primary/10 rounded-full flex items-center justify-center">
-              <span className="text-xl">{serviceConfig.icon}</span>
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm">Novo chamado!</h3>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs bg-provider-primary/10 text-provider-primary px-1.5 py-0.5 rounded-full font-medium">
-                  {serviceConfig.label}
-                </span>
-                {vehicleTypeConfig && (
-                  <span className="text-[10px] bg-secondary text-foreground px-1.5 py-0.5 rounded-full">
-                    {vehicleTypeConfig.icon} {vehicleTypeConfig.label}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">• {timeLeft}s</span>
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {/* Header - Maximum priority */}
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-provider-primary/10 rounded-2xl flex items-center justify-center">
+                <span className="text-4xl">{serviceConfig.icon}</span>
               </div>
-            </div>
-          </div>
-          <button 
-            onClick={handleDecline}
-            className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-secondary/80"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Route info - compact */}
-        <div className="p-3">
-          <div className="flex items-start gap-2.5">
-            <div className="flex flex-col items-center gap-0.5 pt-0.5">
-              <div className="w-2 h-2 bg-provider-primary rounded-full" />
-              {hasDestination && (
-                <>
-                  <div className="w-px h-8 bg-border" />
-                  <div className="w-2 h-2 bg-foreground rounded-full" />
-                </>
-              )}
-            </div>
-            <div className="flex-1 min-w-0 space-y-3">
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                  {hasDestination ? 'Buscar veículo em' : 'Atender em'}
-                </p>
-                <p className="font-medium text-xs truncate">{incomingRequest.origem.address}</p>
-              </div>
-              {hasDestination && incomingRequest.destino && (
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Levar até</p>
-                  <p className="font-medium text-xs truncate">{incomingRequest.destino.address}</p>
+                <h2 className="font-black text-2xl tracking-tight text-foreground">
+                  NOVO CHAMADO
+                </h2>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="text-sm bg-provider-primary/15 text-provider-primary px-3 py-1 rounded-full font-semibold">
+                    {serviceConfig.label}
+                  </span>
+                  {vehicleTypeConfig && (
+                    <span className="text-sm bg-secondary text-foreground px-3 py-1 rounded-full font-medium">
+                      {vehicleTypeConfig.icon} {vehicleTypeConfig.label}
+                    </span>
+                  )}
                 </div>
-              )}
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-2xl font-bold text-muted-foreground">{timeLeft}s</span>
             </div>
           </div>
-        </div>
 
-        {/* Stats - compact */}
-        <div className={`px-3 pb-3 grid gap-1.5 ${hasDestination ? 'grid-cols-4' : 'grid-cols-3'}`}>
-          <div className="bg-secondary/80 rounded-lg p-2 text-center">
-            <Navigation className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
-            <p className="font-semibold text-xs">{formattedDistance}</p>
-            <p className="text-[10px] text-muted-foreground">Até cliente</p>
-          </div>
-          {hasDestination && (
-            <div className="bg-secondary/80 rounded-lg p-2 text-center">
-              <Route className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
-              <p className="font-semibold text-xs">{formattedDistanceToDestination}</p>
-              <p className="text-[10px] text-muted-foreground">Até entrega</p>
+          {/* Value block - Most prominent element */}
+          <div className="mb-6 p-5 bg-provider-primary/10 border-2 border-provider-primary/30 rounded-2xl text-center">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <DollarSign className="w-6 h-6 text-provider-primary" />
+              <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Valor</span>
             </div>
-          )}
-          <div className="bg-secondary/80 rounded-lg p-2 text-center">
-            <Clock className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
-            <p className="font-semibold text-xs">{serviceConfig.estimatedTime}</p>
-            <p className="text-[10px] text-muted-foreground">Estimado</p>
+            <p className="text-4xl font-black text-foreground">A combinar</p>
           </div>
-          <div className="bg-secondary/80 rounded-lg p-2 text-center">
-            <DollarSign className="w-4 h-4 mx-auto mb-0.5 text-provider-primary" />
-            <p className="font-semibold text-xs">A combinar</p>
-            <p className="text-[10px] text-muted-foreground">Valor</p>
-          </div>
-        </div>
 
-        {/* Service type info - compact */}
-        {!hasDestination && (
-          <div className="px-3 pb-3">
-            <div className="flex items-center gap-1.5 p-2 bg-provider-primary/5 rounded-lg">
-              <Check className="w-3 h-3 text-provider-primary" />
-              <p className="text-xs text-muted-foreground">
+          {/* Metrics - Single line */}
+          <div className="mb-6 flex items-center justify-between gap-2 p-4 bg-secondary/50 rounded-xl">
+            <div className="flex items-center gap-2 flex-1">
+              <MapPin className="w-5 h-5 text-provider-primary flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-lg font-bold">{formattedDistance}</p>
+                <p className="text-xs text-muted-foreground">Até cliente</p>
+              </div>
+            </div>
+            
+            {hasDestination && (
+              <>
+                <div className="w-px h-10 bg-border" />
+                <div className="flex items-center gap-2 flex-1">
+                  <Truck className="w-5 h-5 text-provider-primary flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-lg font-bold">{formattedDistanceToDestination}</p>
+                    <p className="text-xs text-muted-foreground">Até entrega</p>
+                  </div>
+                </div>
+              </>
+            )}
+            
+            <div className="w-px h-10 bg-border" />
+            <div className="flex items-center gap-2 flex-1">
+              <Clock className="w-5 h-5 text-provider-primary flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-lg font-bold">{serviceConfig.estimatedTime}</p>
+                <p className="text-xs text-muted-foreground">Estimado</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Addresses - Simplified */}
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-provider-primary rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-3 h-3 bg-white rounded-full" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
+                  {hasDestination ? 'Buscar em' : 'Atender em'}
+                </p>
+                <p className="font-semibold text-base leading-tight line-clamp-2">
+                  {incomingRequest.origem.address}
+                </p>
+              </div>
+            </div>
+
+            {hasDestination && incomingRequest.destino && (
+              <>
+                <div className="flex items-center gap-3 pl-4">
+                  <div className="w-0.5 h-6 bg-border" />
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-foreground rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-3 h-3 bg-white rounded-full" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
+                      Levar até
+                    </p>
+                    <p className="font-semibold text-base leading-tight line-clamp-2">
+                      {incomingRequest.destino.address}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Service type info for non-transport */}
+          {!hasDestination && (
+            <div className="mt-6 flex items-center gap-2 p-3 bg-provider-primary/5 rounded-xl">
+              <Check className="w-4 h-4 text-provider-primary flex-shrink-0" />
+              <p className="text-sm text-muted-foreground">
                 Serviço no local - sem necessidade de reboque
               </p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Action buttons - wider */}
-        <div className="p-3 pt-0 flex gap-2">
+        {/* Fixed action buttons at footer */}
+        <div className="flex-shrink-0 p-5 pt-3 bg-card border-t border-border/50 flex gap-3 safe-area-bottom">
           <Button 
             variant="outline" 
             onClick={handleDecline}
-            className="flex-1 h-11"
+            className="flex-1 h-14 text-base font-semibold"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 mr-2" />
             Recusar
           </Button>
           <Button 
             variant="provider"
             onClick={handleAccept}
             disabled={isAccepting}
-            className="flex-1 h-11"
+            className="flex-[1.5] h-14 text-base font-semibold"
           >
-            <Check className="w-4 h-4" />
+            <Check className="w-5 h-5 mr-2" />
             {isAccepting ? 'Verificando...' : 'Aceitar'}
           </Button>
         </div>
