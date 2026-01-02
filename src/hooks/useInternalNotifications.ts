@@ -14,7 +14,7 @@ export interface InternalNotification {
   titulo: string;
   texto: string;
   imagem_url: string | null;
-  publico: 'cliente' | 'prestador' | 'ambos';
+  publico: 'clientes' | 'prestadores' | 'todos';
   criada_em: string;
   publicada_em: string | null;
   expira_em: string | null;
