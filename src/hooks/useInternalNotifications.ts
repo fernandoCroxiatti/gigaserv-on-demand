@@ -3,10 +3,9 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import {
-  UserRole,
-  applyNotificationPipeline,
-  validateIncomingNotification,
-  mapProfileToRole,
+  UserProfiles,
+  applyNotificationPipelineWithProfiles,
+  validateIncomingNotificationWithProfiles,
 } from '@/lib/notificationAudienceFilter';
 
 export interface InternalNotification {
@@ -25,24 +24,24 @@ export interface InternalNotification {
 /**
  * HARDENED Internal Notifications Hook
  * 
- * All notifications pass through centralized audience filter before:
- * - Being stored in state
- * - Being counted for badge
- * - Being rendered
+ * Notifications are filtered based on REGISTERED profiles (not active session):
+ * - Client profile → sees "clientes" and "todos"
+ * - Provider profile → sees "prestadores", "clientes" (providers are also clients), and "todos"
+ * - Admin → sees everything
  * 
- * Cache is cleared on profile switch to prevent cross-contamination.
+ * Cache is cleared on profile change to prevent cross-contamination.
  */
 export function useInternalNotifications() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  // Track previous role to detect profile switches
-  const previousRoleRef = useRef<UserRole | null>(null);
+  // Track previous profiles to detect changes
+  const previousProfilesRef = useRef<string | null>(null);
 
-  // Fetch user profile type to determine filtering
-  const { data: profileData } = useQuery({
-    queryKey: ['user-profile-type', user?.id],
-    queryFn: async () => {
+  // Fetch user's REGISTERED profiles to determine filtering
+  const { data: userProfiles } = useQuery({
+    queryKey: ['user-registered-profiles', user?.id],
+    queryFn: async (): Promise<UserProfiles | null> => {
       if (!user?.id) return null;
 
       // Check if user is admin
@@ -53,45 +52,49 @@ export function useInternalNotifications() {
 
       const isAdmin = roles?.some(r => r.role === 'admin') || false;
 
-      // Get user's perfil_principal from profiles
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('perfil_principal, active_profile')
+      // Check if user has provider_data (is registered as provider)
+      const { data: providerData } = await supabase
+        .from('provider_data')
+        .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (!profile && !isAdmin) return null;
-
-      const role = mapProfileToRole(profile?.perfil_principal, isAdmin);
+      const isProvider = !!providerData;
       
+      // All users can be clients (default behavior)
+      // Provider is ALSO a client (can request services)
+      const isClient = true;
+
       return { 
-        role,
+        isClient,
+        isProvider,
         isAdmin,
-        perfilPrincipal: profile?.perfil_principal,
-        activeProfile: profile?.active_profile
       };
     },
     enabled: !!user?.id,
     staleTime: 60000, // Cache for 1 minute
   });
 
-  const currentRole = profileData?.role || null;
+  // Create a string key for profile comparison
+  const profilesKey = userProfiles 
+    ? `${userProfiles.isClient}-${userProfiles.isProvider}-${userProfiles.isAdmin}`
+    : null;
 
-  // CRITICAL: Clear cache when role changes to prevent cross-contamination
+  // CRITICAL: Clear cache when profiles change to prevent cross-contamination
   useEffect(() => {
-    if (currentRole && previousRoleRef.current && currentRole !== previousRoleRef.current) {
-      console.log(`[Notifications] Role changed: ${previousRoleRef.current} → ${currentRole}, clearing cache`);
+    if (profilesKey && previousProfilesRef.current && profilesKey !== previousProfilesRef.current) {
+      console.log(`[Notifications] Profiles changed: ${previousProfilesRef.current} → ${profilesKey}, clearing cache`);
       queryClient.removeQueries({ queryKey: ['internal-notifications'] });
       queryClient.invalidateQueries({ queryKey: ['internal-notifications'] });
     }
-    previousRoleRef.current = currentRole;
-  }, [currentRole, queryClient]);
+    previousProfilesRef.current = profilesKey;
+  }, [profilesKey, queryClient]);
 
-  // Fetch published notifications with centralized filtering
+  // Fetch published notifications with centralized filtering based on REGISTERED profiles
   const { data: notifications = [], isLoading, refetch } = useQuery({
-    queryKey: ['internal-notifications', user?.id, currentRole],
+    queryKey: ['internal-notifications', user?.id, profilesKey],
     queryFn: async () => {
-      if (!user?.id || !currentRole) return [];
+      if (!user?.id || !userProfiles) return [];
 
       // Step 1: Fetch all published notifications (raw data)
       const { data: rawNotifs, error } = await supabase
@@ -109,9 +112,9 @@ export function useInternalNotifications() {
         return [];
       }
 
-      // Step 2 & 3: Apply centralized pipeline (audience + expiration filter)
+      // Step 2 & 3: Apply centralized pipeline using REGISTERED profiles
       // THIS IS THE SINGLE SOURCE OF TRUTH
-      const filteredNotifs = applyNotificationPipeline(rawNotifs, currentRole);
+      const filteredNotifs = applyNotificationPipelineWithProfiles(rawNotifs, userProfiles);
 
       // Step 4: Fetch read status
       const { data: reads } = await supabase
@@ -127,11 +130,12 @@ export function useInternalNotifications() {
         isRead: readIds.has(n.id),
       })) as InternalNotification[];
 
-      console.log(`[Notifications] Pipeline complete: ${rawNotifs.length} raw → ${filteredNotifs.length} filtered for role: ${currentRole}`);
+      const profileStr = `client=${userProfiles.isClient}, provider=${userProfiles.isProvider}, admin=${userProfiles.isAdmin}`;
+      console.log(`[Notifications] Pipeline complete: ${rawNotifs.length} raw → ${filteredNotifs.length} filtered for profiles: ${profileStr}`);
 
       return notificationsWithReadStatus;
     },
-    enabled: !!user?.id && !!currentRole,
+    enabled: !!user?.id && !!userProfiles,
     refetchInterval: 30000,
     // Prevent stale data from being shown during refetch
     refetchOnMount: true,
@@ -144,7 +148,7 @@ export function useInternalNotifications() {
 
   // Real-time subscription for new notifications
   useEffect(() => {
-    if (!user?.id || !currentRole) return;
+    if (!user?.id || !userProfiles) return;
 
     const channel = supabase
       .channel('internal-notifications-realtime')
@@ -159,8 +163,8 @@ export function useInternalNotifications() {
         (payload) => {
           const newNotification = payload.new as any;
           
-          // CRITICAL: Validate incoming notification before adding to state
-          if (!validateIncomingNotification(newNotification, currentRole)) {
+          // CRITICAL: Validate incoming notification using REGISTERED profiles
+          if (!validateIncomingNotificationWithProfiles(newNotification, userProfiles)) {
             console.log('[Notifications] Realtime: Blocked notification for wrong audience:', newNotification.publico);
             return;
           }
@@ -186,7 +190,7 @@ export function useInternalNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, currentRole, refetch]);
+  }, [user?.id, userProfiles, refetch]);
 
   // Mark notification as read
   const markAsRead = useMutation({
@@ -243,6 +247,6 @@ export function useInternalNotifications() {
     markAllAsRead,
     refetch,
     // Expose for debugging
-    userRole: currentRole,
+    userProfiles,
   };
 }
