@@ -22,10 +22,10 @@ interface DirectPaymentBannerProps {
  */
 export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
   const { user } = useApp();
-  const { effectiveRate, loading: loadingFee, error: fetchError } = useProviderFeeRate(user?.id ?? null);
+  const { effectivePercentage, feeSource, promotionEndDate, loading: loadingFee, error: fetchError } = useProviderFeeRate(user?.id ?? null);
 
   // Determine fee percentage from effective rate
-  const feePercentage = effectiveRate?.percentage ?? null;
+  const feePercentage = effectivePercentage;
 
   // Show loading state
   if (loadingFee) {
@@ -73,22 +73,22 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
       </div>
     );
   }
-  // Check if provider has exemption
-  const hasExemption = effectiveRate?.source === 'exemption';
+  // Check if provider has promotion
+  const hasPromotion = feeSource === 'promotion';
   
   return (
-    <div className={`${hasExemption ? 'bg-green-500' : 'bg-amber-500'} text-white px-4 py-3 shadow-lg`}>
+    <div className={`${hasPromotion ? 'bg-green-500' : 'bg-amber-500'} text-white px-4 py-3 shadow-lg`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="bg-white/20 rounded-full p-2">
-            {hasExemption ? <Gift className="w-6 h-6" /> : <DollarSign className="w-6 h-6" />}
+            {hasPromotion ? <Gift className="w-6 h-6" /> : <DollarSign className="w-6 h-6" />}
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-medium opacity-90">Receba do cliente</span>
             <span className="text-xl font-bold">R$ {formatCurrency(feeCalc.serviceValue)}</span>
           </div>
         </div>
-        {!hasExemption && <AlertTriangle className="w-6 h-6 animate-bounce flex-shrink-0" />}
+        {!hasPromotion && <AlertTriangle className="w-6 h-6 animate-bounce flex-shrink-0" />}
       </div>
       
       {/* Fee breakdown - always shows valid numbers */}
@@ -96,7 +96,7 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
         <div>
           <span className="opacity-80">Taxa do app:</span>
           <span className="font-semibold ml-1">
-            {hasExemption ? (
+            {hasPromotion && feeCalc.feePercentage === 0 ? (
               <span className="bg-white/20 px-1 rounded">ISENTO</span>
             ) : (
               `${formatPercentage(feeCalc.feePercentage)} (R$ ${formatCurrency(feeCalc.feeAmount)})`
@@ -109,10 +109,10 @@ export function DirectPaymentBanner({ amount }: DirectPaymentBannerProps) {
         </div>
       </div>
       
-      {/* Exemption badge */}
-      {hasExemption && effectiveRate?.exemptionUntil && (
+      {/* Promotion badge */}
+      {hasPromotion && promotionEndDate && (
         <div className="mt-2 text-xs text-center opacity-90">
-          🎉 Promoção ativa até {effectiveRate.exemptionUntil.toLocaleDateString('pt-BR')}
+          🎉 Promoção ativa até {promotionEndDate.toLocaleDateString('pt-BR')}
         </div>
       )}
     </div>

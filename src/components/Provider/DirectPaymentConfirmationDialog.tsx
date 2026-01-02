@@ -53,11 +53,11 @@ export function DirectPaymentConfirmationDialog({
   onNotReceived,
   isLoading = false,
 }: DirectPaymentConfirmationDialogProps) {
-  const { effectiveRate, loading: loadingFee, error: fetchError } = useProviderFeeRate(providerId);
+  const { effectivePercentage, feeSource, promotionEndDate, loading: loadingFee, error: fetchError } = useProviderFeeRate(providerId);
   
   // Determine fee percentage from effective rate
-  const feePercentage = effectiveRate?.percentage ?? null;
-  const hasExemption = effectiveRate?.source === 'exemption';
+  const feePercentage = effectivePercentage;
+  const hasPromotion = feeSource === 'promotion';
 
   // Calculate fee using safe utility with invariant checks
   const feeCalc = calculateFee(amount, feePercentage);
@@ -91,8 +91,8 @@ export function DirectPaymentConfirmationDialog({
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2 text-lg">
-            <div className={`w-10 h-10 rounded-full ${hasExemption ? 'bg-green-500/10' : 'bg-amber-500/10'} flex items-center justify-center`}>
-              {hasExemption ? <Gift className="w-5 h-5 text-green-500" /> : <DollarSign className="w-5 h-5 text-amber-500" />}
+            <div className={`w-10 h-10 rounded-full ${hasPromotion ? 'bg-green-500/10' : 'bg-amber-500/10'} flex items-center justify-center`}>
+              {hasPromotion ? <Gift className="w-5 h-5 text-green-500" /> : <DollarSign className="w-5 h-5 text-amber-500" />}
             </div>
             Confirmação de Recebimento
           </AlertDialogTitle>
@@ -134,7 +134,7 @@ export function DirectPaymentConfirmationDialog({
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Taxa do app:</span>
                       <span className="font-medium">
-                        {hasExemption ? (
+                        {hasPromotion && feeCalc.feePercentage === 0 ? (
                           <span className="text-green-600 dark:text-green-400">ISENTO 🎉</span>
                         ) : (
                           `${formatPercentage(feeCalc.feePercentage)} (R$ ${formatCurrency(feeCalc.feeAmount)})`
@@ -145,9 +145,9 @@ export function DirectPaymentConfirmationDialog({
                       <span className="text-muted-foreground">Valor líquido para você:</span>
                       <span className="font-bold text-primary">R$ {formatCurrency(feeCalc.providerNetAmount)}</span>
                     </div>
-                    {hasExemption && effectiveRate?.exemptionUntil && (
+                    {hasPromotion && promotionEndDate && (
                       <div className="text-xs text-green-600 dark:text-green-400 text-center pt-1">
-                        Promoção ativa até {effectiveRate.exemptionUntil.toLocaleDateString('pt-BR')}
+                        Promoção ativa até {promotionEndDate.toLocaleDateString('pt-BR')}
                       </div>
                     )}
                   </div>
@@ -158,7 +158,7 @@ export function DirectPaymentConfirmationDialog({
                   </p>
                   
                   {/* Warning about fee registration - only show if NOT exempt */}
-                  {!hasExemption && (
+                  {!(hasPromotion && feeCalc.feePercentage === 0) && (
                     <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
                       <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-amber-700 dark:text-amber-400">
