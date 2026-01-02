@@ -631,6 +631,9 @@ export type Database = {
           current_address: string | null
           current_lat: number | null
           current_lng: number | null
+          custom_fee_enabled: boolean | null
+          custom_fee_fixed: number | null
+          custom_fee_percentage: number | null
           device_id: string | null
           device_id_registered_at: string | null
           fee_exemption_until: string | null
@@ -691,6 +694,9 @@ export type Database = {
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          custom_fee_enabled?: boolean | null
+          custom_fee_fixed?: number | null
+          custom_fee_percentage?: number | null
           device_id?: string | null
           device_id_registered_at?: string | null
           fee_exemption_until?: string | null
@@ -753,6 +759,9 @@ export type Database = {
           current_address?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          custom_fee_enabled?: boolean | null
+          custom_fee_fixed?: number | null
+          custom_fee_percentage?: number | null
           device_id?: string | null
           device_id_registered_at?: string | null
           fee_exemption_until?: string | null

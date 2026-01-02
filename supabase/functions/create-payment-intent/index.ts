@@ -135,10 +135,10 @@ serve(async (req) => {
       tipoServico: chamado.tipo_servico 
     });
 
-    // Get provider's Stripe account
+    // Get provider's Stripe account and custom fee settings
     const { data: providerData, error: providerError } = await supabaseClient
       .from('provider_data')
-      .select('stripe_account_id, stripe_charges_enabled, is_blocked, payout_enabled')
+      .select('stripe_account_id, stripe_charges_enabled, is_blocked, payout_enabled, custom_fee_enabled, custom_fee_percentage, custom_fee_fixed')
       .eq('user_id', chamado.prestador_id)
       .single();
 
@@ -200,24 +200,49 @@ serve(async (req) => {
       transfersEnabled: stripeAccount.capabilities?.transfers
     });
 
-    // Get app commission percentage
+    // Get app commission percentage (global rate)
     const { data: settings } = await supabaseClient
       .from('app_settings')
       .select('value')
       .eq('key', 'app_commission_percentage')
       .single();
 
-    const commissionPercentage = settings?.value?.value || 15;
-    logStep("Commission percentage", { percentage: commissionPercentage });
+    const globalCommissionPercentage = settings?.value?.value || 15;
+    
+    // Determine effective commission: custom fee if enabled, otherwise global
+    let commissionPercentage = globalCommissionPercentage;
+    let customFixedFee = 0;
+    
+    if (providerData.custom_fee_enabled) {
+      if (typeof providerData.custom_fee_percentage === 'number') {
+        commissionPercentage = providerData.custom_fee_percentage;
+      }
+      if (typeof providerData.custom_fee_fixed === 'number') {
+        customFixedFee = providerData.custom_fee_fixed;
+      }
+      logStep("Using custom fee for provider", { 
+        percentage: commissionPercentage, 
+        fixedFee: customFixedFee,
+        providerId: chamado.prestador_id 
+      });
+    } else {
+      logStep("Using global commission", { percentage: commissionPercentage });
+    }
 
     // Calculate amounts (in centavos)
     const totalAmountCentavos = Math.round(chamado.valor * 100);
-    const applicationFeeAmount = Math.round(totalAmountCentavos * (commissionPercentage / 100));
+    // Application fee = percentage fee + fixed fee (in centavos)
+    const percentageFeeAmount = Math.round(totalAmountCentavos * (commissionPercentage / 100));
+    const fixedFeeAmountCentavos = Math.round(customFixedFee * 100);
+    const applicationFeeAmount = percentageFeeAmount + fixedFeeAmountCentavos;
     
     logStep("Payment amounts calculated", {
       total: totalAmountCentavos,
+      percentageFee: percentageFeeAmount,
+      fixedFee: fixedFeeAmountCentavos,
       applicationFee: applicationFeeAmount,
       providerReceives: totalAmountCentavos - applicationFeeAmount,
+      customFeeEnabled: providerData.custom_fee_enabled,
     });
 
     // Stripe already initialized above

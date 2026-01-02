@@ -11,8 +11,12 @@ import { getEffectiveFeeRate, EffectiveFeeResult } from '@/lib/feeCalculator';
 interface ProviderFeeData {
   /** Provider's fee exemption end date */
   exemptionUntil: Date | null;
-  /** Provider's individual fee rate (if any) - currently not implemented */
+  /** Provider's individual fee rate (if custom fee enabled) */
   individualRate: number | null;
+  /** Provider's individual fixed fee (if custom fee enabled) */
+  individualFixedFee: number | null;
+  /** Whether custom fee is enabled */
+  customFeeEnabled: boolean;
   /** Global commission rate */
   globalRate: number;
   /** Effective fee result */
@@ -31,6 +35,8 @@ export function useProviderFeeRate(providerId: string | null): ProviderFeeData {
   const [data, setData] = useState<ProviderFeeData>({
     exemptionUntil: null,
     individualRate: null,
+    individualFixedFee: null,
+    customFeeEnabled: false,
     globalRate: 15, // Default fallback
     effectiveRate: null,
     loading: true,
@@ -44,11 +50,11 @@ export function useProviderFeeRate(providerId: string | null): ProviderFeeData {
     }
 
     try {
-      // Fetch in parallel: provider exemption + global rate
+      // Fetch in parallel: provider data + global rate
       const [providerResult, globalRateResult] = await Promise.all([
         supabase
           .from('provider_data')
-          .select('fee_exemption_until')
+          .select('fee_exemption_until, custom_fee_enabled, custom_fee_percentage, custom_fee_fixed')
           .eq('user_id', providerId)
           .maybeSingle(),
         getAppCommissionPercentage(),
@@ -58,22 +64,30 @@ export function useProviderFeeRate(providerId: string | null): ProviderFeeData {
         console.error('[useProviderFeeRate] Error fetching provider:', providerResult.error);
       }
 
-      const exemptionUntil = providerResult.data?.fee_exemption_until
-        ? new Date(providerResult.data.fee_exemption_until)
+      const providerData = providerResult.data;
+      const exemptionUntil = providerData?.fee_exemption_until
+        ? new Date(providerData.fee_exemption_until)
         : null;
+      const customFeeEnabled = providerData?.custom_fee_enabled ?? false;
+      const individualRate = providerData?.custom_fee_percentage ?? null;
+      const individualFixedFee = providerData?.custom_fee_fixed ?? null;
 
       const globalRate = globalRateResult ?? 15;
 
       // Calculate effective rate
       const effectiveRate = getEffectiveFeeRate({
         exemptionUntil,
-        individualRate: null, // Not implemented yet
+        individualRate,
+        individualFixedFee,
+        customFeeEnabled,
         globalRate,
       });
 
       setData({
         exemptionUntil,
-        individualRate: null,
+        individualRate,
+        individualFixedFee,
+        customFeeEnabled,
         globalRate,
         effectiveRate,
         loading: false,

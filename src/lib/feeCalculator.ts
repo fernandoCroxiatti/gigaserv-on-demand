@@ -38,8 +38,12 @@ export interface FeeAuditLog {
 export interface EffectiveFeeParams {
   /** Provider's fee exemption end date (if any) */
   exemptionUntil?: Date | null;
-  /** Provider's individual fee rate (if configured) */
+  /** Provider's individual fee percentage (if configured) */
   individualRate?: number | null;
+  /** Provider's individual fixed fee in BRL (if configured) */
+  individualFixedFee?: number | null;
+  /** Whether custom fee is enabled for the provider */
+  customFeeEnabled?: boolean;
   /** Global commission rate (default) */
   globalRate: number;
 }
@@ -50,6 +54,8 @@ export interface EffectiveFeeParams {
 export interface EffectiveFeeResult {
   /** The fee percentage to apply */
   percentage: number;
+  /** Fixed fee amount in BRL */
+  fixedFee: number;
   /** Source of this percentage */
   source: 'exemption' | 'individual' | 'global';
   /** If exemption, when it expires */
@@ -197,7 +203,7 @@ export function calculateFee(
  * This function is PURE and does not modify any state.
  */
 export function getEffectiveFeeRate(params: EffectiveFeeParams): EffectiveFeeResult {
-  const { exemptionUntil, individualRate, globalRate } = params;
+  const { exemptionUntil, individualRate, individualFixedFee, customFeeEnabled, globalRate } = params;
   
   // Priority 1: Active fee exemption
   if (exemptionUntil) {
@@ -206,17 +212,19 @@ export function getEffectiveFeeRate(params: EffectiveFeeParams): EffectiveFeeRes
       console.log('[FeeCalculator] Provider has active fee exemption until:', exemptionUntil);
       return {
         percentage: 0,
+        fixedFee: 0,
         source: 'exemption',
         exemptionUntil,
       };
     }
   }
   
-  // Priority 2: Individual rate (if configured and valid)
-  if (typeof individualRate === 'number' && individualRate >= 0 && individualRate <= 100) {
-    console.log('[FeeCalculator] Using provider individual rate:', individualRate);
+  // Priority 2: Individual rate (if custom fee is enabled and valid)
+  if (customFeeEnabled && typeof individualRate === 'number' && individualRate >= 0 && individualRate <= 100) {
+    console.log('[FeeCalculator] Using provider individual rate:', individualRate, 'fixed:', individualFixedFee);
     return {
       percentage: individualRate,
+      fixedFee: typeof individualFixedFee === 'number' ? individualFixedFee : 0,
       source: 'individual',
     };
   }
@@ -225,6 +233,7 @@ export function getEffectiveFeeRate(params: EffectiveFeeParams): EffectiveFeeRes
   console.log('[FeeCalculator] Using global rate:', globalRate);
   return {
     percentage: globalRate,
+    fixedFee: 0,
     source: 'global',
   };
 }

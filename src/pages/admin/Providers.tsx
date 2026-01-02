@@ -2,9 +2,10 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useAdminProviders } from '@/hooks/useAdminData';
+import { useAdminProviders, useAppSettings } from '@/hooks/useAdminData';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Loader2, 
   UserCheck,
@@ -17,8 +18,13 @@ import {
   Mail,
   Truck,
   Calendar,
-  ChevronDown
+  ChevronDown,
+  Percent,
+  Settings
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Command,
   CommandEmpty,
@@ -49,9 +55,137 @@ import { ptBR } from 'date-fns/locale';
 
 const PAGE_SIZE = 20;
 
+// Component for Provider Fee Configuration
+function ProviderFeeConfig({ provider, onUpdate }: { provider: any; onUpdate: () => void }) {
+  const { commissionPercentage } = useAppSettings();
+  const [useCustomFee, setUseCustomFee] = useState<boolean>(provider.custom_fee_enabled || false);
+  const [customPercentage, setCustomPercentage] = useState<string>(
+    provider.custom_fee_percentage?.toString() || ''
+  );
+  const [customFixed, setCustomFixed] = useState<string>(
+    provider.custom_fee_fixed?.toString() || ''
+  );
+  const [saving, setSaving] = useState(false);
+
+  const isStripeConnected = provider.stripe_connected;
+  const isDisabled = !isStripeConnected;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('provider_data')
+        .update({
+          custom_fee_enabled: useCustomFee,
+          custom_fee_percentage: useCustomFee && customPercentage ? parseFloat(customPercentage) : null,
+          custom_fee_fixed: useCustomFee && customFixed ? parseFloat(customFixed) : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', provider.user_id);
+
+      if (error) throw error;
+
+      toast.success('Configuração de taxa salva com sucesso');
+      onUpdate();
+    } catch (err) {
+      console.error('Error saving fee config:', err);
+      toast.error('Erro ao salvar configuração de taxa');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
+      <div className="flex items-center gap-2">
+        <Percent className="w-4 h-4 text-muted-foreground" />
+        <Label className="text-sm font-medium">Configuração de Taxa</Label>
+      </div>
+
+      {!isStripeConnected && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+          <p className="text-sm text-amber-600">
+            Stripe não está conectado. Configure o Stripe para editar taxas.
+          </p>
+        </div>
+      )}
+
+      <RadioGroup 
+        value={useCustomFee ? 'custom' : 'global'} 
+        onValueChange={(value) => setUseCustomFee(value === 'custom')}
+        disabled={isDisabled}
+        className="space-y-2"
+      >
+        <div className="flex items-center space-x-2">
+          <RadioGroupItem value="global" id="global" disabled={isDisabled} />
+          <Label htmlFor="global" className={isDisabled ? 'text-muted-foreground' : ''}>
+            Usar taxa global do app ({commissionPercentage}%)
+          </Label>
+        </div>
+        <div className="flex items-center space-x-2">
+          <RadioGroupItem value="custom" id="custom" disabled={isDisabled} />
+          <Label htmlFor="custom" className={isDisabled ? 'text-muted-foreground' : ''}>
+            Usar taxa personalizada
+          </Label>
+        </div>
+      </RadioGroup>
+
+      {useCustomFee && (
+        <div className="grid gap-4 md:grid-cols-2 pl-6">
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">Taxa percentual (%)</Label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              placeholder="Ex: 10"
+              value={customPercentage}
+              onChange={(e) => setCustomPercentage(e.target.value)}
+              disabled={isDisabled}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">Taxa fixa (R$)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Ex: 5.00"
+              value={customFixed}
+              onChange={(e) => setCustomFixed(e.target.value)}
+              disabled={isDisabled}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <Button 
+          onClick={handleSave} 
+          disabled={isDisabled || saving}
+          size="sm"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Settings className="w-4 h-4 mr-1" />
+              Salvar Taxa
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminProviders() {
   const { user } = useAuth();
-  const { providers, loading, onlineNow, onlineToday, blockProvider, unblockProvider, togglePayout } = useAdminProviders();
+  const { providers, loading, onlineNow, onlineToday, blockProvider, unblockProvider, togglePayout, refetch: fetchProviders } = useAdminProviders();
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
@@ -347,6 +481,12 @@ export default function AdminProviders() {
                   </div>
                 </div>
               </div>
+
+              {/* Fee Configuration */}
+              <ProviderFeeConfig 
+                provider={selectedProvider} 
+                onUpdate={fetchProviders}
+              />
 
               {/* Services Offered */}
               <div className="space-y-2">
