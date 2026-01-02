@@ -13,7 +13,6 @@ import {
   Bell, 
   Plus, 
   Sparkles, 
-  Image as ImageIcon,
   Send, 
   Eye,
   Loader2,
@@ -35,18 +34,31 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { 
+  NOTIFICATION_CONCEPTS, 
+  DEFAULT_CONCEPT,
+  type NotificationConcept 
+} from '@/lib/notificationConcepts';
+import { NotificationConceptIcon } from '@/components/Notifications/NotificationConceptIcon';
 
 interface NotificationDraft {
   titulo: string;
   texto: string;
-  imagem_url: string;
+  image_concept: NotificationConcept;
   publico: 'cliente' | 'prestador' | 'ambos';
 }
 
 const initialDraft: NotificationDraft = {
   titulo: '',
   texto: '',
-  imagem_url: '',
+  image_concept: DEFAULT_CONCEPT,
   publico: 'ambos',
 };
 
@@ -55,7 +67,6 @@ export default function InternalNotificationsAdmin() {
   const [draft, setDraft] = useState<NotificationDraft>(initialDraft);
   const [isCreating, setIsCreating] = useState(false);
   const [isGeneratingText, setIsGeneratingText] = useState(false);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showPreview, setShowPreview] = useState(false);
 
@@ -78,10 +89,14 @@ export default function InternalNotificationsAdmin() {
     mutationFn: async (notification: NotificationDraft & { publicada: boolean }) => {
       const { data: userData } = await supabase.auth.getUser();
       
+      // Map image_concept to imagem_url field for DB compatibility
+      const { image_concept, ...rest } = notification;
+      
       const { error } = await supabase
         .from('internal_notifications')
         .insert({
-          ...notification,
+          ...rest,
+          imagem_url: image_concept, // Store concept as string in imagem_url
           criada_por: userData.user?.id,
           publicada_em: notification.publicada ? new Date().toISOString() : null,
         });
@@ -161,47 +176,17 @@ export default function InternalNotificationsAdmin() {
           ...prev,
           titulo: data.titulo,
           texto: data.texto,
+          image_concept: data.image_concept && data.image_concept in NOTIFICATION_CONCEPTS 
+            ? data.image_concept 
+            : DEFAULT_CONCEPT,
         }));
-        toast.success('Texto gerado! Revise e edite conforme necessário.');
+        toast.success('Texto e conceito gerados! Revise e edite conforme necessário.');
       }
     } catch (error) {
       console.error('Error generating text:', error);
       toast.error('Erro ao gerar texto');
     } finally {
       setIsGeneratingText(false);
-    }
-  };
-
-  // Generate image with AI
-  const generateImage = async () => {
-    if (!draft.titulo.trim()) {
-      toast.error('Preencha o título antes de gerar a ilustração');
-      return;
-    }
-
-    setIsGeneratingImage(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-notification-image', {
-        body: { 
-          titulo: draft.titulo,
-          texto: draft.texto,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.imageUrl) {
-        setDraft(prev => ({
-          ...prev,
-          imagem_url: data.imageUrl,
-        }));
-        toast.success('Ilustração gerada!');
-      }
-    } catch (error) {
-      console.error('Error generating image:', error);
-      toast.error('Erro ao gerar ilustração');
-    } finally {
-      setIsGeneratingImage(false);
     }
   };
 
@@ -356,38 +341,36 @@ export default function InternalNotificationsAdmin() {
                 </RadioGroup>
               </div>
 
-              {/* Image */}
+              {/* Concept Icon */}
               <div className="space-y-2">
-                <Label>Ilustração (opcional)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="URL da imagem ou gere com IA"
-                    value={draft.imagem_url}
-                    onChange={(e) => setDraft(prev => ({ ...prev, imagem_url: e.target.value }))}
-                    className="flex-1"
-                  />
-                  <Button 
-                    onClick={generateImage} 
-                    disabled={isGeneratingImage || !draft.titulo.trim()}
-                    variant="outline"
+                <Label>Ícone da Notificação</Label>
+                <div className="flex items-center gap-4">
+                  <NotificationConceptIcon concept={draft.image_concept} size="lg" />
+                  <Select
+                    value={draft.image_concept}
+                    onValueChange={(value) => setDraft(prev => ({ ...prev, image_concept: value as NotificationConcept }))}
                   >
-                    {isGeneratingImage ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <ImageIcon className="h-4 w-4 mr-2" />
-                        Gerar IA
-                      </>
-                    )}
-                  </Button>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Selecione o ícone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(NOTIFICATION_CONCEPTS).map(([key, config]) => {
+                        const Icon = config.icon;
+                        return (
+                          <SelectItem key={key} value={key}>
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-4 w-4" />
+                              <span>{config.label}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
-                {draft.imagem_url && (
-                  <img 
-                    src={draft.imagem_url} 
-                    alt="Preview" 
-                    className="w-32 h-32 rounded-lg object-cover mt-2"
-                  />
-                )}
+                <p className="text-xs text-muted-foreground">
+                  A IA sugere automaticamente o ícone baseado no tema, mas você pode alterar manualmente.
+                </p>
               </div>
             </div>
 
@@ -409,13 +392,7 @@ export default function InternalNotificationsAdmin() {
                 <Card className="bg-primary/5 border-primary/20">
                   <CardContent className="p-4">
                     <div className="flex gap-3">
-                      {draft.imagem_url && (
-                        <img
-                          src={draft.imagem_url}
-                          alt=""
-                          className="w-16 h-16 rounded-lg object-cover bg-muted flex-shrink-0"
-                        />
-                      )}
+                      <NotificationConceptIcon concept={draft.image_concept} size="md" />
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-semibold line-clamp-2">
                           {draft.titulo || 'Título da notificação'}
@@ -488,13 +465,7 @@ export default function InternalNotificationsAdmin() {
                   key={notification.id}
                   className="flex items-start gap-4 p-4 rounded-lg border bg-card"
                 >
-                  {notification.imagem_url && (
-                    <img
-                      src={notification.imagem_url}
-                      alt=""
-                      className="w-16 h-16 rounded-lg object-cover bg-muted flex-shrink-0"
-                    />
-                  )}
+                  <NotificationConceptIcon concept={notification.imagem_url} size="md" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h4 className="font-medium">{notification.titulo}</h4>

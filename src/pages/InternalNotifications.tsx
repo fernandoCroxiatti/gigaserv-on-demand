@@ -1,12 +1,13 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, BellOff, Loader2 } from 'lucide-react';
+import { ArrowLeft, BellOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useInternalNotifications, InternalNotification } from '@/hooks/useInternalNotifications';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { NotificationConceptIcon } from '@/components/Notifications/NotificationConceptIcon';
 
 function NotificationItem({ 
   notification, 
@@ -35,15 +36,7 @@ function NotificationItem({
       onClick={handleClick}
     >
       <div className="flex gap-3">
-        {notification.imagem_url && (
-          <div className="flex-shrink-0">
-            <img
-              src={notification.imagem_url}
-              alt=""
-              className="w-16 h-16 rounded-lg object-cover bg-muted"
-            />
-          </div>
-        )}
+        <NotificationConceptIcon concept={notification.imagem_url} size="md" />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <h3 className={cn(
