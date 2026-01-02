@@ -42,6 +42,46 @@ async function sendOneSignalNotification(
   }
 }
 
+// Helper to validate user type before sending notifications
+// deno-lint-ignore no-explicit-any
+async function validateUserIsProvider(supabase: any, userId: string): Promise<boolean> {
+  try {
+    const { data: providerData, error } = await supabase
+      .from('provider_data')
+      .select('user_id, registration_complete')
+      .eq('user_id', userId)
+      .eq('registration_complete', true)
+      .maybeSingle();
+    
+    if (error || !providerData) {
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[process-scheduled] Error validating provider:', err);
+    return false;
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+async function validateUserIsClient(supabase: any, userId: string): Promise<boolean> {
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('perfil_principal')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (error || !profile || !profile.perfil_principal) {
+      return false;
+    }
+    return profile.perfil_principal === 'client';
+  } catch (err) {
+    console.error('[process-scheduled] Error validating client:', err);
+    return false;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -87,12 +127,14 @@ serve(async (req) => {
         let users: { user_id: string }[] = [];
         
         if (notification.target_type === 'providers') {
+          // Get only registered providers from provider_data
           const { data } = await supabase
             .from('provider_data')
             .select('user_id')
             .eq('registration_complete', true);
           users = data || [];
         } else if (notification.target_type === 'clients') {
+          // Get only clients from profiles
           const { data } = await supabase
             .from('profiles')
             .select('user_id')
@@ -104,10 +146,34 @@ serve(async (req) => {
             .select('user_id');
           users = data || [];
         }
+        
+        console.log('[process-scheduled] Candidates before validation:', users.length, 'for target_type:', notification.target_type);
 
         let sentCount = 0;
+        let blockedCount = 0;
         
         for (const user of users) {
+          // ===== MANDATORY USER TYPE VALIDATION =====
+          // For provider-targeted notifications: MUST validate user is actually a provider
+          if (notification.target_type === 'providers') {
+            const isProvider = await validateUserIsProvider(supabase, user.user_id);
+            if (!isProvider) {
+              console.log('[process-scheduled] BLOCKED: User is not a provider:', user.user_id.substring(0, 8));
+              blockedCount++;
+              continue;
+            }
+          }
+          
+          // For client-targeted notifications: MUST validate user is actually a client
+          if (notification.target_type === 'clients') {
+            const isClient = await validateUserIsClient(supabase, user.user_id);
+            if (!isClient) {
+              console.log('[process-scheduled] BLOCKED: User is not a client:', user.user_id.substring(0, 8));
+              blockedCount++;
+              continue;
+            }
+          }
+
           // Check user preferences
           const { data: prefs } = await supabase
             .from('notification_preferences')
@@ -139,6 +205,8 @@ serve(async (req) => {
             }
           }
         }
+        
+        console.log('[process-scheduled] Notification', notification.id, '| Blocked:', blockedCount);
 
         // Update notification status to sent
         await supabase

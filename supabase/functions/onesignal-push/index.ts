@@ -117,6 +117,68 @@ async function cancelNotification(notificationId: string): Promise<boolean> {
   }
 }
 
+// Helper to validate user type before sending provider-specific notifications
+// deno-lint-ignore no-explicit-any
+async function validateUserType(
+  supabase: any,
+  userId: string,
+  requiredType: 'provider' | 'client'
+): Promise<boolean> {
+  try {
+    if (requiredType === 'provider') {
+      // Check if user exists in provider_data with registration complete
+      const { data: providerData, error } = await supabase
+        .from('provider_data')
+        .select('user_id, registration_complete')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (error || !providerData) {
+        console.log('[onesignal-push] User is not a registered provider:', userId.substring(0, 8));
+        return false;
+      }
+      return true;
+    } else {
+      // Check if user has client profile
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('perfil_principal')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (error || !profile) {
+        console.log('[onesignal-push] User profile not found:', userId.substring(0, 8));
+        return false;
+      }
+      return profile.perfil_principal === 'client';
+    }
+  } catch (err) {
+    console.error('[onesignal-push] Error validating user type:', err);
+    return false;
+  }
+}
+
+// Filter user IDs by type - returns only valid users for the notification type
+// deno-lint-ignore no-explicit-any
+async function filterUsersByType(
+  supabase: any,
+  userIds: string[],
+  requiredType: 'provider' | 'client' | null
+): Promise<string[]> {
+  if (!requiredType || userIds.length === 0) return userIds;
+  
+  const validUserIds: string[] = [];
+  for (const uid of userIds) {
+    const isValid = await validateUserType(supabase, uid, requiredType);
+    if (isValid) {
+      validUserIds.push(uid);
+    } else {
+      console.log(`[onesignal-push] BLOCKED: User ${uid.substring(0, 8)} is not a ${requiredType}`);
+    }
+  }
+  return validUserIds;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -133,13 +195,29 @@ serve(async (req) => {
     const { action, userId, userIds, title, body, data, chamadoId, scheduled_at } = payload;
 
     // Get target user IDs
-    const targetUserIds: string[] = userIds || (userId ? [userId] : []);
+    let targetUserIds: string[] = userIds || (userId ? [userId] : []);
     
     if (targetUserIds.length === 0 && action !== 'cancel') {
       return new Response(
         JSON.stringify({ error: 'No target users specified' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // ===== USER TYPE VALIDATION =====
+    // For 'chamada' action: MUST be sent ONLY to providers (fail-safe)
+    if (action === 'chamada') {
+      console.log('[onesignal-push] Validating provider user types for chamada notification...');
+      targetUserIds = await filterUsersByType(supabase, targetUserIds, 'provider');
+      
+      if (targetUserIds.length === 0) {
+        console.log('[onesignal-push] No valid providers to notify after validation');
+        return new Response(
+          JSON.stringify({ success: false, message: 'No valid providers to notify' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      console.log('[onesignal-push] Valid providers after filter:', targetUserIds.length);
     }
 
     let success = false;

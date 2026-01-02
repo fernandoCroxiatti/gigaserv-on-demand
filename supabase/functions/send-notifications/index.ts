@@ -246,6 +246,48 @@ function getRandomMessage<T>(messages: T[]): T {
   return messages[Math.floor(Math.random() * messages.length)];
 }
 
+// Helper to validate user type before sending notifications
+// deno-lint-ignore no-explicit-any
+async function validateUserIsProvider(supabase: any, userId: string): Promise<boolean> {
+  try {
+    const { data: providerData, error } = await supabase
+      .from('provider_data')
+      .select('user_id, registration_complete')
+      .eq('user_id', userId)
+      .eq('registration_complete', true)
+      .maybeSingle();
+    
+    if (error || !providerData) {
+      console.log('[send-notifications] User is not a registered provider:', userId.substring(0, 8));
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[send-notifications] Error validating provider:', err);
+    return false;
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+async function validateUserIsClient(supabase: any, userId: string): Promise<boolean> {
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('perfil_principal')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (error || !profile || !profile.perfil_principal) {
+      console.log('[send-notifications] User profile not found or invalid:', userId.substring(0, 8));
+      return false;
+    }
+    return profile.perfil_principal === 'client';
+  } catch (err) {
+    console.error('[send-notifications] Error validating client:', err);
+    return false;
+  }
+}
+
 // deno-lint-ignore no-explicit-any
 async function sendScheduledNotifications(supabase: any) {
   console.log('[send-notifications] Running scheduled notifications...');
@@ -259,6 +301,8 @@ async function sendScheduledNotifications(supabase: any) {
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+  // ===== PROVIDER MOTIVATIONAL NOTIFICATIONS =====
+  // Only query from provider_data table (already ensures they are providers)
   const { data: offlineProviders } = await supabase
     .from('provider_data')
     .select('user_id')
@@ -267,6 +311,13 @@ async function sendScheduledNotifications(supabase: any) {
 
   if (offlineProviders) {
     for (const provider of offlineProviders) {
+      // FAIL-SAFE: Double-check user is actually a provider before sending
+      const isProvider = await validateUserIsProvider(supabase, provider.user_id);
+      if (!isProvider) {
+        console.log('[send-notifications] BLOCKED: Skipping non-provider user:', provider.user_id.substring(0, 8));
+        continue;
+      }
+
       const { data: recentNotif } = await supabase
         .from('notification_history')
         .select('id')
@@ -284,15 +335,17 @@ async function sendScheduledNotifications(supabase: any) {
 
         if (prefs?.enabled && prefs?.promotional !== false) {
           const message = getRandomMessage(PROVIDER_MOTIVATIONAL_MESSAGES);
+          console.log('[send-notifications] Sending provider_motivational to verified provider:', provider.user_id.substring(0, 8));
           await sendPushToUser(supabase, provider.user_id, 'provider_motivational', message.title, message.body);
         }
       }
     }
   }
 
+  // ===== CLIENT REENGAGEMENT NOTIFICATIONS =====
   const { data: inactiveProfiles } = await supabase
     .from('profiles')
-    .select('user_id, updated_at')
+    .select('user_id, updated_at, perfil_principal')
     .eq('perfil_principal', 'client')
     .lt('updated_at', sevenDaysAgo.toISOString());
 
@@ -300,6 +353,13 @@ async function sendScheduledNotifications(supabase: any) {
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     
     for (const profile of inactiveProfiles) {
+      // FAIL-SAFE: Double-check user is actually a client before sending
+      const isClient = await validateUserIsClient(supabase, profile.user_id);
+      if (!isClient) {
+        console.log('[send-notifications] BLOCKED: Skipping non-client user:', profile.user_id.substring(0, 8));
+        continue;
+      }
+
       const { data: recentNotif } = await supabase
         .from('notification_history')
         .select('id')
@@ -317,6 +377,7 @@ async function sendScheduledNotifications(supabase: any) {
 
         if (prefs?.enabled && prefs?.promotional !== false) {
           const message = getRandomMessage(CLIENT_REENGAGEMENT_MESSAGES);
+          console.log('[send-notifications] Sending client_reengagement to verified client:', profile.user_id.substring(0, 8));
           await sendPushToUser(supabase, profile.user_id, 'client_reengagement', message.title, message.body);
         }
       }
@@ -359,29 +420,54 @@ async function sendManualNotifications(supabase: any, targetType: string, messag
   let users: any[] = [];
   
   if (targetType === 'providers') {
+    // Get only registered providers from provider_data
     const { data } = await supabase
       .from('provider_data')
       .select('user_id')
       .eq('registration_complete', true);
     users = data || [];
   } else if (targetType === 'clients') {
+    // Get only clients from profiles
     const { data } = await supabase
       .from('profiles')
-      .select('user_id')
+      .select('user_id, perfil_principal')
       .eq('perfil_principal', 'client');
     users = data || [];
   } else {
-    // all users
+    // all users - no type filtering
     const { data } = await supabase
       .from('profiles')
       .select('user_id');
     users = data || [];
   }
 
-  console.log('[send-notifications] Sending to', users.length, 'users');
+  console.log('[send-notifications] Candidates before validation:', users.length);
 
   let successCount = 0;
+  let blockedCount = 0;
+  
   for (const user of users) {
+    // ===== MANDATORY USER TYPE VALIDATION =====
+    // For provider-targeted notifications: MUST validate user is actually a provider
+    if (targetType === 'providers') {
+      const isProvider = await validateUserIsProvider(supabase, user.user_id);
+      if (!isProvider) {
+        console.log('[send-notifications] BLOCKED: User is not a provider:', user.user_id.substring(0, 8));
+        blockedCount++;
+        continue;
+      }
+    }
+    
+    // For client-targeted notifications: MUST validate user is actually a client
+    if (targetType === 'clients') {
+      const isClient = await validateUserIsClient(supabase, user.user_id);
+      if (!isClient) {
+        console.log('[send-notifications] BLOCKED: User is not a client:', user.user_id.substring(0, 8));
+        blockedCount++;
+        continue;
+      }
+    }
+
     // Check user preferences
     const { data: prefs } = await supabase
       .from('notification_preferences')
@@ -414,5 +500,5 @@ async function sendManualNotifications(supabase: any, targetType: string, messag
     }
   }
 
-  console.log('[send-notifications] Manual notifications completed. Sent:', successCount, '/', users.length);
+  console.log('[send-notifications] Manual notifications completed. Sent:', successCount, '/', users.length, '| Blocked:', blockedCount);
 }
