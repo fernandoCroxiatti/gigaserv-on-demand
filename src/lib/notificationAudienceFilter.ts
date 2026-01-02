@@ -21,6 +21,16 @@
 export type NotificationAudience = 'clientes' | 'prestadores' | 'todos';
 export type UserRole = 'client' | 'provider' | 'admin';
 
+/**
+ * User profiles structure - represents REGISTERED profiles, not active session
+ * A provider is ALSO a client (can request services)
+ */
+export interface UserProfiles {
+  isClient: boolean;
+  isProvider: boolean;
+  isAdmin: boolean;
+}
+
 // Canonical valid audience values - LOCKED - DO NOT MODIFY
 const VALID_AUDIENCES: readonly NotificationAudience[] = ['clientes', 'prestadores', 'todos'] as const;
 
@@ -38,20 +48,19 @@ export function isValidAudience(audience: unknown): audience is NotificationAudi
 }
 
 /**
- * CORE FILTER: Determines if a notification is visible to a specific role
+ * CORE FILTER: Determines if a notification is visible based on REGISTERED profiles
  * 
- * Rules:
- * - client → audience === "clientes" OR audience === "todos"
- * - provider → audience === "prestadores" OR audience === "todos"
- * - admin → sees everything with valid audience
+ * Rules based on REGISTERED profiles (not active session):
+ * - User with client profile → "clientes" and "todos"
+ * - User with provider profile → "prestadores" and "todos"
+ * - Provider is ALSO a client, so they see "clientes" too
+ * - Admin → sees everything with valid audience
  * 
  * FAIL-SAFE: If audience is invalid, returns false (block notification)
- * NO FALLBACK: Invalid values are silently discarded
- * NO CONVERSION: "cliente" does NOT become "clientes"
  */
-export function isNotificationVisibleToRole(
+export function isNotificationVisibleToProfiles(
   audience: unknown,
-  role: UserRole
+  profiles: UserProfiles
 ): boolean {
   // FAIL-SAFE: Invalid audience = block notification (no exceptions)
   if (!isValidAudience(audience)) {
@@ -62,7 +71,7 @@ export function isNotificationVisibleToRole(
   }
 
   // Admin sees everything with valid audience
-  if (role === 'admin') {
+  if (profiles.isAdmin) {
     return true;
   }
 
@@ -71,13 +80,13 @@ export function isNotificationVisibleToRole(
     return true;
   }
 
-  // Client can only see "clientes" notifications
-  if (role === 'client' && audience === 'clientes') {
+  // "clientes" - visible to clients AND providers (providers can also be clients)
+  if (audience === 'clientes' && (profiles.isClient || profiles.isProvider)) {
     return true;
   }
 
-  // Provider can only see "prestadores" notifications
-  if (role === 'provider' && audience === 'prestadores') {
+  // "prestadores" - visible ONLY to providers
+  if (audience === 'prestadores' && profiles.isProvider) {
     return true;
   }
 
@@ -86,18 +95,41 @@ export function isNotificationVisibleToRole(
 }
 
 /**
+ * @deprecated Use isNotificationVisibleToProfiles instead
+ * Kept for backwards compatibility during transition
+ */
+export function isNotificationVisibleToRole(
+  audience: unknown,
+  role: UserRole
+): boolean {
+  // Convert role to profiles for backwards compatibility
+  const profiles: UserProfiles = {
+    isClient: role === 'client',
+    isProvider: role === 'provider',
+    isAdmin: role === 'admin',
+  };
+  
+  // Provider is also a client
+  if (role === 'provider') {
+    profiles.isClient = true;
+  }
+  
+  return isNotificationVisibleToProfiles(audience, profiles);
+}
+
+/**
  * CENTRALIZED FILTER FUNCTION - Use this for all notification filtering
  * 
- * Filters an array of notifications to only include those visible to the given role.
- * This is the SINGLE SOURCE OF TRUTH for audience filtering.
+ * Filters an array of notifications to only include those visible to the user
+ * based on their REGISTERED profiles (not active session).
  * 
  * @param notifications - Array of notifications with 'publico' field
- * @param role - User role ('client', 'provider', 'admin')
+ * @param profiles - User's registered profiles
  * @returns Filtered array of notifications
  */
-export function filterNotificationsByAudience<T extends { publico?: string | null }>(
+export function filterNotificationsByProfiles<T extends { publico?: string | null }>(
   notifications: T[],
-  role: UserRole
+  profiles: UserProfiles
 ): T[] {
   if (!Array.isArray(notifications)) {
     console.error('[NotificationFilter] Invalid notifications array');
@@ -106,16 +138,39 @@ export function filterNotificationsByAudience<T extends { publico?: string | nul
 
   const filtered = notifications.filter(notification => {
     const audience = notification.publico;
-    return isNotificationVisibleToRole(audience, role);
+    return isNotificationVisibleToProfiles(audience, profiles);
   });
 
   // Log filtering results
   const blocked = notifications.length - filtered.length;
   if (blocked > 0) {
-    console.log(`[NotificationFilter] ${notifications.length} → ${filtered.length} (blocked ${blocked}) for role: ${role}`);
+    const profileStr = `client=${profiles.isClient}, provider=${profiles.isProvider}, admin=${profiles.isAdmin}`;
+    console.log(`[NotificationFilter] ${notifications.length} → ${filtered.length} (blocked ${blocked}) for profiles: ${profileStr}`);
   }
 
   return filtered;
+}
+
+/**
+ * @deprecated Use filterNotificationsByProfiles instead
+ * Kept for backwards compatibility
+ */
+export function filterNotificationsByAudience<T extends { publico?: string | null }>(
+  notifications: T[],
+  role: UserRole
+): T[] {
+  const profiles: UserProfiles = {
+    isClient: role === 'client',
+    isProvider: role === 'provider',
+    isAdmin: role === 'admin',
+  };
+  
+  // Provider is also a client
+  if (role === 'provider') {
+    profiles.isClient = true;
+  }
+  
+  return filterNotificationsByProfiles(notifications, profiles);
 }
 
 /**
@@ -138,14 +193,31 @@ export function filterExpiredNotifications<T extends { expira_em?: string | null
 }
 
 /**
- * COMPLETE NOTIFICATION PIPELINE - Apply all filters in correct order
+ * COMPLETE NOTIFICATION PIPELINE - Apply all filters using REGISTERED profiles
  * 
  * Pipeline order:
- * 1. Filter by audience (role-based) - MUST BE FIRST
+ * 1. Filter by audience (profile-based) - MUST BE FIRST
  * 2. Filter by expiration
  * 3. Return filtered notifications
  * 
  * Use this function to ensure consistent filtering across the app.
+ */
+export function applyNotificationPipelineWithProfiles<T extends { publico?: string | null; expira_em?: string | null }>(
+  notifications: T[],
+  profiles: UserProfiles
+): T[] {
+  // Step 1: Filter by audience based on registered profiles
+  const audienceFiltered = filterNotificationsByProfiles(notifications, profiles);
+  
+  // Step 2: Filter expired notifications
+  const expirationFiltered = filterExpiredNotifications(audienceFiltered);
+  
+  return expirationFiltered;
+}
+
+/**
+ * @deprecated Use applyNotificationPipelineWithProfiles instead
+ * Kept for backwards compatibility
  */
 export function applyNotificationPipeline<T extends { publico?: string | null; expira_em?: string | null }>(
   notifications: T[],
@@ -161,10 +233,34 @@ export function applyNotificationPipeline<T extends { publico?: string | null; e
 }
 
 /**
- * Validates a single notification for real-time/push events
+ * Validates a single notification for real-time/push events using REGISTERED profiles
  * Use this before adding any notification to state from external sources
  * 
  * Returns true if the notification should be added to state, false otherwise
+ */
+export function validateIncomingNotificationWithProfiles(
+  notification: { publico?: string | null; expira_em?: string | null },
+  profiles: UserProfiles
+): boolean {
+  // Check audience based on registered profiles FIRST
+  if (!isNotificationVisibleToProfiles(notification.publico, profiles)) {
+    return false;
+  }
+  
+  // Check expiration
+  if (notification.expira_em) {
+    const now = new Date().toISOString();
+    if (notification.expira_em <= now) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * @deprecated Use validateIncomingNotificationWithProfiles instead
+ * Kept for backwards compatibility
  */
 export function validateIncomingNotification(
   notification: { publico?: string | null; expira_em?: string | null },
