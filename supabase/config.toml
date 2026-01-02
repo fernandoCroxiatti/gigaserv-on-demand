@@ -80,3 +80,6 @@ verify_jwt = true
 
 [functions.generate-notification-image]
 verify_jwt = true
+
+[functions.process-scheduled-internal-notifications]
+verify_jwt = false
