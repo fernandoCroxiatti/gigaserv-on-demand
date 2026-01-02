@@ -15,6 +15,7 @@ import { VehicleTypeSelector } from './VehicleTypeSelector';
 import { LocationPermissionModal } from '../Permissions/LocationPermissionModal';
 import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
 import { NotificationCTA } from '../Notifications/NotificationCTA';
+import { DestinationBottomSheet } from './DestinationBottomSheet';
 
 const NEARBY_RADIUS_KM = 15;
 
@@ -83,6 +84,7 @@ export function ClientIdleView() {
   const [destino, setDestino] = useState<Location | null>(null);
   const [destinoText, setDestinoText] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [destinationSheetOpen, setDestinationSheetOpen] = useState(false);
   
   // Permission modals
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -463,18 +465,19 @@ export function ClientIdleView() {
                     Destino do veículo
                   </p>
                   
-                  <div className="ring-1 ring-border/50 rounded-xl overflow-visible">
-                    <PlacesAutocomplete
-                      value={destinoText}
-                      onChange={handleDestinoTextChange}
-                      onSelect={handleDestinoSelect}
-                      placeholder="Oficina, casa ou outro destino"
-                      icon={<MapPin className="w-4 h-4 text-primary" />}
-                      recentAddresses={recentAddresses}
-                      showRecentOnFocus={true}
-                      dropdownPosition="below"
-                    />
-                  </div>
+                  {/* Trigger button that opens Bottom Sheet */}
+                  <button
+                    onClick={() => setDestinationSheetOpen(true)}
+                    className="w-full flex items-center gap-3 p-3.5 bg-secondary rounded-xl ring-1 ring-border/50 hover:bg-secondary/80 transition-colors text-left"
+                  >
+                    <MapPin className={`w-5 h-5 flex-shrink-0 ${destino ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <span className={`flex-1 text-sm font-medium truncate ${
+                      destino ? 'text-foreground' : 'text-muted-foreground'
+                    }`}>
+                      {destinoText || 'Oficina, casa ou outro destino'}
+                    </span>
+                    {destino && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -566,6 +569,15 @@ export function ClientIdleView() {
         onDecline={handleLocationPermissionDecline}
         userType="client"
         loading={locationPermissionLoading}
+      />
+
+      {/* Destination Bottom Sheet - Uber/99 style */}
+      <DestinationBottomSheet
+        open={destinationSheetOpen}
+        onClose={() => setDestinationSheetOpen(false)}
+        onSelect={handleDestinoSelect}
+        recentAddresses={recentAddresses}
+        initialValue={destinoText}
       />
 
     </div>
