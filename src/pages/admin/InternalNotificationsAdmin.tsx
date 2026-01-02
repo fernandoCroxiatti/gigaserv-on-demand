@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { 
   Bell, 
   Plus, 
@@ -23,9 +22,7 @@ import {
   UsersRound,
   Trash2,
   Check,
-  Clock,
-  Calendar,
-  CalendarClock
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -44,7 +41,6 @@ interface NotificationDraft {
   texto: string;
   imagem_url: string;
   publico: 'cliente' | 'prestador' | 'ambos';
-  agendada_para: string;
 }
 
 const initialDraft: NotificationDraft = {
@@ -52,7 +48,6 @@ const initialDraft: NotificationDraft = {
   texto: '',
   imagem_url: '',
   publico: 'ambos',
-  agendada_para: '',
 };
 
 export default function InternalNotificationsAdmin() {
@@ -63,7 +58,6 @@ export default function InternalNotificationsAdmin() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showPreview, setShowPreview] = useState(false);
-  const [scheduleEnabled, setScheduleEnabled] = useState(false);
 
   // Fetch all notifications (including unpublished)
   const { data: notifications = [], isLoading } = useQuery({
@@ -81,19 +75,13 @@ export default function InternalNotificationsAdmin() {
 
   // Create notification
   const createMutation = useMutation({
-    mutationFn: async (notification: NotificationDraft & { status: string; publicada: boolean }) => {
+    mutationFn: async (notification: NotificationDraft & { publicada: boolean }) => {
       const { data: userData } = await supabase.auth.getUser();
       
       const { error } = await supabase
         .from('internal_notifications')
         .insert({
-          titulo: notification.titulo,
-          texto: notification.texto,
-          imagem_url: notification.imagem_url || null,
-          publico: notification.publico,
-          agendada_para: notification.agendada_para || null,
-          status: notification.status,
-          publicada: notification.publicada,
+          ...notification,
           criada_por: userData.user?.id,
           publicada_em: notification.publicada ? new Date().toISOString() : null,
         });
@@ -104,7 +92,6 @@ export default function InternalNotificationsAdmin() {
       queryClient.invalidateQueries({ queryKey: ['admin-internal-notifications'] });
       setDraft(initialDraft);
       setIsCreating(false);
-      setScheduleEnabled(false);
       toast.success('Notificação criada com sucesso!');
     },
     onError: (error) => {
@@ -119,7 +106,6 @@ export default function InternalNotificationsAdmin() {
       const { error } = await supabase
         .from('internal_notifications')
         .update({ 
-          status: 'publicada',
           publicada: true,
           publicada_em: new Date().toISOString(),
         })
@@ -133,28 +119,6 @@ export default function InternalNotificationsAdmin() {
     },
     onError: () => {
       toast.error('Erro ao publicar notificação');
-    },
-  });
-
-  // Cancel scheduled notification
-  const cancelScheduleMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('internal_notifications')
-        .update({ 
-          status: 'rascunho',
-          agendada_para: null,
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-internal-notifications'] });
-      toast.success('Agendamento cancelado');
-    },
-    onError: () => {
-      toast.error('Erro ao cancelar agendamento');
     },
   });
 
@@ -246,24 +210,7 @@ export default function InternalNotificationsAdmin() {
       toast.error('Preencha título e texto');
       return;
     }
-    createMutation.mutate({ ...draft, status: 'rascunho', publicada: false });
-  };
-
-  const handleSchedule = () => {
-    if (!draft.titulo.trim() || !draft.texto.trim()) {
-      toast.error('Preencha título e texto');
-      return;
-    }
-    if (!draft.agendada_para) {
-      toast.error('Selecione data e hora para agendar');
-      return;
-    }
-    const scheduledDate = new Date(draft.agendada_para);
-    if (scheduledDate <= new Date()) {
-      toast.error('A data de agendamento deve ser no futuro');
-      return;
-    }
-    createMutation.mutate({ ...draft, status: 'agendada', publicada: false });
+    createMutation.mutate({ ...draft, publicada: false });
   };
 
   const handlePublish = () => {
@@ -271,7 +218,7 @@ export default function InternalNotificationsAdmin() {
       toast.error('Preencha título e texto');
       return;
     }
-    createMutation.mutate({ ...draft, status: 'publicada', publicada: true });
+    createMutation.mutate({ ...draft, publicada: true });
   };
 
   const getPublicoLabel = (publico: string) => {
@@ -288,39 +235,6 @@ export default function InternalNotificationsAdmin() {
       case 'prestador': return <UserCog className="h-4 w-4" />;
       default: return <UsersRound className="h-4 w-4" />;
     }
-  };
-
-  const getStatusBadge = (notification: any) => {
-    switch (notification.status) {
-      case 'publicada':
-        return (
-          <Badge variant="default" className="bg-green-600">
-            <Check className="h-3 w-3 mr-1" />
-            Publicada
-          </Badge>
-        );
-      case 'agendada':
-        return (
-          <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-            <CalendarClock className="h-3 w-3 mr-1" />
-            Agendada
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="secondary">
-            <Clock className="h-3 w-3 mr-1" />
-            Rascunho
-          </Badge>
-        );
-    }
-  };
-
-  // Get min datetime for scheduling (now + 5 minutes)
-  const getMinDateTime = () => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 5);
-    return now.toISOString().slice(0, 16);
   };
 
   return (
@@ -340,55 +254,6 @@ export default function InternalNotificationsAdmin() {
           <Plus className="h-4 w-4 mr-2" />
           Nova Notificação
         </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-green-100 dark:bg-green-900">
-                <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Publicadas</p>
-                <p className="text-2xl font-bold">
-                  {notifications.filter(n => n.status === 'publicada').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
-                <CalendarClock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Agendadas</p>
-                <p className="text-2xl font-bold">
-                  {notifications.filter(n => n.status === 'agendada').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-gray-100 dark:bg-gray-800">
-                <Clock className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Rascunhos</p>
-                <p className="text-2xl font-bold">
-                  {notifications.filter(n => n.status === 'rascunho').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Creation Form */}
@@ -524,42 +389,6 @@ export default function InternalNotificationsAdmin() {
                   />
                 )}
               </div>
-
-              {/* Scheduling */}
-              <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-muted-foreground" />
-                    <Label htmlFor="schedule-toggle" className="font-medium">Agendar publicação</Label>
-                  </div>
-                  <Switch
-                    id="schedule-toggle"
-                    checked={scheduleEnabled}
-                    onCheckedChange={(checked) => {
-                      setScheduleEnabled(checked);
-                      if (!checked) {
-                        setDraft(prev => ({ ...prev, agendada_para: '' }));
-                      }
-                    }}
-                  />
-                </div>
-                
-                {scheduleEnabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="agendada_para">Data e hora</Label>
-                    <Input
-                      id="agendada_para"
-                      type="datetime-local"
-                      min={getMinDateTime()}
-                      value={draft.agendada_para}
-                      onChange={(e) => setDraft(prev => ({ ...prev, agendada_para: e.target.value }))}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      A notificação será publicada automaticamente na data/hora selecionada
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Preview */}
@@ -595,10 +424,7 @@ export default function InternalNotificationsAdmin() {
                           {draft.texto || 'Texto da notificação...'}
                         </p>
                         <p className="text-xs text-muted-foreground/60 mt-2">
-                          {scheduleEnabled && draft.agendada_para 
-                            ? format(new Date(draft.agendada_para), "dd/MM 'às' HH:mm", { locale: ptBR })
-                            : 'Agora mesmo'
-                          }
+                          Agora mesmo
                         </p>
                       </div>
                       <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1.5" />
@@ -609,8 +435,8 @@ export default function InternalNotificationsAdmin() {
             </Dialog>
 
             {/* Actions */}
-            <div className="flex gap-3 justify-end flex-wrap">
-              <Button variant="ghost" onClick={() => { setIsCreating(false); setScheduleEnabled(false); }}>
+            <div className="flex gap-3 justify-end">
+              <Button variant="ghost" onClick={() => setIsCreating(false)}>
                 Cancelar
               </Button>
               <Button 
@@ -625,32 +451,17 @@ export default function InternalNotificationsAdmin() {
                 )}
                 Salvar Rascunho
               </Button>
-              {scheduleEnabled ? (
-                <Button 
-                  onClick={handleSchedule}
-                  disabled={createMutation.isPending || !draft.agendada_para}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {createMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <CalendarClock className="h-4 w-4 mr-2" />
-                  )}
-                  Agendar
-                </Button>
-              ) : (
-                <Button 
-                  onClick={handlePublish}
-                  disabled={createMutation.isPending}
-                >
-                  {createMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Send className="h-4 w-4 mr-2" />
-                  )}
-                  Publicar Agora
-                </Button>
-              )}
+              <Button 
+                onClick={handlePublish}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Publicar Agora
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -685,9 +496,21 @@ export default function InternalNotificationsAdmin() {
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <div className="flex items-center gap-2 mb-1">
                       <h4 className="font-medium">{notification.titulo}</h4>
-                      {getStatusBadge(notification)}
+                      <Badge variant={notification.publicada ? 'default' : 'secondary'}>
+                        {notification.publicada ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1" />
+                            Publicada
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="h-3 w-3 mr-1" />
+                            Rascunho
+                          </>
+                        )}
+                      </Badge>
                       <Badge variant="outline" className="gap-1">
                         {getPublicoIcon(notification.publico)}
                         {getPublicoLabel(notification.publico)}
@@ -696,23 +519,15 @@ export default function InternalNotificationsAdmin() {
                     <p className="text-sm text-muted-foreground line-clamp-2">
                       {notification.texto}
                     </p>
-                    <div className="text-xs text-muted-foreground/60 mt-2 space-y-0.5">
-                      <p>
-                        Criada em {format(new Date(notification.criada_em), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                      </p>
-                      {notification.status === 'agendada' && notification.agendada_para && (
-                        <p className="text-blue-600 dark:text-blue-400 font-medium">
-                          <CalendarClock className="h-3 w-3 inline mr-1" />
-                          Agendada para {format(new Date(notification.agendada_para), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                        </p>
-                      )}
+                    <p className="text-xs text-muted-foreground/60 mt-2">
+                      Criada em {format(new Date(notification.criada_em), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                       {notification.publicada_em && (
-                        <p>Publicada em {format(new Date(notification.publicada_em), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                        <> · Publicada em {format(new Date(notification.publicada_em), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</>
                       )}
-                    </div>
+                    </p>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    {notification.status === 'rascunho' && (
+                  <div className="flex gap-2">
+                    {!notification.publicada && (
                       <Button
                         size="sm"
                         onClick={() => publishMutation.mutate(notification.id)}
@@ -721,26 +536,6 @@ export default function InternalNotificationsAdmin() {
                         <Send className="h-4 w-4 mr-1" />
                         Publicar
                       </Button>
-                    )}
-                    {notification.status === 'agendada' && (
-                      <>
-                        <Button
-                          size="sm"
-                          onClick={() => publishMutation.mutate(notification.id)}
-                          disabled={publishMutation.isPending}
-                        >
-                          <Send className="h-4 w-4 mr-1" />
-                          Publicar Agora
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => cancelScheduleMutation.mutate(notification.id)}
-                          disabled={cancelScheduleMutation.isPending}
-                        >
-                          Cancelar
-                        </Button>
-                      </>
                     )}
                     <Button
                       size="sm"
