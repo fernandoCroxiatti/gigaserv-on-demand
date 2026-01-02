@@ -377,10 +377,13 @@ export type Database = {
       }
       internal_notifications: {
         Row: {
+          acao_pendente: boolean | null
+          acao_tipo: string | null
           agendada_para: string | null
           criada_em: string
           criada_por: string | null
           destaque: boolean
+          expira_em: string | null
           id: string
           imagem_url: string | null
           publicada: boolean
@@ -391,10 +394,13 @@ export type Database = {
           titulo: string
         }
         Insert: {
+          acao_pendente?: boolean | null
+          acao_tipo?: string | null
           agendada_para?: string | null
           criada_em?: string
           criada_por?: string | null
           destaque?: boolean
+          expira_em?: string | null
           id?: string
           imagem_url?: string | null
           publicada?: boolean
@@ -405,10 +411,13 @@ export type Database = {
           titulo: string
         }
         Update: {
+          acao_pendente?: boolean | null
+          acao_tipo?: string | null
           agendada_para?: string | null
           criada_em?: string
           criada_por?: string | null
           destaque?: boolean
+          expira_em?: string | null
           id?: string
           imagem_url?: string | null
           publicada?: boolean

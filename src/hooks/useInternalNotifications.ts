@@ -18,16 +18,19 @@ export function useInternalNotifications() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch published notifications
+  // Fetch published notifications (excluding expired ones)
   const { data: notifications = [], isLoading, refetch } = useQuery({
     queryKey: ['internal-notifications', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
 
+      const now = new Date().toISOString();
+
       const { data: notifs, error } = await supabase
         .from('internal_notifications')
         .select('*')
         .eq('publicada', true)
+        .or(`expira_em.is.null,expira_em.gt.${now}`)
         .order('criada_em', { ascending: false });
 
       if (error) {
