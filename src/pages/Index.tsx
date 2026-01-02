@@ -18,6 +18,8 @@ import { ProviderView } from '@/components/ProviderView';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useWakeLock } from '@/hooks/useWakeLock';
+import { useHighlightNotification } from '@/hooks/useHighlightNotification';
+import { HighlightNotificationModal } from '@/components/Notifications/HighlightNotificationModal';
 import { Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
@@ -27,6 +29,9 @@ const Index = () => {
   
   // Keep screen awake while app is open
   useWakeLock();
+  
+  // Highlight notification modal
+  const { showModal, highlightNotification, closeModal } = useHighlightNotification();
 
   // Show loading while checking auth
   if (authLoading || isLoading) {
@@ -55,6 +60,13 @@ const Index = () => {
     <div className={`h-full ${!isClient ? 'provider-theme' : ''}`}>
       <Header />
       {isClient ? <ClientView /> : <ProviderView />}
+      
+      {/* Highlight Notification Modal */}
+      <HighlightNotificationModal
+        open={showModal}
+        onClose={closeModal}
+        notification={highlightNotification}
+      />
     </div>
   );
 };
