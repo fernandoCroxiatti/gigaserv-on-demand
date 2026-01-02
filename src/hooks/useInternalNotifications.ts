@@ -39,37 +39,55 @@ export function useInternalNotifications() {
   const previousProfilesRef = useRef<string | null>(null);
 
   // Fetch user's REGISTERED profiles to determine filtering
-  const { data: userProfiles } = useQuery({
+  const { data: userProfiles, isLoading: isLoadingProfiles } = useQuery({
     queryKey: ['user-registered-profiles', user?.id],
-    queryFn: async (): Promise<UserProfiles | null> => {
-      if (!user?.id) return null;
+    queryFn: async (): Promise<UserProfiles> => {
+      if (!user?.id) {
+        // Return default client profile if no user
+        console.log('[Notifications] No user, returning default client profile');
+        return { isClient: true, isProvider: false, isAdmin: false };
+      }
+
+      console.log('[Notifications] Fetching profiles for user:', user.id);
 
       // Check if user is admin
-      const { data: roles } = await supabase
+      const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id);
 
+      if (rolesError) {
+        console.error('[Notifications] Error fetching roles:', rolesError);
+      }
+
       const isAdmin = roles?.some(r => r.role === 'admin') || false;
 
       // Check if user has provider_data (is registered as provider)
-      const { data: providerData } = await supabase
+      const { data: providerData, error: providerError } = await supabase
         .from('provider_data')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      if (providerError) {
+        console.error('[Notifications] Error fetching provider data:', providerError);
+      }
+
       const isProvider = !!providerData;
       
-      // All users can be clients (default behavior)
-      // Provider is ALSO a client (can request services)
+      // All users are clients by default
+      // This is the KEY FIX: every authenticated user is a client
       const isClient = true;
 
-      return { 
+      const profiles = { 
         isClient,
         isProvider,
         isAdmin,
       };
+      
+      console.log('[Notifications] User profiles detected:', profiles);
+
+      return profiles;
     },
     enabled: !!user?.id,
     staleTime: 60000, // Cache for 1 minute
@@ -91,10 +109,19 @@ export function useInternalNotifications() {
   }, [profilesKey, queryClient]);
 
   // Fetch published notifications with centralized filtering based on REGISTERED profiles
-  const { data: notifications = [], isLoading, refetch } = useQuery({
+  const { data: notifications = [], isLoading: isLoadingNotifications, refetch } = useQuery({
     queryKey: ['internal-notifications', user?.id, profilesKey],
     queryFn: async () => {
-      if (!user?.id || !userProfiles) return [];
+      if (!user?.id) return [];
+
+      // Use fetched profiles or default to client-only
+      const profiles: UserProfiles = userProfiles || { 
+        isClient: true, 
+        isProvider: false, 
+        isAdmin: false 
+      };
+
+      console.log('[Notifications] Fetching with profiles:', profiles);
 
       // Step 1: Fetch all published notifications (raw data)
       const { data: rawNotifs, error } = await supabase
@@ -108,13 +135,17 @@ export function useInternalNotifications() {
         return [];
       }
 
+      console.log('[Notifications] Raw notifications from DB:', rawNotifs?.length || 0);
+
       if (!rawNotifs || rawNotifs.length === 0) {
         return [];
       }
 
       // Step 2 & 3: Apply centralized pipeline using REGISTERED profiles
       // THIS IS THE SINGLE SOURCE OF TRUTH
-      const filteredNotifs = applyNotificationPipelineWithProfiles(rawNotifs, userProfiles);
+      const filteredNotifs = applyNotificationPipelineWithProfiles(rawNotifs, profiles);
+
+      console.log('[Notifications] After pipeline filtering:', filteredNotifs.length);
 
       // Step 4: Fetch read status
       const { data: reads } = await supabase
@@ -130,17 +161,19 @@ export function useInternalNotifications() {
         isRead: readIds.has(n.id),
       })) as InternalNotification[];
 
-      const profileStr = `client=${userProfiles.isClient}, provider=${userProfiles.isProvider}, admin=${userProfiles.isAdmin}`;
+      const profileStr = `client=${profiles.isClient}, provider=${profiles.isProvider}, admin=${profiles.isAdmin}`;
       console.log(`[Notifications] Pipeline complete: ${rawNotifs.length} raw → ${filteredNotifs.length} filtered for profiles: ${profileStr}`);
 
       return notificationsWithReadStatus;
     },
-    enabled: !!user?.id && !!userProfiles,
+    enabled: !!user?.id,
     refetchInterval: 30000,
     // Prevent stale data from being shown during refetch
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
+  
+  const isLoading = isLoadingProfiles || isLoadingNotifications;
 
   // Step 6 & 7: Badge uses SAME filtered array (not recalculated from raw)
   // CRITICAL: This ensures badge matches exactly what's in the list
@@ -148,7 +181,14 @@ export function useInternalNotifications() {
 
   // Real-time subscription for new notifications
   useEffect(() => {
-    if (!user?.id || !userProfiles) return;
+    if (!user?.id) return;
+
+    // Use fetched profiles or default to client-only for real-time validation
+    const profiles: UserProfiles = userProfiles || { 
+      isClient: true, 
+      isProvider: false, 
+      isAdmin: false 
+    };
 
     const channel = supabase
       .channel('internal-notifications-realtime')
@@ -164,7 +204,7 @@ export function useInternalNotifications() {
           const newNotification = payload.new as any;
           
           // CRITICAL: Validate incoming notification using REGISTERED profiles
-          if (!validateIncomingNotificationWithProfiles(newNotification, userProfiles)) {
+          if (!validateIncomingNotificationWithProfiles(newNotification, profiles)) {
             console.log('[Notifications] Realtime: Blocked notification for wrong audience:', newNotification.publico);
             return;
           }
