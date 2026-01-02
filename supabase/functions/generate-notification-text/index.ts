@@ -49,8 +49,22 @@ REGRAS OBRIGATÓRIAS:
 - Títulos devem ser curtos (máximo 1 linha, até 60 caracteres)
 - Textos devem ser objetivos (2 a 4 linhas, até 200 caracteres)
 
+CONCEITO DE IMAGEM (image_concept):
+Você DEVE escolher UM conceito simples para a ilustração baseado no tema.
+Conceitos disponíveis (escolha APENAS um):
+- "checklist" - para cadastro, verificação, documentos
+- "documento" - para termos, contratos, comprovantes
+- "engrenagem" - para configurações, sistema, manutenção
+- "alerta" - para avisos, alertas, urgências
+- "confirmacao" - para sucesso, aprovação, conclusão
+- "mapa" - para corridas, rotas, localização
+- "pagamento" - para financeiro, recebimentos, PIX
+- "seguranca" - para proteção, privacidade, cadeado
+- "novidade" - para atualizações, novidades gerais
+- "suporte" - para ajuda, atendimento, contato
+
 Você deve retornar APENAS um JSON válido no formato:
-{"titulo": "...", "texto": "..."}
+{"titulo": "...", "texto": "...", "image_concept": "..."}
 
 Não adicione nenhum texto fora do JSON.`
           },
@@ -91,6 +105,7 @@ Não adicione nenhum texto fora do JSON.`
       result = {
         titulo: prompt.slice(0, 60),
         texto: `Novidade no GIGA S.O.S! ${prompt.slice(0, 150)}`,
+        image_concept: 'novidade',
       };
     }
 
