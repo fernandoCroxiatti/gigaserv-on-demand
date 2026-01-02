@@ -7,7 +7,7 @@ import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { useAddressHistory } from '@/hooks/useAddressHistory';
 import { Button } from '../ui/button';
-import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car } from 'lucide-react';
+import { ChevronRight, Check, Loader2, Crosshair, MapPin, Search, Car, Wrench } from 'lucide-react';
 import { Location, ServiceType, SERVICE_CONFIG, serviceRequiresDestination } from '@/types/chamado';
 import { VehicleType } from '@/types/vehicleTypes';
 import { VehicleTypeSelector } from './VehicleTypeSelector';
@@ -186,6 +186,20 @@ export function ClientIdleView() {
 
   const canSubmit = origem && (!needsDestination || destino) && selectedVehicleType && !isSubmitting;
 
+  // Progressive visibility states
+  const showServiceType = !!origem;
+  const showDestination = showServiceType && needsDestination;
+  const showLocalInfo = showServiceType && !needsDestination;
+  const showVehicleType = showServiceType && selectedService && (!needsDestination || destino);
+  const showCTA = showVehicleType && selectedVehicleType;
+
+  // Smart CTA text based on service type
+  const getCtaText = () => {
+    if (isSubmitting) return 'Solicitando...';
+    if (selectedService === 'guincho') return 'Solicitar guincho';
+    return 'Solicitar assistência no local';
+  };
+
   return (
     <>
       <div className="relative h-full">
@@ -224,7 +238,7 @@ export function ClientIdleView() {
           />
         )}
         
-        <div className="bg-card rounded-xl px-4 py-3 shadow-sm flex items-center gap-3 animate-fade-in">
+        <div className="bg-card/95 backdrop-blur-sm rounded-xl px-4 py-3 shadow-md border border-border/30 flex items-center gap-3 animate-fade-in">
           <div className="relative flex-shrink-0">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
               nearbyProviders.length > 0 ? 'bg-primary/10' : 'bg-muted'
@@ -257,7 +271,7 @@ export function ClientIdleView() {
             ) : (
               <>
                 <p className="text-sm font-medium text-muted-foreground">
-                  {!origem && !userLocation ? 'Informe sua localização' : 'Procurando prestadores...'}
+                  {!origem && !userLocation ? 'Informe a localização do veículo' : 'Procurando prestadores...'}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {!origem && !userLocation ? 'Use o GPS ou digite o endereço' : 'Normalmente leva poucos minutos'}
@@ -268,177 +282,219 @@ export function ClientIdleView() {
         </div>
       </div>
 
-      {/* Bottom panel */}
+      {/* Bottom panel - Progressive UX */}
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
-        <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-4 max-h-[65vh] overflow-y-auto">
-          
-          {/* 1. ORIGEM - Location inputs */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Onde está seu veículo?
-            </p>
-
-            {/* GPS Button */}
-            <button
-              onClick={handleUseMyLocation}
-              disabled={locationLoading || locationDenied}
-              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
-                usingGpsLocation 
-                  ? 'bg-primary/10 ring-1 ring-primary/30' 
-                  : locationDenied
-                    ? 'bg-muted/50 opacity-60 cursor-not-allowed'
-                    : 'bg-secondary/50 hover:bg-secondary'
-              }`}
-            >
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                usingGpsLocation ? 'bg-primary' : 'bg-muted'
-              }`}>
-                {locationLoading ? (
-                  <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-                ) : (
-                  <Crosshair className={`w-4 h-4 ${usingGpsLocation ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                )}
-              </div>
-              <div className="flex-1 text-left">
-                <p className={`font-medium text-sm ${usingGpsLocation ? 'text-primary' : 'text-foreground'}`}>
-                  {locationDenied ? 'Localização desativada' : 'Usar minha localização'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {usingGpsLocation ? 'GPS ativo' : locationDenied ? 'Ative nas configurações' : 'Detectar via GPS'}
-                </p>
-              </div>
-              {usingGpsLocation && (
-                <Check className="w-4 h-4 text-primary" />
-              )}
-            </button>
-
-            {/* Address input */}
-            <PlacesAutocomplete
-              value={origemText}
-              onChange={handleOrigemTextChange}
-              onSelect={handleOrigemSelect}
-              placeholder="Ou digite o endereço"
-              icon={<Search className="w-4 h-4 text-muted-foreground" />}
-            />
-            
-            {locationError && !locationDenied && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
-                {locationError}
-              </p>
-            )}
+        <div className="bg-card rounded-t-3xl shadow-2xl border-t border-border/20">
+          {/* Handle indicator */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
           </div>
+          
+          <div className="px-5 pb-6 space-y-5 max-h-[60vh] overflow-y-auto">
+          
+            {/* 1. ORIGEM - Always visible */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-xs font-bold text-primary">1</span>
+                </div>
+                <p className="text-sm font-semibold text-foreground">
+                  Onde está seu veículo?
+                </p>
+              </div>
 
-          {/* 2. DESTINO */}
-          {needsDestination && (
-            <div className="space-y-2 animate-fade-in">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Para onde levar?
-              </p>
-              <div className="ring-1 ring-border/50 rounded-xl">
-                <PlacesAutocomplete
-                  value={destinoText}
-                  onChange={handleDestinoTextChange}
-                  onSelect={handleDestinoSelect}
-                  placeholder="Oficina, casa ou outro destino"
-                  icon={<MapPin className="w-4 h-4 text-primary" />}
-                  recentAddresses={recentAddresses}
-                  showRecentOnFocus={true}
+              {/* GPS Button */}
+              <button
+                onClick={handleUseMyLocation}
+                disabled={locationLoading || locationDenied}
+                className={`w-full flex items-center gap-3 p-3.5 rounded-xl transition-all ${
+                  usingGpsLocation 
+                    ? 'bg-primary/10 ring-2 ring-primary/40' 
+                    : locationDenied
+                      ? 'bg-muted/50 opacity-60 cursor-not-allowed'
+                      : 'bg-secondary hover:bg-secondary/80'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                  usingGpsLocation ? 'bg-primary' : 'bg-muted'
+                }`}>
+                  {locationLoading ? (
+                    <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+                  ) : (
+                    <Crosshair className={`w-4 h-4 ${usingGpsLocation ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                  )}
+                </div>
+                <div className="flex-1 text-left">
+                  <p className={`font-medium text-sm ${usingGpsLocation ? 'text-primary' : 'text-foreground'}`}>
+                    {locationDenied ? 'Localização desativada' : 'Usar minha localização'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {usingGpsLocation ? 'GPS ativo' : locationDenied ? 'Ative nas configurações' : 'Detectar via GPS'}
+                  </p>
+                </div>
+                {usingGpsLocation && (
+                  <Check className="w-5 h-5 text-primary" />
+                )}
+              </button>
+
+              {/* Address input */}
+              <PlacesAutocomplete
+                value={origemText}
+                onChange={handleOrigemTextChange}
+                onSelect={handleOrigemSelect}
+                placeholder="Ou digite o endereço"
+                icon={<Search className="w-4 h-4 text-muted-foreground" />}
+              />
+              
+              {locationError && !locationDenied && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {locationError}
+                </p>
+              )}
+            </div>
+
+            {/* 2. TIPO DE SERVIÇO - Progressive: show after origem */}
+            {showServiceType && (
+              <div className="space-y-3 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-xs font-bold text-primary">2</span>
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Qual assistência você precisa?
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType) => {
+                    const config = SERVICE_CONFIG[serviceType];
+                    const isSelected = selectedService === serviceType;
+                    const typeProviderCount = nearbyProviders.filter(p => 
+                      p.services.includes(serviceType)
+                    ).length;
+                    
+                    return (
+                      <button
+                        key={serviceType}
+                        onClick={() => {
+                          setSelectedService(serviceType);
+                          if (!serviceRequiresDestination(serviceType)) {
+                            setDestino(null);
+                            setDestinoText('');
+                          }
+                        }}
+                        className={`flex items-center gap-2.5 p-3.5 rounded-xl transition-all ${
+                          isSelected 
+                            ? 'bg-primary/10 ring-2 ring-primary/40 shadow-sm' 
+                            : 'bg-secondary hover:bg-secondary/80'
+                        }`}
+                      >
+                        <span className="text-xl">{config.icon}</span>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                            {config.label}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {typeProviderCount > 0 
+                              ? `${typeProviderCount} disponíve${typeProviderCount > 1 ? 'is' : 'l'}` 
+                              : config.estimatedTime}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                            <Check className="w-3 h-3 text-primary-foreground" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 3. DESTINO - Progressive: show after service type, only for guincho */}
+            {showDestination && (
+              <div className="space-y-3 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-xs font-bold text-primary">3</span>
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Para onde o veículo será levado?
+                  </p>
+                </div>
+                
+                <div className="ring-1 ring-border/50 rounded-xl overflow-hidden">
+                  <PlacesAutocomplete
+                    value={destinoText}
+                    onChange={handleDestinoTextChange}
+                    onSelect={handleDestinoSelect}
+                    placeholder="Oficina, casa ou outro destino"
+                    icon={<MapPin className="w-4 h-4 text-primary" />}
+                    recentAddresses={recentAddresses}
+                    showRecentOnFocus={true}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Local service info - when destination not needed */}
+            {showLocalInfo && (
+              <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-xl animate-fade-in border border-primary/10">
+                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Wrench className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Atendimento no local do veículo</p>
+                  <p className="text-xs text-muted-foreground">O prestador irá até você para realizar o serviço.</p>
+                </div>
+              </div>
+            )}
+
+            {/* 4. TIPO DE VEÍCULO - Progressive */}
+            {showVehicleType && (
+              <div className="animate-fade-in">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-xs font-bold text-primary">{needsDestination ? '4' : '3'}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Qual é o tipo do veículo?
+                  </p>
+                </div>
+                <VehicleTypeSelector 
+                  value={selectedVehicleType} 
+                  onChange={setSelectedVehicleType} 
                 />
               </div>
-            </div>
-          )}
-
-          {/* Local service info - when destination not needed */}
-          {!needsDestination && origem && (
-            <div className="flex items-center gap-2.5 p-3 bg-primary/5 rounded-xl animate-fade-in">
-              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                <Check className="w-4 h-4 text-primary" />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                O prestador irá até você. Destino não necessário.
-              </p>
-            </div>
-          )}
-
-          {/* Divider */}
-          <div className="h-px bg-border/50" />
-
-          {/* 3. TIPO DE SERVIÇO */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tipo de serviço</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType) => {
-                const config = SERVICE_CONFIG[serviceType];
-                const isSelected = selectedService === serviceType;
-                const typeProviderCount = nearbyProviders.filter(p => 
-                  p.services.includes(serviceType)
-                ).length;
-                
-                return (
-                  <button
-                    key={serviceType}
-                    onClick={() => {
-                      setSelectedService(serviceType);
-                      if (!serviceRequiresDestination(serviceType)) {
-                        setDestino(null);
-                        setDestinoText('');
-                      }
-                    }}
-                    className={`flex items-center gap-2.5 p-3 rounded-xl transition-all ${
-                      isSelected 
-                        ? 'bg-primary/8 shadow-sm' 
-                        : 'bg-secondary/50 hover:bg-secondary'
-                    }`}
-                  >
-                    <span className="text-xl">{config.icon}</span>
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                        {config.label}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {typeProviderCount > 0 
-                          ? `${typeProviderCount} disponíve${typeProviderCount > 1 ? 'is' : 'l'}` 
-                          : config.estimatedTime}
-                      </p>
-                    </div>
-                    {isSelected && (
-                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-primary-foreground" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 4. TIPO DE VEÍCULO */}
-          <VehicleTypeSelector 
-            value={selectedVehicleType} 
-            onChange={setSelectedVehicleType} 
-          />
-
-          {/* 5. BOTÃO CTA */}
-          <Button 
-            onClick={handleSolicitar}
-            className="w-full h-12 text-base font-semibold rounded-xl shadow-sm"
-            size="lg"
-            disabled={!canSubmit}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Solicitando...
-              </>
-            ) : (
-              <>
-                <span className="mr-2">{serviceConfig.icon}</span>
-                Solicitar {serviceConfig.label}
-                <ChevronRight className="w-5 h-5 ml-1" />
-              </>
             )}
-          </Button>
+
+            {/* 5. BOTÃO CTA - Progressive */}
+            {showCTA && (
+              <div className="pt-2 animate-fade-in">
+                <Button 
+                  onClick={handleSolicitar}
+                  className="w-full h-14 text-base font-semibold rounded-xl shadow-lg"
+                  size="lg"
+                  disabled={!canSubmit}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Solicitando...
+                    </>
+                  ) : (
+                    <>
+                      <span className="mr-2">{serviceConfig.icon}</span>
+                      {getCtaText()}
+                      <ChevronRight className="w-5 h-5 ml-1" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

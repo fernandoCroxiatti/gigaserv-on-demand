@@ -42,7 +42,7 @@ export const ProfileSelectionScreen: React.FC<ProfileSelectionScreenProps> = ({
           size="lg"
           className="w-full max-w-xs text-lg py-6 rounded-2xl font-semibold shadow-sm hover:shadow-md transition-all"
         >
-          Começar
+          Chamar socorro veicular
         </Button>
       </div>
 
