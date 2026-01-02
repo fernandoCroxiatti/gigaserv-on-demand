@@ -23,6 +23,7 @@ import TermsOfUse from "./pages/TermsOfUse";
 import Settings from "./pages/Settings";
 import Support from "./pages/Support";
 import InternalNotificationsPage from "./pages/InternalNotifications";
+import VehiclesPage from "./pages/Vehicles";
 import { AdminLayout } from "./components/Admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminSettings from "./pages/admin/Settings";
@@ -201,6 +202,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <InternalNotificationsPage />
+          </ProtectedRoute>
+        } 
+      />
+      {/* Vehicles page - Provider only */}
+      <Route 
+        path="/vehicles" 
+        element={
+          <ProtectedRoute>
+            <VehiclesPage />
           </ProtectedRoute>
         } 
       />
