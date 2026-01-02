@@ -18,34 +18,23 @@ import { NotificationCTA } from '../Notifications/NotificationCTA';
 
 const NEARBY_RADIUS_KM = 15;
 
-// Animation variants for progressive steps
-const stepVariants = {
+// Subtle animation variants - discreet, not step-like
+const subtleFade = {
   hidden: { 
     opacity: 0, 
-    y: 20,
-    height: 0,
-    marginTop: 0,
+    y: 8,
   },
   visible: { 
     opacity: 1, 
     y: 0,
-    height: 'auto',
-    marginTop: 20,
     transition: {
-      type: 'spring' as const,
-      stiffness: 300,
-      damping: 30,
-      opacity: { duration: 0.2 },
+      duration: 0.25,
+      ease: [0.4, 0, 0.2, 1] as const,
     }
   },
   exit: { 
     opacity: 0, 
-    y: -10,
-    height: 0,
-    marginTop: 0,
-    transition: {
-      duration: 0.2,
-    }
+    transition: { duration: 0.15 }
   }
 };
 
@@ -55,8 +44,8 @@ const panelVariants = {
     y: 0,
     transition: {
       type: 'spring' as const,
-      stiffness: 300,
-      damping: 30,
+      stiffness: 400,
+      damping: 35,
     }
   }
 };
@@ -339,18 +328,13 @@ export function ClientIdleView() {
             <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
           </div>
           
-          <div className="px-5 pb-6 max-h-[60vh] overflow-y-auto">
+          <div className="px-5 pb-5 space-y-4 max-h-[60vh] overflow-y-auto">
           
             {/* 1. ORIGEM - Always visible */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-xs font-bold text-primary">1</span>
-                </div>
-                <p className="text-sm font-semibold text-foreground">
-                  Onde está seu veículo?
-                </p>
-              </div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Localização do veículo
+              </p>
 
               {/* GPS Button */}
               <button
@@ -404,24 +388,19 @@ export function ClientIdleView() {
             </div>
 
             {/* 2. TIPO DE SERVIÇO - Progressive: show after origem */}
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {showServiceType && (
                 <motion.div 
                   key="service-type"
-                  variants={stepVariants}
+                  variants={subtleFade}
                   initial="hidden"
                   animate="visible"
                   exit="exit"
-                  className="space-y-3 overflow-hidden"
+                  className="space-y-3"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">2</span>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">
-                      Qual assistência você precisa?
-                    </p>
-                  </div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Tipo de assistência
+                  </p>
                   
                   <div className="grid grid-cols-2 gap-2">
                     {(Object.keys(SERVICE_CONFIG) as ServiceType[]).map((serviceType, index) => {
@@ -432,11 +411,8 @@ export function ClientIdleView() {
                       ).length;
                       
                       return (
-                        <motion.button
+                        <button
                           key={serviceType}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: index * 0.05 }}
                           onClick={() => {
                             setSelectedService(serviceType);
                             if (!serviceRequiresDestination(serviceType)) {
@@ -444,14 +420,13 @@ export function ClientIdleView() {
                               setDestinoText('');
                             }
                           }}
-                          className={`flex items-center gap-2.5 p-3.5 rounded-xl transition-all ${
+                          className={`flex items-center gap-2.5 p-3 rounded-xl transition-all ${
                             isSelected 
-                              ? 'bg-primary/10 ring-2 ring-primary/40 shadow-sm' 
-                              : 'bg-secondary hover:bg-secondary/80'
+                              ? 'bg-primary/10 ring-1 ring-primary/30' 
+                              : 'bg-secondary/50 hover:bg-secondary'
                           }`}
-                          whileTap={{ scale: 0.98 }}
                         >
-                          <span className="text-xl">{config.icon}</span>
+                          <span className="text-lg">{config.icon}</span>
                           <div className="flex-1 min-w-0 text-left">
                             <p className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                               {config.label}
@@ -463,15 +438,9 @@ export function ClientIdleView() {
                             </p>
                           </div>
                           {isSelected && (
-                            <motion.div 
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0"
-                            >
-                              <Check className="w-3 h-3 text-primary-foreground" />
-                            </motion.div>
+                            <Check className="w-4 h-4 text-primary flex-shrink-0" />
                           )}
-                        </motion.button>
+                        </button>
                       );
                     })}
                   </div>
@@ -479,25 +448,20 @@ export function ClientIdleView() {
               )}
             </AnimatePresence>
 
-            {/* 3. DESTINO - Progressive: show after service type, only for guincho */}
-            <AnimatePresence mode="wait">
+            {/* 3. DESTINO - Progressive: show only for guincho */}
+            <AnimatePresence>
               {showDestination && (
                 <motion.div 
                   key="destination"
-                  variants={stepVariants}
+                  variants={subtleFade}
                   initial="hidden"
                   animate="visible"
                   exit="exit"
-                  className="space-y-3 overflow-hidden"
+                  className="space-y-3"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">3</span>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">
-                      Para onde o veículo será levado?
-                    </p>
-                  </div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Destino do veículo
+                  </p>
                   
                   <div className="ring-1 ring-border/50 rounded-xl overflow-hidden">
                     <PlacesAutocomplete
@@ -515,51 +479,40 @@ export function ClientIdleView() {
             </AnimatePresence>
 
             {/* Local service info - when destination not needed */}
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {showLocalInfo && (
                 <motion.div 
                   key="local-info"
-                  variants={stepVariants}
+                  variants={subtleFade}
                   initial="hidden"
                   animate="visible"
                   exit="exit"
-                  className="flex items-center gap-3 p-4 bg-primary/5 rounded-xl border border-primary/10 overflow-hidden"
+                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl"
                 >
-                  <motion.div 
-                    initial={{ rotate: -180, opacity: 0 }}
-                    animate={{ rotate: 0, opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0"
-                  >
-                    <Wrench className="w-5 h-5 text-primary" />
-                  </motion.div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Atendimento no local do veículo</p>
-                    <p className="text-xs text-muted-foreground">O prestador irá até você para realizar o serviço.</p>
+                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Wrench className="w-4 h-4 text-primary" />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Atendimento no local do veículo
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
 
             {/* 4. TIPO DE VEÍCULO - Progressive */}
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {showVehicleType && (
                 <motion.div 
                   key="vehicle-type"
-                  variants={stepVariants}
+                  variants={subtleFade}
                   initial="hidden"
                   animate="visible"
                   exit="exit"
-                  className="overflow-hidden"
+                  className="space-y-3"
                 >
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">{needsDestination ? '4' : '3'}</span>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">
-                      Qual é o tipo do veículo?
-                    </p>
-                  </div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Tipo de veículo
+                  </p>
                   <VehicleTypeSelector 
                     value={selectedVehicleType} 
                     onChange={setSelectedVehicleType} 
@@ -569,23 +522,22 @@ export function ClientIdleView() {
             </AnimatePresence>
 
             {/* 5. BOTÃO CTA - Progressive */}
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {showCTA && (
                 <motion.div 
                   key="cta-button"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  className="pt-2"
+                  variants={subtleFade}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="pt-1"
                 >
-                  <motion.div whileTap={{ scale: 0.98 }}>
-                    <Button 
-                      onClick={handleSolicitar}
-                      className="w-full h-14 text-base font-semibold rounded-xl shadow-lg"
-                      size="lg"
-                      disabled={!canSubmit}
-                    >
+                  <Button 
+                    onClick={handleSolicitar}
+                    className="w-full h-12 text-base font-semibold rounded-xl"
+                    size="lg"
+                    disabled={!canSubmit}
+                  >
                       {isSubmitting ? (
                         <>
                           <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -597,9 +549,8 @@ export function ClientIdleView() {
                           {getCtaText()}
                           <ChevronRight className="w-5 h-5 ml-1" />
                         </>
-                      )}
-                    </Button>
-                  </motion.div>
+                    )}
+                  </Button>
                 </motion.div>
               )}
             </AnimatePresence>
