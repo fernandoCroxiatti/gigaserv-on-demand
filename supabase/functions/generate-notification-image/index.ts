@@ -40,23 +40,39 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você cria prompts para ilustrações de notificações de um app de guincho (GIGA S.O.S).
+            content: `Você cria prompts para ilustrações conceituais de notificações do app GIGA S.O.S (guincho e assistência veicular).
 
-REGRAS CRÍTICAS para a ilustração:
-- Estilo: flat, simples, profissional, minimalista
-- SEM pessoas reais
-- SEM rostos
-- SEM textos na imagem
-- Poucas cores, paleta harmônica
-- Fundo claro ou neutro
-- Ilustrações conceituais (ex: carro, guincho, localização, alerta, chave, pneu)
-- Formato quadrado, ícone grande centralizado
+REGRAS ABSOLUTAS:
+1. A imagem DEVE representar o CONCEITO/TEMA da notificação, NUNCA cenas genéricas
+2. PROIBIDO: fotos realistas, pessoas, rostos, bancos de imagem, cenas do mundo real
+3. APENAS ilustrações flat/vetoriais com ícones e símbolos conceituais
 
-Retorne APENAS o prompt em inglês para gerar a imagem, sem explicações.`
+MAPEAMENTO SEMÂNTICO OBRIGATÓRIO:
+- Cadastro/recebimentos/dados → documento, checklist, formulário, engrenagem de configuração
+- Corridas/serviços → mapa estilizado, rota pontilhada, veículo simplificado, pin de localização  
+- Segurança/sistema → escudo, cadeado, chave, verificação/checkmark
+- Avisos operacionais → sino de alerta, relógio, ícone de atenção
+- Pagamentos/financeiro → moeda, carteira, cifrão estilizado
+- Promoções/novidades → estrela, presente, megafone
+- Manutenção/atualização → engrenagem, ferramenta, seta de atualização
+
+ESTILO VISUAL:
+- Flat design, minimalista, profissional
+- Ícone grande e centralizado
+- Fundo claro/neutro (branco, cinza claro, bege)
+- Máximo 3-4 cores harmônicas
+- Formato quadrado
+
+Retorne APENAS o prompt em inglês, sem explicações.`
           },
           {
             role: 'user',
-            content: `Crie um prompt para ilustrar: "${titulo}". ${texto ? `Contexto: ${texto}` : ''}`
+            content: `Analise o TEMA principal desta notificação e crie um prompt para uma ilustração conceitual que represente diretamente esse tema:
+
+Título: "${titulo}"
+${texto ? `Texto: "${texto}"` : ''}
+
+Identifique o conceito central (ex: cadastro, segurança, corrida, pagamento, aviso) e use o ícone/símbolo apropriado.`
           }
         ],
         temperature: 0.7,
@@ -69,8 +85,8 @@ Retorne APENAS o prompt em inglês para gerar a imagem, sem explicações.`
     }
 
     const descData = await descriptionResponse.json();
-    const imagePrompt = descData.choices?.[0]?.message?.content?.trim() || 
-      'Flat minimalist icon of a tow truck, simple colors, clean design, light background';
+      const imagePrompt = descData.choices?.[0]?.message?.content?.trim() || 
+      'Flat minimalist conceptual icon representing notification alert, simple geometric shapes, light neutral background';
 
     console.log('Image prompt:', imagePrompt);
 
@@ -86,7 +102,17 @@ Retorne APENAS o prompt em inglês para gerar a imagem, sem explicações.`
         messages: [
           {
             role: 'user',
-            content: `Generate a simple, flat, minimalist illustration: ${imagePrompt}. Square format, centered icon, light neutral background, no text, no faces, no real people. Professional app notification style.`
+            content: `Crie uma ilustração conceitual em estilo flat e profissional para uma notificação interna do app Giga S.O.S, baseada diretamente no TEMA da notificação.
+
+${imagePrompt}
+
+REGRAS OBRIGATÓRIAS:
+- Não use fotos reais, pessoas, rostos ou cenas do mundo real
+- Não use imagens genéricas de trabalho ou escritório
+- Use apenas ícones e símbolos conceituais que representem a ideia principal
+- Fundo claro ou neutro, cores harmônicas alinhadas à identidade do app
+- Formato quadrado, ícone grande centralizado
+- A imagem deve complementar o texto, nunca ilustrar pessoas ou ações reais`
           }
         ],
         max_tokens: 1000,
@@ -121,8 +147,9 @@ Retorne APENAS o prompt em inglês para gerar a imagem, sem explicações.`
 
     if (!imageUrl) {
       console.log('Image generation response:', JSON.stringify(imageData).slice(0, 500));
-      // Return a placeholder if image generation failed
-      imageUrl = 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=256&h=256&fit=crop';
+      // Return null - admin should retry or skip image
+      console.warn('Could not extract image URL from response');
+      imageUrl = null;
     }
 
     console.log('Generated image URL:', imageUrl?.slice(0, 100));
@@ -138,8 +165,8 @@ Retorne APENAS o prompt em inglês para gerar a imagem, sem explicações.`
     return new Response(
       JSON.stringify({ 
         error: message,
-        // Provide fallback image
-        imageUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=256&h=256&fit=crop'
+        // No fallback - admin should retry
+        imageUrl: null
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

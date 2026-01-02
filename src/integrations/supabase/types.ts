@@ -377,6 +377,7 @@ export type Database = {
       }
       internal_notifications: {
         Row: {
+          agendada_para: string | null
           criada_em: string
           criada_por: string | null
           id: string
@@ -384,10 +385,12 @@ export type Database = {
           publicada: boolean
           publicada_em: string | null
           publico: string
+          status: string
           texto: string
           titulo: string
         }
         Insert: {
+          agendada_para?: string | null
           criada_em?: string
           criada_por?: string | null
           id?: string
@@ -395,10 +398,12 @@ export type Database = {
           publicada?: boolean
           publicada_em?: string | null
           publico?: string
+          status?: string
           texto: string
           titulo: string
         }
         Update: {
+          agendada_para?: string | null
           criada_em?: string
           criada_por?: string | null
           id?: string
@@ -406,6 +411,7 @@ export type Database = {
           publicada?: boolean
           publicada_em?: string | null
           publico?: string
+          status?: string
           texto?: string
           titulo?: string
         }
