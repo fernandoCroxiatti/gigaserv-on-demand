@@ -3,23 +3,31 @@
  * Pure TypeScript - no React or external dependencies
  * 
  * This module defines types for:
- * 1. Provider Fee Promotions (temporary fee exemptions)
+ * 1. Provider Fee Promotions (campaign-based with fixed dates)
  * 2. First-Use Client Coupons (discount on first completed service)
  */
 
 /**
  * Provider fee promotion configuration
  * Stored in app_settings with key 'provider_fee_promotion'
+ * 
+ * NEW MODEL: Campaign-based with start/end dates and scope
  */
 export interface ProviderFeePromotionConfig {
   /** Whether the promotion is active */
   enabled: boolean;
-  /** Promotional commission percentage (0 = free) */
+  /** Promotional commission percentage (0 = full exemption) */
   promotional_commission: number;
-  /** Default duration in days for new promotions */
-  default_duration_days: number;
-  /** Target audience for the promotion */
-  apply_to: 'new_providers' | 'all_providers';
+  /** Campaign start date (ISO string) */
+  start_date: string | null;
+  /** Campaign end date (ISO string) */
+  end_date: string | null;
+  /** Scope of the promotion */
+  scope: 'global' | 'specific_provider';
+  /** Specific provider ID (only when scope = 'specific_provider') */
+  specific_provider_id: string | null;
+  /** Specific provider name (for display purposes) */
+  specific_provider_name?: string | null;
 }
 
 /**
@@ -29,8 +37,11 @@ export interface ProviderFeePromotionConfig {
 export const DEFAULT_PROVIDER_FEE_PROMOTION: ProviderFeePromotionConfig = {
   enabled: false,
   promotional_commission: 0,
-  default_duration_days: 30,
-  apply_to: 'new_providers',
+  start_date: null,
+  end_date: null,
+  scope: 'global',
+  specific_provider_id: null,
+  specific_provider_name: null,
 };
 
 /**
@@ -63,9 +74,9 @@ export interface ProviderFeeCalculationResult {
   /** Final fee percentage to apply */
   fee_percentage: number;
   /** Reason for this fee */
-  reason: 'exemption' | 'individual' | 'global';
-  /** If exemption, when it expires */
-  exemption_until?: Date;
+  reason: 'promotion' | 'individual' | 'global';
+  /** If promotion, when it ends */
+  promotion_end_date?: Date;
 }
 
 /**
@@ -87,3 +98,32 @@ export const PROMOTION_SETTINGS_KEYS = {
   PROVIDER_FEE_PROMOTION: 'provider_fee_promotion',
   FIRST_USE_COUPON: 'first_use_coupon',
 } as const;
+
+/**
+ * Check if promotion is currently active based on dates
+ */
+export function isPromotionActive(config: ProviderFeePromotionConfig): boolean {
+  if (!config.enabled) return false;
+  if (!config.start_date || !config.end_date) return false;
+  
+  const now = new Date();
+  const start = new Date(config.start_date);
+  const end = new Date(config.end_date);
+  
+  return now >= start && now <= end;
+}
+
+/**
+ * Check if promotion applies to a specific provider
+ */
+export function promotionAppliesToProvider(
+  config: ProviderFeePromotionConfig,
+  providerId: string
+): boolean {
+  if (!isPromotionActive(config)) return false;
+  
+  if (config.scope === 'global') return true;
+  
+  return config.scope === 'specific_provider' && 
+         config.specific_provider_id === providerId;
+}

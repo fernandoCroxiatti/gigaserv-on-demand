@@ -209,17 +209,68 @@ serve(async (req) => {
 
     const globalCommissionPercentage = settings?.value?.value || 15;
     
-    // Determine effective commission: custom fee if enabled, otherwise global
+    // Check for active promotion campaign
+    const { data: promoSettings } = await supabaseClient
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'provider_fee_promotion')
+      .maybeSingle();
+
+    let promoConfig = promoSettings?.value as {
+      enabled?: boolean;
+      promotional_commission?: number;
+      start_date?: string;
+      end_date?: string;
+      scope?: 'global' | 'specific_provider';
+      specific_provider_id?: string;
+    } | null;
+
+    // Check if promotion is active and applies to this provider
+    let isPromotionActive = false;
+    let promotionalCommission = 0;
+    
+    if (promoConfig?.enabled && promoConfig.start_date && promoConfig.end_date) {
+      const now = new Date();
+      const startDate = new Date(promoConfig.start_date);
+      const endDate = new Date(promoConfig.end_date);
+      
+      if (now >= startDate && now <= endDate) {
+        // Check scope
+        if (promoConfig.scope === 'global') {
+          isPromotionActive = true;
+          promotionalCommission = promoConfig.promotional_commission ?? 0;
+        } else if (promoConfig.scope === 'specific_provider' && 
+                   promoConfig.specific_provider_id === chamado.prestador_id) {
+          isPromotionActive = true;
+          promotionalCommission = promoConfig.promotional_commission ?? 0;
+        }
+      }
+    }
+    
+    // Determine effective commission: 
+    // Priority: 1. Active promotion, 2. Custom fee, 3. Global
     let commissionPercentage = globalCommissionPercentage;
     let customFixedFee = 0;
+    let feeSource = 'global';
     
-    if (providerData.custom_fee_enabled) {
+    if (isPromotionActive) {
+      commissionPercentage = promotionalCommission;
+      feeSource = 'promotion';
+      logStep("Using promotion fee", { 
+        percentage: commissionPercentage, 
+        startDate: promoConfig?.start_date,
+        endDate: promoConfig?.end_date,
+        scope: promoConfig?.scope,
+        providerId: chamado.prestador_id 
+      });
+    } else if (providerData.custom_fee_enabled) {
       if (typeof providerData.custom_fee_percentage === 'number') {
         commissionPercentage = providerData.custom_fee_percentage;
       }
       if (typeof providerData.custom_fee_fixed === 'number') {
         customFixedFee = providerData.custom_fee_fixed;
       }
+      feeSource = 'individual';
       logStep("Using custom fee for provider", { 
         percentage: commissionPercentage, 
         fixedFee: customFixedFee,
@@ -242,7 +293,7 @@ serve(async (req) => {
       fixedFee: fixedFeeAmountCentavos,
       applicationFee: applicationFeeAmount,
       providerReceives: totalAmountCentavos - applicationFeeAmount,
-      customFeeEnabled: providerData.custom_fee_enabled,
+      feeSource: feeSource,
     });
 
     // Stripe already initialized above
@@ -300,6 +351,7 @@ serve(async (req) => {
         tipo_servico: chamado.tipo_servico,
         commission_percentage: commissionPercentage.toString(),
         payment_method_type: payment_method_type,
+        fee_source: feeSource,
       },
     };
 

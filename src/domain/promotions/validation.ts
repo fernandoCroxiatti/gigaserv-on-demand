@@ -11,39 +11,32 @@ import {
   FirstUseCouponConfig,
   ProviderFeeCalculationResult,
   CouponApplicationResult,
+  isPromotionActive,
+  promotionAppliesToProvider,
 } from './types';
 
 /**
- * Check if a provider has an active fee exemption
- * @param exemptionUntil - The exemption expiration date
- * @returns true if exemption is still valid
- */
-export function hasActiveFeeExemption(exemptionUntil: Date | null | undefined): boolean {
-  if (!exemptionUntil) return false;
-  const now = new Date();
-  return exemptionUntil > now;
-}
-
-/**
  * Calculate the fee percentage for a provider
- * Priority: exemption > individual rate > global rate
+ * Priority: active promotion > individual rate > global rate
  * 
- * @param exemptionUntil - Provider's exemption date
+ * @param promotionConfig - Promotion configuration
+ * @param providerId - Provider ID
  * @param individualRate - Provider's individual fee rate (if any)
  * @param globalRate - Global commission rate
  * @returns Fee calculation result with percentage and reason
  */
 export function calculateProviderFee(
-  exemptionUntil: Date | null | undefined,
+  promotionConfig: ProviderFeePromotionConfig | null,
+  providerId: string,
   individualRate: number | null | undefined,
   globalRate: number
 ): ProviderFeeCalculationResult {
-  // Priority 1: Active exemption
-  if (hasActiveFeeExemption(exemptionUntil)) {
+  // Priority 1: Active promotion that applies to this provider
+  if (promotionConfig && promotionAppliesToProvider(promotionConfig, providerId)) {
     return {
-      fee_percentage: 0,
-      reason: 'exemption',
-      exemption_until: exemptionUntil!,
+      fee_percentage: promotionConfig.promotional_commission,
+      reason: 'promotion',
+      promotion_end_date: promotionConfig.end_date ? new Date(promotionConfig.end_date) : undefined,
     };
   }
 
@@ -60,36 +53,6 @@ export function calculateProviderFee(
     fee_percentage: globalRate,
     reason: 'global',
   };
-}
-
-/**
- * Calculate exemption end date based on promotion config
- * @param config - Promotion configuration
- * @param startDate - Start date (defaults to now)
- * @returns End date of exemption
- */
-export function calculateExemptionEndDate(
-  config: ProviderFeePromotionConfig,
-  startDate: Date = new Date()
-): Date {
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + config.default_duration_days);
-  return endDate;
-}
-
-/**
- * Check if a new provider should receive fee exemption
- * @param config - Promotion configuration
- * @param isNewProvider - Whether this is a new provider
- * @returns true if exemption should be applied
- */
-export function shouldApplyFeeExemption(
-  config: ProviderFeePromotionConfig,
-  isNewProvider: boolean
-): boolean {
-  if (!config.enabled) return false;
-  if (config.apply_to === 'all_providers') return true;
-  return config.apply_to === 'new_providers' && isNewProvider;
 }
 
 /**
@@ -171,12 +134,24 @@ export function validateFeePromotionConfig(
     }
   }
 
-  if (typeof config.default_duration_days === 'number') {
-    if (config.default_duration_days < 1) {
-      errors.push('Duração mínima é 1 dia');
+  // Validate dates if enabled
+  if (config.enabled) {
+    if (!config.start_date) {
+      errors.push('Data de início é obrigatória');
     }
-    if (config.default_duration_days > 365) {
-      errors.push('Duração máxima é 365 dias');
+    if (!config.end_date) {
+      errors.push('Data de término é obrigatória');
+    }
+    if (config.start_date && config.end_date) {
+      const start = new Date(config.start_date);
+      const end = new Date(config.end_date);
+      if (end <= start) {
+        errors.push('Data de término deve ser posterior à data de início');
+      }
+    }
+    // Validate specific provider if scope is specific
+    if (config.scope === 'specific_provider' && !config.specific_provider_id) {
+      errors.push('Selecione um prestador específico');
     }
   }
 

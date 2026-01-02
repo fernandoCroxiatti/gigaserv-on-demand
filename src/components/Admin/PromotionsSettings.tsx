@@ -2,7 +2,7 @@
  * Admin Promotions Settings Component
  * 
  * Manages:
- * 1. Provider Fee Promotion - Temporary fee exemptions
+ * 1. Provider Fee Promotion - Campaign-based with fixed dates
  * 2. First-Use Coupon - Discount on first completed service
  * 
  * ALL FEATURES ARE DISABLED BY DEFAULT
@@ -17,14 +17,17 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Gift, Percent, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, Gift, Percent, AlertCircle, CheckCircle2, Calendar, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 import {
   ProviderFeePromotionConfig,
   FirstUseCouponConfig,
   DEFAULT_PROVIDER_FEE_PROMOTION,
   DEFAULT_FIRST_USE_COUPON,
+  isPromotionActive,
 } from '@/domain/promotions/types';
 import {
   validateFeePromotionConfig,
@@ -37,6 +40,12 @@ import {
   saveCouponConfig,
 } from '@/services/promotions/promotionsService';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+
+interface ProviderOption {
+  id: string;
+  name: string;
+}
 
 export default function PromotionsSettings() {
   const { user } = useAuth();
@@ -46,6 +55,7 @@ export default function PromotionsSettings() {
   const [loadingCoupon, setLoadingCoupon] = useState(true);
   const [savingFeePromo, setSavingFeePromo] = useState(false);
   const [savingCoupon, setSavingCoupon] = useState(false);
+  const [loadingProviders, setLoadingProviders] = useState(false);
 
   // Fee promotion state
   const [feePromoConfig, setFeePromoConfig] = useState<ProviderFeePromotionConfig>(
@@ -57,9 +67,13 @@ export default function PromotionsSettings() {
     DEFAULT_FIRST_USE_COUPON
   );
 
+  // Providers list for specific selection
+  const [providers, setProviders] = useState<ProviderOption[]>([]);
+
   // Load configurations on mount
   useEffect(() => {
     loadConfigurations();
+    loadProviders();
   }, []);
 
   const loadConfigurations = async () => {
@@ -83,7 +97,31 @@ export default function PromotionsSettings() {
     }
   };
 
-  // Save fee promotion config
+  const loadProviders = async () => {
+    setLoadingProviders(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, name')
+        .eq('perfil_principal', 'provider')
+        .order('name');
+
+      if (error) throw error;
+
+      setProviders(
+        (data || []).map((p) => ({
+          id: p.user_id,
+          name: p.name,
+        }))
+      );
+    } catch (error) {
+      console.error('[PromotionsSettings] Error loading providers:', error);
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  // Save fee promotion config with notification
   const handleSaveFeePromo = async () => {
     if (!user?.id) return;
 
@@ -97,6 +135,10 @@ export default function PromotionsSettings() {
     try {
       const success = await saveFeePromotionConfig(feePromoConfig, user.id);
       if (success) {
+        // Create notification for affected providers
+        if (feePromoConfig.enabled) {
+          await createPromotionNotification(feePromoConfig);
+        }
         toast.success('Promoção de taxa salva com sucesso');
       } else {
         toast.error('Erro ao salvar promoção de taxa');
@@ -106,6 +148,47 @@ export default function PromotionsSettings() {
       toast.error('Erro ao salvar');
     } finally {
       setSavingFeePromo(false);
+    }
+  };
+
+  // Create notification for promotion
+  const createPromotionNotification = async (config: ProviderFeePromotionConfig) => {
+    try {
+      const startDate = config.start_date ? format(new Date(config.start_date), 'dd/MM/yyyy', { locale: ptBR }) : '';
+      const endDate = config.end_date ? format(new Date(config.end_date), 'dd/MM/yyyy', { locale: ptBR }) : '';
+      
+      const taxaTexto = config.promotional_commission === 0 
+        ? 'isenção total de taxa'
+        : `taxa promocional de ${config.promotional_commission}%`;
+
+      const titulo = '🎉 Promoção de Taxa Ativa!';
+      const texto = `Você está participando de uma promoção especial com ${taxaTexto}. Válida de ${startDate} até ${endDate}. Aproveite!`;
+
+      // Determine audience
+      const publico = config.scope === 'global' ? 'prestadores' : 'prestadores';
+
+      // Create internal notification
+      const { error } = await supabase
+        .from('internal_notifications')
+        .insert({
+          titulo,
+          texto,
+          publico,
+          destaque: true,
+          publicada: true,
+          publicada_em: new Date().toISOString(),
+          criada_por: user?.id,
+          expira_em: config.end_date, // Expires when promotion ends
+          imagem_url: 'promocao', // Image concept for promo
+        });
+
+      if (error) {
+        console.error('[PromotionsSettings] Error creating notification:', error);
+      } else {
+        console.log('[PromotionsSettings] Notification created for promotion');
+      }
+    } catch (err) {
+      console.error('[PromotionsSettings] Error in createPromotionNotification:', err);
     }
   };
 
@@ -135,6 +218,42 @@ export default function PromotionsSettings() {
     }
   };
 
+  // Format date for input
+  const formatDateForInput = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      return dateStr.slice(0, 10);
+    } catch {
+      return '';
+    }
+  };
+
+  // Get status text for promotion
+  const getPromotionStatus = (): { text: string; active: boolean } => {
+    if (!feePromoConfig.enabled) {
+      return { text: 'Promoção DESATIVADA', active: false };
+    }
+    if (isPromotionActive(feePromoConfig)) {
+      const endDate = feePromoConfig.end_date 
+        ? format(new Date(feePromoConfig.end_date), 'dd/MM/yyyy', { locale: ptBR })
+        : '';
+      return { 
+        text: `Promoção ATIVA até ${endDate}`, 
+        active: true 
+      };
+    }
+    if (feePromoConfig.start_date && new Date(feePromoConfig.start_date) > new Date()) {
+      const startDate = format(new Date(feePromoConfig.start_date), 'dd/MM/yyyy', { locale: ptBR });
+      return { 
+        text: `Promoção agendada para ${startDate}`, 
+        active: false 
+      };
+    }
+    return { text: 'Promoção EXPIRADA', active: false };
+  };
+
+  const promotionStatus = getPromotionStatus();
+
   return (
     <div className="space-y-6">
       {/* Provider Fee Promotion */}
@@ -145,8 +264,8 @@ export default function PromotionsSettings() {
             <CardTitle>Promoção de Taxa do Prestador</CardTitle>
           </div>
           <CardDescription>
-            Configure isenção temporária de taxa para prestadores.
-            Esta configuração NÃO substitui a taxa global - apenas adiciona regras de isenção.
+            Configure promoção de taxa por campanha com data fixa.
+            Quando ativa, substitui temporariamente as taxas individuais.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -157,12 +276,10 @@ export default function PromotionsSettings() {
           ) : (
             <>
               {/* Status Alert */}
-              <Alert variant={feePromoConfig.enabled ? 'default' : 'destructive'}>
+              <Alert variant={promotionStatus.active ? 'default' : 'destructive'}>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  {feePromoConfig.enabled
-                    ? 'Promoção ATIVA - Novos prestadores receberão isenção de taxa'
-                    : 'Promoção DESATIVADA - Sistema usando apenas taxa global'}
+                  {promotionStatus.text}
                 </AlertDescription>
               </Alert>
 
@@ -171,7 +288,7 @@ export default function PromotionsSettings() {
                 <div>
                   <Label htmlFor="fee-promo-enabled">Ativar promoção de taxa</Label>
                   <p className="text-sm text-muted-foreground">
-                    Quando ativo, aplica isenção de taxa conforme configuração
+                    Quando ativo, aplica taxa promocional no período definido
                   </p>
                 </div>
                 <Switch
@@ -205,47 +322,122 @@ export default function PromotionsSettings() {
                 </p>
               </div>
 
-              {/* Duration */}
-              <div className="space-y-2">
-                <Label htmlFor="promo-duration">Duração da promoção (dias)</Label>
-                <Input
-                  id="promo-duration"
-                  type="number"
-                  min="1"
-                  max="365"
-                  value={feePromoConfig.default_duration_days}
-                  onChange={(e) =>
-                    setFeePromoConfig({
-                      ...feePromoConfig,
-                      default_duration_days: parseInt(e.target.value) || 30,
-                    })
-                  }
-                  placeholder="30"
-                />
+              {/* Date Range */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start-date" className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    Data de início
+                  </Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={formatDateForInput(feePromoConfig.start_date)}
+                    onChange={(e) =>
+                      setFeePromoConfig({
+                        ...feePromoConfig,
+                        start_date: e.target.value ? new Date(e.target.value).toISOString() : null,
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end-date" className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    Data de término
+                  </Label>
+                  <Input
+                    id="end-date"
+                    type="date"
+                    value={formatDateForInput(feePromoConfig.end_date)}
+                    onChange={(e) =>
+                      setFeePromoConfig({
+                        ...feePromoConfig,
+                        end_date: e.target.value ? new Date(e.target.value).toISOString() : null,
+                      })
+                    }
+                  />
+                </div>
               </div>
 
-              {/* Apply To */}
+              {/* Scope */}
               <div className="space-y-2">
-                <Label>Aplicar promoção para</Label>
+                <Label className="flex items-center gap-1">
+                  <User className="h-4 w-4" />
+                  Escopo da promoção
+                </Label>
                 <Select
-                  value={feePromoConfig.apply_to}
-                  onValueChange={(value: 'new_providers' | 'all_providers') =>
-                    setFeePromoConfig({ ...feePromoConfig, apply_to: value })
+                  value={feePromoConfig.scope}
+                  onValueChange={(value: 'global' | 'specific_provider') =>
+                    setFeePromoConfig({ 
+                      ...feePromoConfig, 
+                      scope: value,
+                      specific_provider_id: value === 'global' ? null : feePromoConfig.specific_provider_id,
+                    })
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="new_providers">
-                      Apenas novos prestadores
-                    </SelectItem>
-                    <SelectItem value="all_providers">
+                    <SelectItem value="global">
                       Todos os prestadores
+                    </SelectItem>
+                    <SelectItem value="specific_provider">
+                      Prestador específico
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Specific Provider Selector */}
+              {feePromoConfig.scope === 'specific_provider' && (
+                <div className="space-y-2">
+                  <Label>Selecionar prestador</Label>
+                  {loadingProviders ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Carregando prestadores...
+                    </div>
+                  ) : (
+                    <Select
+                      value={feePromoConfig.specific_provider_id || ''}
+                      onValueChange={(value) => {
+                        const provider = providers.find((p) => p.id === value);
+                        setFeePromoConfig({
+                          ...feePromoConfig,
+                          specific_provider_id: value,
+                          specific_provider_name: provider?.name || null,
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um prestador" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {providers.map((provider) => (
+                          <SelectItem key={provider.id} value={provider.id}>
+                            {provider.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+
+              {/* Info about priority */}
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  <strong>Prioridade de taxa:</strong>
+                  <ol className="mt-2 list-decimal pl-4 space-y-1">
+                    <li>Promoção ativa (campanha com data vigente)</li>
+                    <li>Taxa individual do prestador</li>
+                    <li>Taxa global do app</li>
+                  </ol>
+                </AlertDescription>
+              </Alert>
 
               {/* Save Button */}
               <Button
