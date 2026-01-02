@@ -484,6 +484,7 @@ export default function AdminProviders() {
 
               {/* Fee Configuration */}
               <ProviderFeeConfig 
+                key={selectedProvider.user_id}
                 provider={selectedProvider} 
                 onUpdate={fetchProviders}
               />
