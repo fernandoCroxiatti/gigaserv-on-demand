@@ -1,7 +1,13 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import {
+  UserRole,
+  applyNotificationPipeline,
+  validateIncomingNotification,
+  mapProfileToRole,
+} from '@/lib/notificationAudienceFilter';
 
 export interface InternalNotification {
   id: string;
@@ -16,49 +22,22 @@ export interface InternalNotification {
   isRead?: boolean;
 }
 
-type UserProfileType = 'client' | 'provider' | 'admin';
-
 /**
- * Validates if notification should be visible to the given profile type
- * CRITICAL: This is the core filtering logic for audience segregation
+ * HARDENED Internal Notifications Hook
+ * 
+ * All notifications pass through centralized audience filter before:
+ * - Being stored in state
+ * - Being counted for badge
+ * - Being rendered
+ * 
+ * Cache is cleared on profile switch to prevent cross-contamination.
  */
-function isNotificationVisibleToProfile(
-  notificationPublico: string,
-  userProfileType: UserProfileType
-): boolean {
-  // Admin sees everything
-  if (userProfileType === 'admin') {
-    return true;
-  }
-
-  // Validate publico field - if invalid/missing, block notification (fail-safe)
-  if (!notificationPublico || !['cliente', 'prestador', 'ambos'].includes(notificationPublico)) {
-    console.warn('[Notifications] Blocking notification with invalid publico:', notificationPublico);
-    return false;
-  }
-
-  // "ambos" is visible to everyone
-  if (notificationPublico === 'ambos') {
-    return true;
-  }
-
-  // Client can only see "cliente" notifications
-  if (userProfileType === 'client' && notificationPublico === 'cliente') {
-    return true;
-  }
-
-  // Provider can only see "prestador" notifications
-  if (userProfileType === 'provider' && notificationPublico === 'prestador') {
-    return true;
-  }
-
-  // Block all other cases
-  return false;
-}
-
 export function useInternalNotifications() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  
+  // Track previous role to detect profile switches
+  const previousRoleRef = useRef<UserRole | null>(null);
 
   // Fetch user profile type to determine filtering
   const { data: profileData } = useQuery({
@@ -73,9 +52,6 @@ export function useInternalNotifications() {
         .eq('user_id', user.id);
 
       const isAdmin = roles?.some(r => r.role === 'admin') || false;
-      if (isAdmin) {
-        return { type: 'admin' as UserProfileType, isAdmin: true };
-      }
 
       // Get user's perfil_principal from profiles
       const { data: profile } = await supabase
@@ -84,45 +60,60 @@ export function useInternalNotifications() {
         .eq('user_id', user.id)
         .single();
 
-      if (!profile) return null;
+      if (!profile && !isAdmin) return null;
 
-      // Use perfil_principal as the base type (client or provider)
-      const profileType = profile.perfil_principal === 'provider' ? 'provider' : 'client';
+      const role = mapProfileToRole(profile?.perfil_principal, isAdmin);
       
       return { 
-        type: profileType as UserProfileType, 
-        isAdmin: false,
-        perfilPrincipal: profile.perfil_principal,
-        activeProfile: profile.active_profile
+        role,
+        isAdmin,
+        perfilPrincipal: profile?.perfil_principal,
+        activeProfile: profile?.active_profile
       };
     },
     enabled: !!user?.id,
     staleTime: 60000, // Cache for 1 minute
   });
 
-  // Fetch published notifications (excluding expired ones)
+  const currentRole = profileData?.role || null;
+
+  // CRITICAL: Clear cache when role changes to prevent cross-contamination
+  useEffect(() => {
+    if (currentRole && previousRoleRef.current && currentRole !== previousRoleRef.current) {
+      console.log(`[Notifications] Role changed: ${previousRoleRef.current} → ${currentRole}, clearing cache`);
+      queryClient.removeQueries({ queryKey: ['internal-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['internal-notifications'] });
+    }
+    previousRoleRef.current = currentRole;
+  }, [currentRole, queryClient]);
+
+  // Fetch published notifications with centralized filtering
   const { data: notifications = [], isLoading, refetch } = useQuery({
-    queryKey: ['internal-notifications', user?.id, profileData?.type],
+    queryKey: ['internal-notifications', user?.id, currentRole],
     queryFn: async () => {
-      if (!user?.id || !profileData) return [];
+      if (!user?.id || !currentRole) return [];
 
-      const now = new Date().toISOString();
-      const userProfileType = profileData.type;
-
-      // Fetch all published, non-expired notifications
-      const { data: notifs, error } = await supabase
+      // Step 1: Fetch all published notifications (raw data)
+      const { data: rawNotifs, error } = await supabase
         .from('internal_notifications')
         .select('*')
         .eq('publicada', true)
-        .or(`expira_em.is.null,expira_em.gt.${now}`)
         .order('criada_em', { ascending: false });
 
       if (error) {
-        console.error('Error fetching internal notifications:', error);
+        console.error('[Notifications] Error fetching:', error);
         return [];
       }
 
-      // Fetch read status
+      if (!rawNotifs || rawNotifs.length === 0) {
+        return [];
+      }
+
+      // Step 2 & 3: Apply centralized pipeline (audience + expiration filter)
+      // THIS IS THE SINGLE SOURCE OF TRUTH
+      const filteredNotifs = applyNotificationPipeline(rawNotifs, currentRole);
+
+      // Step 4: Fetch read status
       const { data: reads } = await supabase
         .from('internal_notification_reads')
         .select('notificacao_id')
@@ -130,37 +121,84 @@ export function useInternalNotifications() {
 
       const readIds = new Set(reads?.map(r => r.notificacao_id) || []);
 
-      // CRITICAL: Filter notifications by audience BEFORE returning
-      const filteredNotifications = (notifs || [])
-        .filter(n => {
-          // Validate publico field exists and is valid
-          if (!n.publico) {
-            console.warn('[Notifications] Notification missing publico field:', n.id);
-            return false;
-          }
-          
-          return isNotificationVisibleToProfile(n.publico, userProfileType);
-        })
-        .map(n => ({
-          ...n,
-          isRead: readIds.has(n.id),
-        })) as InternalNotification[];
+      // Step 5: Apply read status to filtered notifications
+      const notificationsWithReadStatus = filteredNotifs.map(n => ({
+        ...n,
+        isRead: readIds.has(n.id),
+      })) as InternalNotification[];
 
-      console.log(`[Notifications] Filtered ${notifs?.length || 0} -> ${filteredNotifications.length} for profile: ${userProfileType}`);
+      console.log(`[Notifications] Pipeline complete: ${rawNotifs.length} raw → ${filteredNotifs.length} filtered for role: ${currentRole}`);
 
-      return filteredNotifications;
+      return notificationsWithReadStatus;
     },
-    enabled: !!user?.id && !!profileData,
-    refetchInterval: 30000, // Poll every 30 seconds
+    enabled: !!user?.id && !!currentRole,
+    refetchInterval: 30000,
+    // Prevent stale data from being shown during refetch
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
-  // Count unread notifications (ONLY those visible to current profile)
+  // Step 6 & 7: Badge uses SAME filtered array (not recalculated from raw)
+  // CRITICAL: This ensures badge matches exactly what's in the list
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // Real-time subscription for new notifications
+  useEffect(() => {
+    if (!user?.id || !currentRole) return;
+
+    const channel = supabase
+      .channel('internal-notifications-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'internal_notifications',
+          filter: 'publicada=eq.true',
+        },
+        (payload) => {
+          const newNotification = payload.new as any;
+          
+          // CRITICAL: Validate incoming notification before adding to state
+          if (!validateIncomingNotification(newNotification, currentRole)) {
+            console.log('[Notifications] Realtime: Blocked notification for wrong audience:', newNotification.publico);
+            return;
+          }
+
+          // Refetch to get proper state with read status
+          refetch();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'internal_notifications',
+        },
+        () => {
+          // Refetch on any update to ensure consistency
+          refetch();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, currentRole, refetch]);
 
   // Mark notification as read
   const markAsRead = useMutation({
     mutationFn: async (notificationId: string) => {
       if (!user?.id) return;
+
+      // Verify notification is in our filtered list before marking as read
+      const exists = notifications.some(n => n.id === notificationId);
+      if (!exists) {
+        console.warn('[Notifications] Attempted to mark non-visible notification as read:', notificationId);
+        return;
+      }
 
       const { error } = await supabase
         .from('internal_notification_reads')
@@ -172,7 +210,7 @@ export function useInternalNotifications() {
         });
 
       if (error) {
-        console.error('Error marking notification as read:', error);
+        console.error('[Notifications] Error marking as read:', error);
         throw error;
       }
     },
@@ -187,19 +225,24 @@ export function useInternalNotifications() {
 
     const unreadNotifications = notifications.filter(n => !n.isRead);
     
-    for (const notification of unreadNotifications) {
-      await markAsRead.mutateAsync(notification.id);
-    }
+    // Batch update for better performance
+    const promises = unreadNotifications.map(notification =>
+      markAsRead.mutateAsync(notification.id)
+    );
+
+    await Promise.all(promises);
   }, [user?.id, notifications, markAsRead]);
 
   return {
+    // Already filtered notifications - ready to render
     notifications,
+    // Badge count from same filtered array
     unreadCount,
     isLoading,
     markAsRead: (id: string) => markAsRead.mutate(id),
     markAllAsRead,
     refetch,
-    // Expose profile type for debugging/UI purposes
-    userProfileType: profileData?.type || null,
+    // Expose for debugging
+    userRole: currentRole,
   };
 }
