@@ -2,7 +2,6 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { RealMapView, MapProvider } from '../Map/RealMapView';
-import { PlacesAutocomplete } from '../Map/PlacesAutocomplete';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyProviders } from '@/hooks/useNearbyProviders';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
@@ -16,6 +15,7 @@ import { LocationPermissionModal } from '../Permissions/LocationPermissionModal'
 import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
 import { NotificationCTA } from '../Notifications/NotificationCTA';
 import { DestinationBottomSheet } from './DestinationBottomSheet';
+import { OriginSearchFullScreen } from './OriginSearchFullScreen';
 
 const NEARBY_RADIUS_KM = 15;
 
@@ -85,6 +85,7 @@ export function ClientIdleView() {
   const [destinoText, setDestinoText] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [destinationSheetOpen, setDestinationSheetOpen] = useState(false);
+  const [originSearchOpen, setOriginSearchOpen] = useState(false);
   
   // Permission modals
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -372,14 +373,16 @@ export function ClientIdleView() {
                 )}
               </button>
 
-              {/* Address input */}
-              <PlacesAutocomplete
-                value={origemText}
-                onChange={handleOrigemTextChange}
-                onSelect={handleOrigemSelect}
-                placeholder="Ou digite o endereço"
-                icon={<Search className="w-4 h-4 text-muted-foreground" />}
-              />
+              {/* Address input - opens full screen search */}
+              <button
+                onClick={() => setOriginSearchOpen(true)}
+                className="w-full flex items-center gap-3 p-3 bg-secondary rounded-xl text-left hover:bg-secondary/80 transition-colors"
+              >
+                <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className={`flex-1 text-sm font-medium ${origemText ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {origemText || 'Ou digite o endereço'}
+                </span>
+              </button>
               
               {locationError && !locationDenied && (
                 <p className="text-xs text-destructive flex items-center gap-1">
@@ -578,6 +581,14 @@ export function ClientIdleView() {
         onSelect={handleDestinoSelect}
         recentAddresses={recentAddresses}
         initialValue={destinoText}
+      />
+
+      {/* Origin Full Screen Search */}
+      <OriginSearchFullScreen
+        open={originSearchOpen}
+        onClose={() => setOriginSearchOpen(false)}
+        onSelect={handleOrigemSelect}
+        initialValue={origemText}
       />
 
     </div>
