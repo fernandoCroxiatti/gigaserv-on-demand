@@ -42,37 +42,49 @@ serve(async (req) => {
             role: 'system',
             content: `Você cria prompts para ilustrações conceituais de notificações do app GIGA S.O.S (guincho e assistência veicular).
 
+PROCESSO OBRIGATÓRIO EM 3 PASSOS:
+1. IDENTIFICAR o tema principal da notificação
+2. CONVERTER o tema em UM conceito visual simples
+3. FALLBACK: Se o tema for abstrato ou pouco claro, SEMPRE usar um símbolo neutro de sistema
+
+MAPEAMENTO SEMÂNTICO (usar quando tema for identificável):
+- Cadastro/recebimentos/dados/conta → documento com checkmark, formulário, perfil de usuário
+- Corridas/serviços/atendimento → mapa com pin, rota pontilhada, veículo estilizado
+- Segurança/sistema/verificação → escudo com checkmark, cadeado fechado, chave
+- Avisos/alertas/atenção → sino, triângulo de alerta, círculo com exclamação
+- Pagamentos/financeiro/valores → moeda/cifrão estilizado, carteira, gráfico simples
+- Promoções/novidades/ofertas → estrela brilhante, presente com laço, badge de desconto
+- Manutenção/atualização/melhorias → engrenagens, seta circular de atualização
+
+FALLBACK OBRIGATÓRIO (usar para temas abstratos/genéricos/pouco claros):
+Se não conseguir identificar tema claro, use OBRIGATORIAMENTE um destes:
+- Documento com checkmark (símbolo universal de confirmação)
+- Engrenagem simples (símbolo de sistema/configuração)
+- Sino de notificação (símbolo de aviso)
+- Círculo com checkmark (símbolo de sucesso/confirmação)
+
 REGRAS ABSOLUTAS:
-1. A imagem DEVE representar o CONCEITO/TEMA da notificação, NUNCA cenas genéricas
-2. PROIBIDO: fotos realistas, pessoas, rostos, bancos de imagem, cenas do mundo real
-3. APENAS ilustrações flat/vetoriais com ícones e símbolos conceituais
+- PROIBIDO: fotos realistas, pessoas, rostos, mãos, cenas do mundo real
+- PROIBIDO: imagens genéricas de trabalho/escritório
+- PROIBIDO: texto dentro da imagem
+- OBRIGATÓRIO: flat design, minimalista, ícone grande centralizado
+- OBRIGATÓRIO: fundo claro neutro (branco ou cinza muito claro)
+- OBRIGATÓRIO: máximo 3 cores harmônicas (azul, verde ou laranja como destaque)
 
-MAPEAMENTO SEMÂNTICO OBRIGATÓRIO:
-- Cadastro/recebimentos/dados → documento, checklist, formulário, engrenagem de configuração
-- Corridas/serviços → mapa estilizado, rota pontilhada, veículo simplificado, pin de localização  
-- Segurança/sistema → escudo, cadeado, chave, verificação/checkmark
-- Avisos operacionais → sino de alerta, relógio, ícone de atenção
-- Pagamentos/financeiro → moeda, carteira, cifrão estilizado
-- Promoções/novidades → estrela, presente, megafone
-- Manutenção/atualização → engrenagem, ferramenta, seta de atualização
-
-ESTILO VISUAL:
-- Flat design, minimalista, profissional
-- Ícone grande e centralizado
-- Fundo claro/neutro (branco, cinza claro, bege)
-- Máximo 3-4 cores harmônicas
-- Formato quadrado
-
-Retorne APENAS o prompt em inglês, sem explicações.`
+Retorne APENAS o prompt em inglês, sem explicações. O prompt DEVE gerar uma imagem válida.`
           },
           {
             role: 'user',
-            content: `Analise o TEMA principal desta notificação e crie um prompt para uma ilustração conceitual que represente diretamente esse tema:
+            content: `Analise esta notificação e crie um prompt para ilustração:
 
 Título: "${titulo}"
 ${texto ? `Texto: "${texto}"` : ''}
 
-Identifique o conceito central (ex: cadastro, segurança, corrida, pagamento, aviso) e use o ícone/símbolo apropriado.`
+INSTRUÇÕES:
+1. Identifique o tema central
+2. Se o tema for claro, use o ícone correspondente do mapeamento
+3. Se o tema for abstrato ou confuso, use o fallback (documento com checkmark ou engrenagem)
+4. O prompt DEVE sempre gerar uma ilustração válida, NUNCA falhar`
           }
         ],
         temperature: 0.7,
@@ -102,17 +114,17 @@ Identifique o conceito central (ex: cadastro, segurança, corrida, pagamento, av
         messages: [
           {
             role: 'user',
-            content: `Crie uma ilustração conceitual em estilo flat e profissional para uma notificação interna do app Giga S.O.S, baseada diretamente no TEMA da notificação.
+            content: `Crie uma ilustração conceitual em estilo flat e profissional para uma notificação interna do app Giga S.O.S.
 
 ${imagePrompt}
 
-REGRAS OBRIGATÓRIAS:
-- Não use fotos reais, pessoas, rostos ou cenas do mundo real
-- Não use imagens genéricas de trabalho ou escritório
-- Use apenas ícones e símbolos conceituais que representem a ideia principal
-- Fundo claro ou neutro, cores harmônicas alinhadas à identidade do app
-- Formato quadrado, ícone grande centralizado
-- A imagem deve complementar o texto, nunca ilustrar pessoas ou ações reais`
+INSTRUÇÕES OBRIGATÓRIAS:
+- Baseie a imagem no CONCEITO do tema
+- Se o tema for abstrato, use um símbolo neutro de sistema (documento, checklist, engrenagem ou confirmação)
+- Não use fotos reais, pessoas, rostos ou texto
+- Use fundo claro ou neutro e cores alinhadas à identidade visual do app (azul, verde ou laranja como destaque)
+- Ícone grande e centralizado, formato quadrado
+- A imagem DEVE sempre ser gerada com sucesso`
           }
         ],
         max_tokens: 1000,
