@@ -35,7 +35,7 @@ export function DestinationBottomSheet({
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
   const latestRequestId = useRef(0);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   // Initialize Google services
   useEffect(() => {
@@ -59,27 +59,31 @@ export function DestinationBottomSheet({
     }
   }, [open, initialValue]);
 
-  // Keyboard height detection via visualViewport API
+  // Keyboard avoidance via visualViewport
   useEffect(() => {
     if (!open) return;
 
     const handleViewportResize = () => {
-      if (window.visualViewport) {
-        const viewportHeight = window.visualViewport.height;
-        const windowHeight = window.innerHeight;
-        const estimatedKeyboardHeight = windowHeight - viewportHeight;
-        setKeyboardHeight(Math.max(0, estimatedKeyboardHeight));
-      }
+      const vv = window.visualViewport;
+      if (!vv) return;
+
+      // Robust bottom inset (keyboard) estimation
+      // iOS: offsetTop can change; we use it to avoid overestimating.
+      const inset = window.innerHeight - (vv.height + vv.offsetTop);
+      setKeyboardOffset(Math.max(0, inset));
     };
 
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleViewportResize);
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', handleViewportResize);
+      vv.addEventListener('scroll', handleViewportResize);
       handleViewportResize();
     }
 
     return () => {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleViewportResize);
+      if (vv) {
+        vv.removeEventListener('resize', handleViewportResize);
+        vv.removeEventListener('scroll', handleViewportResize);
       }
     };
   }, [open]);
@@ -88,14 +92,25 @@ export function DestinationBottomSheet({
     const inputValue = e.target.value;
     setValue(inputValue);
 
-    if (!inputValue.trim() || !autocompleteService.current) {
+    if (!inputValue.trim()) {
       latestRequestId.current += 1;
       setPredictions([]);
       setLoading(false);
       return;
     }
 
+    // Keep spinner visible while we fetch predictions (or while maps is still loading)
     setLoading(true);
+  }, []);
+
+  // Fetch predictions whenever value changes (robust even if Maps finishes loading after typing)
+  useEffect(() => {
+    if (!open) return;
+
+    const inputValue = value.trim();
+    if (!inputValue) return;
+    if (!autocompleteService.current) return;
+
     const requestId = ++latestRequestId.current;
 
     autocompleteService.current.getPlacePredictions(
@@ -114,7 +129,7 @@ export function DestinationBottomSheet({
         setLoading(false);
       }
     );
-  }, []);
+  }, [open, value]);
 
   const handleSelectPrediction = async (prediction: google.maps.places.AutocompletePrediction) => {
     if (!placesService.current) return;
@@ -178,8 +193,8 @@ export function DestinationBottomSheet({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-            style={{ paddingBottom: keyboardHeight }}
-            className="fixed left-0 right-0 bottom-0 z-50 bg-card rounded-t-3xl shadow-2xl flex flex-col"
+            style={{ bottom: keyboardOffset, maxHeight: '70vh' }}
+            className="fixed left-0 right-0 z-50 bg-card rounded-t-3xl shadow-2xl flex flex-col"
           >
             {/* Handle bar */}
             <div className="flex justify-center pt-3 pb-1">
@@ -223,10 +238,7 @@ export function DestinationBottomSheet({
             </div>
 
             {/* Content area - scrollable */}
-            <div 
-              className="flex-1 overflow-y-auto px-4 pb-6"
-              style={{ maxHeight: `calc(60vh - ${keyboardHeight}px)` }}
-            >
+            <div className="flex-1 overflow-y-auto px-4 pb-6">
               {/* Recent addresses */}
               {showRecent && (
                 <div className="mb-4">
