@@ -80,8 +80,9 @@ export function isNotificationVisibleToProfiles(
     return true;
   }
 
-  // "clientes" - visible to clients AND providers (providers can also be clients)
-  if (audience === 'clientes' && (profiles.isClient || profiles.isProvider)) {
+  // "clientes" - visible ONLY to pure clients (not providers)
+  // This ensures strict audience targeting as selected in admin
+  if (audience === 'clientes' && profiles.isClient && !profiles.isProvider) {
     return true;
   }
 
