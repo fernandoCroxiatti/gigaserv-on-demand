@@ -9,7 +9,12 @@ import {
   Shield,
   Sparkles,
   HeadphonesIcon,
-  Bell,
+  Tag,
+  RefreshCw,
+  Gift,
+  Star,
+  Clock,
+  Megaphone,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,7 +28,13 @@ export type NotificationConcept =
   | 'pagamento'
   | 'seguranca'
   | 'novidade'
-  | 'suporte';
+  | 'suporte'
+  | 'promocao'
+  | 'atualizacao'
+  | 'presente'
+  | 'avaliacao'
+  | 'tempo'
+  | 'comunicado';
 
 export interface ConceptConfig {
   icon: LucideIcon;
@@ -92,6 +103,42 @@ export const NOTIFICATION_CONCEPTS: Record<NotificationConcept, ConceptConfig> =
     label: 'Suporte',
     bgColor: 'bg-cyan-100 dark:bg-cyan-900/30',
     iconColor: 'text-cyan-600 dark:text-cyan-400',
+  },
+  promocao: {
+    icon: Tag,
+    label: 'Promoção',
+    bgColor: 'bg-rose-100 dark:bg-rose-900/30',
+    iconColor: 'text-rose-600 dark:text-rose-400',
+  },
+  atualizacao: {
+    icon: RefreshCw,
+    label: 'Atualização',
+    bgColor: 'bg-indigo-100 dark:bg-indigo-900/30',
+    iconColor: 'text-indigo-600 dark:text-indigo-400',
+  },
+  presente: {
+    icon: Gift,
+    label: 'Presente',
+    bgColor: 'bg-pink-100 dark:bg-pink-900/30',
+    iconColor: 'text-pink-600 dark:text-pink-400',
+  },
+  avaliacao: {
+    icon: Star,
+    label: 'Avaliação',
+    bgColor: 'bg-yellow-100 dark:bg-yellow-900/30',
+    iconColor: 'text-yellow-600 dark:text-yellow-400',
+  },
+  tempo: {
+    icon: Clock,
+    label: 'Tempo',
+    bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+    iconColor: 'text-orange-600 dark:text-orange-400',
+  },
+  comunicado: {
+    icon: Megaphone,
+    label: 'Comunicado',
+    bgColor: 'bg-violet-100 dark:bg-violet-900/30',
+    iconColor: 'text-violet-600 dark:text-violet-400',
   },
 };
 

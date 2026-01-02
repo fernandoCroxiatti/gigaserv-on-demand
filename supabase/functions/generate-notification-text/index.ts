@@ -52,7 +52,7 @@ REGRAS OBRIGATÓRIAS:
 CONCEITO DE IMAGEM (image_concept):
 Você DEVE escolher UM conceito simples para a ilustração baseado no tema.
 Conceitos disponíveis (escolha APENAS um):
-- "checklist" - para cadastro, verificação, documentos
+- "checklist" - para cadastro, verificação, documentos pendentes
 - "documento" - para termos, contratos, comprovantes
 - "engrenagem" - para configurações, sistema, manutenção
 - "alerta" - para avisos, alertas, urgências
@@ -60,8 +60,14 @@ Conceitos disponíveis (escolha APENAS um):
 - "mapa" - para corridas, rotas, localização
 - "pagamento" - para financeiro, recebimentos, PIX
 - "seguranca" - para proteção, privacidade, cadeado
-- "novidade" - para atualizações, novidades gerais
+- "novidade" - para novidades gerais do app
 - "suporte" - para ajuda, atendimento, contato
+- "promocao" - para descontos, ofertas, cupons
+- "atualizacao" - para novas versões, melhorias do app
+- "presente" - para bônus, recompensas, brindes
+- "avaliacao" - para feedback, estrelas, reviews
+- "tempo" - para prazos, horários, agendamentos
+- "comunicado" - para anúncios oficiais, comunicados gerais
 
 Você deve retornar APENAS um JSON válido no formato:
 {"titulo": "...", "texto": "...", "image_concept": "..."}
