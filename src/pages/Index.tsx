@@ -57,9 +57,11 @@ const Index = () => {
   const isClient = effectiveProfile === 'client';
 
   return (
-    <div className={`h-full ${!isClient ? 'provider-theme' : ''}`}>
+    <div className={`flex flex-col ${!isClient ? 'provider-theme' : ''}`} style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <Header />
-      {isClient ? <ClientView /> : <ProviderView />}
+      <main className="flex-1 min-h-0 relative">
+        {isClient ? <ClientView /> : <ProviderView />}
+      </main>
       
       {/* Highlight Notification Modal */}
       <HighlightNotificationModal

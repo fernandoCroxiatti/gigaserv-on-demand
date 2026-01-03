@@ -37,7 +37,7 @@ export function Header() {
   }, [canPrompt, isNative, promptInstall]);
 
   return (
-    <header className="absolute top-0 left-0 right-0 z-50 px-3 py-2.5 sm:px-4 sm:py-3 pointer-events-none">
+    <header className="sticky top-0 left-0 right-0 z-50 px-3 py-2.5 sm:px-4 sm:py-3 pointer-events-none" style={{ paddingTop: 'max(0.625rem, env(safe-area-inset-top))' }}>
       <div className="flex items-center justify-between gap-2">
         {/* Menu button + Logo */}
         <div className="flex items-center gap-2 pointer-events-auto flex-shrink-0">
