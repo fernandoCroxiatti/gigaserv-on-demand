@@ -92,40 +92,56 @@ export const requestGeolocationPermission = async (): Promise<PermissionResult> 
 };
 
 export const getCurrentPosition = async (): Promise<{ lat: number; lng: number } | null> => {
+  console.log('[CapacitorPermissions] Getting current position, isNative:', isNativeApp());
+  
   if (!isNativeApp() || !isGeolocationAvailable()) {
     // Fall back to web API
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
+        console.error('[CapacitorPermissions] Geolocation not available in browser');
         resolve(null);
         return;
       }
 
+      const timeoutId = setTimeout(() => {
+        console.warn('[CapacitorPermissions] Web geolocation timeout');
+        resolve(null);
+      }, 20000);
+
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          clearTimeout(timeoutId);
+          console.log('[CapacitorPermissions] Web position:', position.coords);
           resolve({
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           });
         },
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+        (error) => {
+          clearTimeout(timeoutId);
+          console.error('[CapacitorPermissions] Web geolocation error:', error.code, error.message);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
       );
     });
   }
 
   try {
+    console.log('[CapacitorPermissions] Using Capacitor geolocation');
     const position = await Geolocation.getCurrentPosition({
       enableHighAccuracy: true,
       timeout: 15000,
-      maximumAge: 60000,
+      maximumAge: 30000,
     });
     
+    console.log('[CapacitorPermissions] Capacitor position:', position.coords);
     return {
       lat: position.coords.latitude,
       lng: position.coords.longitude,
     };
-  } catch (error) {
-    console.error('[CapacitorPermissions] Error getting position:', error);
+  } catch (error: any) {
+    console.error('[CapacitorPermissions] Capacitor geolocation error:', error?.message || error);
     return null;
   }
 };

@@ -385,10 +385,14 @@ export function ClientIdleView() {
               </button>
               
               {locationError && !locationDenied && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
-                  {locationError}
-                </p>
+                <button 
+                  onClick={() => refreshLocation()}
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
+                  <span className="text-xs text-destructive flex-1 text-left">{locationError}</span>
+                  <span className="text-xs text-destructive underline">Tentar novamente</span>
+                </button>
               )}
             </div>
 
