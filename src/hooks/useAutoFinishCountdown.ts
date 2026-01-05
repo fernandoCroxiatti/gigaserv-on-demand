@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 // Timeout duration in milliseconds (15 minutes)
 const AUTO_FINISH_TIMEOUT_MS = 15 * 60 * 1000;
@@ -20,6 +20,7 @@ export function useAutoFinishCountdown(
   providerFinishRequestedAt: Date | string | null | undefined
 ): UseAutoFinishCountdownResult {
   const [now, setNow] = useState(Date.now());
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Calculate the deadline
   const deadline = useMemo(() => {
@@ -32,13 +33,25 @@ export function useAutoFinishCountdown(
 
   // Update every second
   useEffect(() => {
-    if (!deadline) return;
+    if (!deadline) {
+      // Cleanup any existing interval
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
     
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       setNow(Date.now());
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [deadline]);
 
   // Calculate remaining time

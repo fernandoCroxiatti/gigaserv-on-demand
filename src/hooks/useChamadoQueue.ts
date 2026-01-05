@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Chamado, ChamadoStatus, ServiceType, PaymentMethod } from '@/types/chamado';
 import { Database } from '@/integrations/supabase/types';
+import { registerLogoutCleanup, isLoggingOutState } from './useAuth';
 
 type DbChamado = Database['public']['Tables']['chamados']['Row'];
 
@@ -132,6 +133,12 @@ export function useChamadoQueue({
 
   // Poll the queue for pending chamados
   const pollQueue = useCallback(async () => {
+    // Check for logout state first
+    if (isLoggingOutState()) {
+      console.log('[ChamadoQueue] Skipping poll - logging out');
+      return;
+    }
+
     if (!userId || !isOnline || !isProvider || hasActiveChamado) {
       return;
     }
@@ -259,9 +266,35 @@ export function useChamadoQueue({
     };
   }, [resetState, pollQueue, isPolling]);
 
+  // Cleanup function for logout
+  const stopPolling = useCallback(() => {
+    console.log('[ChamadoQueue] Stopping polling (logout cleanup)');
+    isMountedRef.current = false;
+    setIsPolling(false);
+    setQueueSize(0);
+    setLastPollTime(null);
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  // Register cleanup callback for logout
+  useEffect(() => {
+    const unregister = registerLogoutCleanup(stopPolling);
+    return unregister;
+  }, [stopPolling]);
+
   // Start/stop polling based on conditions
   useEffect(() => {
     isMountedRef.current = true;
+    
+    // Don't start if logging out
+    if (isLoggingOutState()) {
+      console.log('[ChamadoQueue] Not starting - app is logging out');
+      return;
+    }
+    
     const shouldPoll = userId && isOnline && isProvider && !hasActiveChamado;
 
     if (shouldPoll) {
@@ -273,14 +306,14 @@ export function useChamadoQueue({
       
       // Initial poll after reset
       const initialPollTimeout = setTimeout(() => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && !isLoggingOutState()) {
           pollQueue();
         }
       }, 100);
       
       // Set up interval
       pollIntervalRef.current = setInterval(() => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && !isLoggingOutState()) {
           pollQueue();
         }
       }, QUEUE_POLL_INTERVAL_MS);

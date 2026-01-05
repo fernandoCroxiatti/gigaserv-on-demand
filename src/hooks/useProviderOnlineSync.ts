@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { registerLogoutCleanup, isLoggingOutState } from './useAuth';
 
 interface UseProviderOnlineSyncOptions {
   userId: string | null;
@@ -76,9 +77,9 @@ export function useProviderOnlineSync({
 
   // Send heartbeat with GPS location to backend
   const sendHeartbeatWithLocation = useCallback(async () => {
-    // CRITICAL: Only send heartbeat if provider is actively online
-    if (!userId || !isOnline || !isActiveRef.current) {
-      console.log('[OnlineSync] Skipping heartbeat - not active or not online');
+    // CRITICAL: Only send heartbeat if provider is actively online and not logging out
+    if (!userId || !isOnline || !isActiveRef.current || isLoggingOutState()) {
+      console.log('[OnlineSync] Skipping heartbeat - not active, not online, or logging out');
       return;
     }
 
@@ -194,6 +195,27 @@ export function useProviderOnlineSync({
     };
   }, [userId, isOnline, sendImmediateLocationUpdate]);
 
+  // Cleanup function to stop all heartbeats
+  const stopAllHeartbeats = useCallback(() => {
+    console.log('[OnlineSync] Stopping all heartbeats (logout cleanup)');
+    isActiveRef.current = false;
+    lastSentLocationRef.current = null;
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  }, []);
+
+  // Register cleanup callback for logout
+  useEffect(() => {
+    const unregister = registerLogoutCleanup(stopAllHeartbeats);
+    return unregister;
+  }, [stopAllHeartbeats]);
+
   // Start/stop heartbeat based on online status
   useEffect(() => {
     // Cleanup any existing interval
@@ -202,11 +224,11 @@ export function useProviderOnlineSync({
       heartbeatIntervalRef.current = null;
     }
 
-    // Only start if actually online
-    if (!userId || !isOnline) {
+    // Only start if actually online and not logging out
+    if (!userId || !isOnline || isLoggingOutState()) {
       isActiveRef.current = false;
       lastSentLocationRef.current = null;
-      console.log('[OnlineSync] Provider offline - heartbeats disabled');
+      console.log('[OnlineSync] Provider offline or logging out - heartbeats disabled');
       return;
     }
 

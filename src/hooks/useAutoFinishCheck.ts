@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { isLoggingOutState } from './useAuth';
 
 // Timeout duration in milliseconds (15 minutes)
 const AUTO_FINISH_TIMEOUT_MS = 15 * 60 * 1000;
@@ -24,15 +25,26 @@ export function useAutoFinishCheck({
   onAutoFinished,
 }: UseAutoFinishCheckParams) {
   const hasTriggeredRef = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Only run for pending_client_confirmation status
     if (status !== 'pending_client_confirmation' || !chamadoId || !providerFinishRequestedAt) {
       hasTriggeredRef.current = false;
+      // Cleanup any existing interval
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
 
     const checkAndAutoFinish = async () => {
+      // Skip if logging out
+      if (isLoggingOutState()) {
+        return;
+      }
+
       const requestTime = typeof providerFinishRequestedAt === 'string'
         ? new Date(providerFinishRequestedAt).getTime()
         : providerFinishRequestedAt.getTime();
@@ -64,8 +76,13 @@ export function useAutoFinishCheck({
     checkAndAutoFinish();
 
     // Set up periodic check
-    const interval = setInterval(checkAndAutoFinish, CHECK_INTERVAL_MS);
+    intervalRef.current = setInterval(checkAndAutoFinish, CHECK_INTERVAL_MS);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [chamadoId, status, providerFinishRequestedAt, onAutoFinished]);
 }

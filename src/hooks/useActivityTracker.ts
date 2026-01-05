@@ -1,15 +1,18 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { registerLogoutCleanup, isLoggingOutState } from './useAuth';
 
 const ACTIVITY_UPDATE_INTERVAL_MS = 60_000; // Update every 1 minute
-const ACTIVITY_EVENTS = ['click', 'keydown', 'scroll', 'touchstart', 'mousemove'];
+const ACTIVITY_EVENTS = ['click', 'keydown', 'scroll', 'touchstart', 'mousemove'] as const;
 
 export function useActivityTracker() {
   const { user } = useAuth();
   const lastUpdateRef = useRef<number>(0);
   const isUpdatingRef = useRef(false);
   const [profileType, setProfileType] = useState<string | null>(null);
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
+  const isCleanedUpRef = useRef(false);
 
   // Fetch profile type once
   useEffect(() => {
@@ -31,7 +34,10 @@ export function useActivityTracker() {
   }, [user?.id]);
 
   const updateActivity = useCallback(async () => {
-    if (!user || !profileType || isUpdatingRef.current) return;
+    // Skip if logging out or cleaned up
+    if (!user || !profileType || isUpdatingRef.current || isLoggingOutState() || isCleanedUpRef.current) {
+      return;
+    }
 
     const now = Date.now();
     // Throttle updates to at most once per minute
@@ -65,8 +71,31 @@ export function useActivityTracker() {
     }
   }, [user?.id, profileType]);
 
+  // Cleanup function for logout
+  const cleanup = useCallback(() => {
+    console.log('[ActivityTracker] Cleanup triggered (logout)');
+    isCleanedUpRef.current = true;
+    
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = null;
+    }
+    
+    ACTIVITY_EVENTS.forEach((event) => {
+      window.removeEventListener(event, updateActivity);
+    });
+  }, [updateActivity]);
+
+  // Register cleanup callback for logout
+  useEffect(() => {
+    const unregister = registerLogoutCleanup(cleanup);
+    return unregister;
+  }, [cleanup]);
+
   useEffect(() => {
     if (!user || !profileType) return;
+    
+    isCleanedUpRef.current = false;
 
     // Update on mount
     updateActivity();
@@ -81,15 +110,15 @@ export function useActivityTracker() {
     });
 
     // Also update periodically while the tab is active
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+    intervalIdRef.current = setInterval(() => {
+      if (document.visibilityState === 'visible' && !isLoggingOutState()) {
         updateActivity();
       }
     }, ACTIVITY_UPDATE_INTERVAL_MS);
 
     // Update when tab becomes visible
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !isLoggingOutState()) {
         updateActivity();
       }
     };
@@ -99,7 +128,10 @@ export function useActivityTracker() {
       ACTIVITY_EVENTS.forEach((event) => {
         window.removeEventListener(event, handleActivity);
       });
-      clearInterval(intervalId);
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [user?.id, profileType, updateActivity]);

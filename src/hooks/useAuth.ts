@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -10,6 +10,28 @@ let initPromise: Promise<void> | null = null;
 
 // Flag to prevent session revalidation after intentional logout
 let isLoggingOut = false;
+
+// Cleanup callbacks registered by other hooks
+const cleanupCallbacks: Set<() => void> = new Set();
+
+/**
+ * Register a cleanup callback to be called on logout.
+ * Use this in hooks that need to stop intervals/listeners when user logs out.
+ */
+export function registerLogoutCleanup(callback: () => void): () => void {
+  cleanupCallbacks.add(callback);
+  return () => {
+    cleanupCallbacks.delete(callback);
+  };
+}
+
+/**
+ * Check if the app is currently in logout state.
+ * Hooks should check this before starting new operations.
+ */
+export function isLoggingOutState(): boolean {
+  return isLoggingOut;
+}
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(cachedUser);
@@ -70,15 +92,27 @@ export function useAuth() {
     };
   }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     console.log('[useAuth] Starting logout...');
     
     // Set flag BEFORE any async operations to prevent race conditions
     isLoggingOut = true;
     
+    // Execute all registered cleanup callbacks
+    console.log(`[useAuth] Executing ${cleanupCallbacks.size} cleanup callbacks...`);
+    cleanupCallbacks.forEach(callback => {
+      try {
+        callback();
+      } catch (err) {
+        console.warn('[useAuth] Cleanup callback error:', err);
+      }
+    });
+    
     // Clear cached state immediately
     cachedUser = null;
     cachedSession = null;
+    initPromise = null; // Reset init promise so next login starts fresh
+    isInitialized = false;
     
     // Update local state immediately
     setUser(null);
@@ -97,7 +131,7 @@ export function useAuth() {
         console.log('[useAuth] Logout flag reset');
       }, 1000);
     }
-  };
+  }, []);
 
   return { user, session, loading, signOut };
 }
