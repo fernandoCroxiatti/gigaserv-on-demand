@@ -3,9 +3,11 @@ import { createPortal } from 'react-dom';
 import { GoogleMap } from '@react-google-maps/api';
 import { useGoogleMaps } from '../Map/GoogleMapsProvider';
 import { Location } from '@/types/chamado';
-import { Loader2, AlertCircle, MapPin, ArrowLeft, Check, Navigation2, Search } from 'lucide-react';
+import { Loader2, AlertCircle, MapPin, ArrowLeft, Check, Navigation2, Search, LocateFixed } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
+import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
 
 interface OriginMapPickerProps {
   initialCenter?: Location | null;
@@ -231,17 +233,47 @@ export function OriginMapPicker({
     setIsConfirming(false);
   }, [mapCenter, resolvedAddress, onConfirm, isConfirming]);
 
-  const handleRecenter = useCallback(() => {
-    if (!map || !navigator.geolocation) return;
+  const handleRecenter = useCallback(async () => {
+    if (!map) return;
     
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const center = { lat: position.coords.latitude, lng: position.coords.longitude };
-        map.panTo(center);
-        setMapCenter(center);
-      },
-      (error) => console.error('Geolocation error:', error)
-    );
+    console.log('[OriginMapPicker] handleRecenter triggered');
+    
+    try {
+      let position: { lat: number; lng: number };
+      
+      if (Capacitor.isNativePlatform()) {
+        // Use Capacitor Geolocation for native platforms
+        console.log('[OriginMapPicker] Using Capacitor Geolocation');
+        const result = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+        position = {
+          lat: result.coords.latitude,
+          lng: result.coords.longitude,
+        };
+      } else {
+        // Fallback to browser geolocation for web
+        console.log('[OriginMapPicker] Using browser geolocation');
+        const result = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+          });
+        });
+        position = {
+          lat: result.coords.latitude,
+          lng: result.coords.longitude,
+        };
+      }
+      
+      console.log('[OriginMapPicker] Recentering to:', position);
+      map.panTo(position);
+      map.setZoom(17);
+      setMapCenter(position);
+    } catch (error) {
+      console.error('[OriginMapPicker] Geolocation error:', error);
+    }
   }, [map]);
 
   const handleZoomIn = useCallback(() => {
@@ -422,9 +454,9 @@ export function OriginMapPicker({
                 variant="secondary"
                 size="icon"
                 onClick={handleRecenter}
-                className="h-11 w-11 rounded-full bg-card shadow-lg border border-border"
+                className="h-11 w-11 rounded-full bg-card shadow-lg border border-border active:scale-95 transition-transform"
               >
-                <Navigation2 className="w-5 h-5" />
+                <LocateFixed className="w-5 h-5" />
               </Button>
             </div>
           </div>
