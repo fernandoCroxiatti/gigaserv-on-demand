@@ -2,7 +2,7 @@ import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import { GoogleMap, Marker, DirectionsRenderer, Circle } from '@react-google-maps/api';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { Location, ServiceType } from '@/types/chamado';
-import { Loader2, AlertCircle, Navigation2 } from 'lucide-react';
+import { Loader2, AlertCircle, Navigation2, MapPin } from 'lucide-react';
 import { ProviderMarkers } from './ProviderMarkers';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
@@ -143,23 +143,23 @@ export function RealMapView({
     return 15;
   }, [zoom, showSearchRadius, searchRadius]);
 
+  // Track if user has manually dragged the map
+  const hasUserDraggedRef = useRef(false);
+  
   /**
-   * GPS Location Updates - MARKER ONLY
+   * GPS Location - SINGLE getCurrentPosition on mount ONLY
    * 
-   * This effect updates the user's MARKER position continuously.
-   * It does NOT move the map camera - that's controlled by mode and auto-follow logic.
-   * 
-   * Separation principle:
-   * - userLocation state = marker position (always updated by GPS)
-   * - map.panTo = camera movement (only in follow/navigation mode, or explicit recenter)
+   * - Uses getCurrentPosition ONCE on initial load
+   * - NO watchPosition - map never moves automatically after load
+   * - User must click "Minha Localização" button to recenter
+   * - After user drags, map NEVER auto-centers
    */
   useEffect(() => {
     if (!showUserLocation || !navigator.geolocation) return;
     
-    // Watch position for continuous marker updates
-    const watchId = navigator.geolocation.watchPosition(
+    // Get position ONCE on mount - with battery-saving options
+    navigator.geolocation.getCurrentPosition(
       (position) => {
-        // Update marker position state - camera movement handled separately
         setUserLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
@@ -167,10 +167,14 @@ export function RealMapView({
         });
       },
       (error) => console.error('Geolocation error:', error),
-      { enableHighAccuracy: true, maximumAge: 5000 }
+      { 
+        enableHighAccuracy: false, 
+        maximumAge: 30000, // Use cached position up to 30 seconds old
+        timeout: 10000 
+      }
     );
     
-    return () => navigator.geolocation.clearWatch(watchId);
+    // NO watchPosition - no automatic updates
   }, [showUserLocation]);
 
   // Calculate route - unchanged
@@ -197,17 +201,17 @@ export function RealMapView({
     );
   }, [showRoute, origem, destino, isLoaded]);
 
-  // Handle user interaction - sets map to free mode
-  // NO TIMERS - user must explicitly click recenter to restore follow
+  // Handle user interaction - sets map to free mode permanently
+  // Once user drags, map NEVER auto-centers again
   const handleInteractionStart = useCallback(() => {
     setIsUserInteracting(true);
     hasUserInteractedRef.current = true;
+    hasUserDraggedRef.current = true; // Permanent flag - never auto-center after drag
     onUserInteraction?.();
   }, [onUserInteraction]);
 
   const handleInteractionEnd = useCallback(() => {
-    // NO auto-return timer - user must explicitly recenter
-    // This prevents any automatic recentering that could interfere with destination selection
+    // NO auto-return - user dragged, so map stays where they left it
   }, []);
 
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
@@ -226,33 +230,50 @@ export function RealMapView({
     setMap(null);
   }, []);
 
-  // Handle recenter button click - explicit user action to restore follow
-  const handleRecenter = useCallback(() => {
-    setIsUserInteracting(false);
-    hasUserInteractedRef.current = false;
+  // Handle "Minha Localização" button click
+  // Uses getCurrentPosition to get fresh location and center map
+  const handleMyLocation = useCallback(() => {
+    if (!navigator.geolocation || !map) return;
     
-    // Pan to center
-    if (map && center) {
-      map.panTo({ lat: center.lat, lng: center.lng });
-    } else if (map && userLocation) {
-      map.panTo({ lat: userLocation.lat, lng: userLocation.lng });
-    }
-  }, [map, center, userLocation]);
+    // Get fresh position with battery-saving options
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const newLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          address: 'Sua localização',
+        };
+        setUserLocation(newLocation);
+        map.panTo({ lat: newLocation.lat, lng: newLocation.lng });
+        
+        // Reset interaction state so button hides
+        setIsUserInteracting(false);
+        hasUserInteractedRef.current = false;
+      },
+      (error) => console.error('Geolocation error:', error),
+      { 
+        enableHighAccuracy: false, 
+        maximumAge: 30000, 
+        timeout: 10000 
+      }
+    );
+  }, [map]);
+
+  // Legacy recenter handler - now uses handleMyLocation
+  const handleRecenter = useCallback(() => {
+    handleMyLocation();
+  }, [handleMyLocation]);
 
   /**
-   * Camera Auto-Follow Logic - MODE-BASED
+   * Camera Auto-Follow Logic - SIMPLIFIED for TWA
    * 
-   * CRITICAL: This is the ONLY place that moves the map camera based on location.
+   * CRITICAL: After user drags, map NEVER auto-centers again.
+   * User must explicitly click "Minha Localização" button.
    * 
    * Rules:
-   * - 'free' mode: Set initial center ONCE, then NEVER auto-center again.
-   *                User must click recenter button to restore follow.
-   * - 'follow' mode: Always auto-center on location updates.
-   * - 'navigation' mode: Auto-center unless user is interacting.
-   *                      (Navigation uses OptimizedNavigationMap with its own logic)
-   * 
-   * NOTE: MapDestinationPicker is COMPLETELY ISOLATED - it creates its own map
-   * instance and is unaffected by this effect or any mode changes.
+   * - Set initial center ONCE on mount
+   * - If user has dragged (hasUserDraggedRef), NEVER auto-center
+   * - No watchPosition, no continuous updates
    */
   useEffect(() => {
     if (!map) return;
@@ -260,28 +281,18 @@ export function RealMapView({
     const targetCenter = center || userLocation;
     if (!targetCenter) return;
     
-    // FREE MODE: Only set initial center once, never auto-center after
-    if (mode === 'free') {
-      if (!initialCenterSetRef.current) {
-        map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
-        initialCenterSetRef.current = true;
-      }
-      // In free mode, GPS updates marker but NEVER moves camera
+    // If user has EVER dragged the map, never auto-center
+    if (hasUserDraggedRef.current) {
       return;
     }
     
-    // FOLLOW MODE: Always auto-center
-    if (mode === 'follow' && !isUserInteracting) {
+    // Only set initial center once
+    if (!initialCenterSetRef.current) {
       map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
-      return;
+      initialCenterSetRef.current = true;
     }
-    
-    // NAVIGATION MODE: Auto-center unless user is interacting
-    // Note: Active navigation typically uses OptimizedNavigationMap, not this component
-    if (mode === 'navigation' && !isUserInteracting) {
-      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
-    }
-  }, [map, center, userLocation, mode, isUserInteracting]);
+    // NO auto-centering after initial load
+  }, [map, center, userLocation]);
 
   const handleMapClick = useCallback(
     async (e: google.maps.MapMouseEvent) => {
@@ -345,8 +356,8 @@ export function RealMapView({
       ? { lat: userLocation.lat, lng: userLocation.lng }
       : defaultCenter;
 
-  // Determine if we should show recenter button
-  const shouldShowRecenter = showRecenterButton && hasUserInteractedRef.current && isUserInteracting && mode !== 'follow';
+  // Show "Minha Localização" button only if geolocation is supported and user has interacted
+  const shouldShowMyLocation = showRecenterButton && navigator.geolocation && hasUserDraggedRef.current;
 
   return (
     <div className={cn("relative", className)}>
@@ -439,16 +450,16 @@ export function RealMapView({
         )}
       </GoogleMap>
       
-      {/* Recenter button - shows when user has interacted with map */}
-      {shouldShowRecenter && (
+      {/* "Minha Localização" floating button - bottom right, visible after user drags */}
+      {shouldShowMyLocation && (
         <Button
           variant="secondary"
           size="sm"
-          onClick={handleRecenter}
-          className="absolute bottom-4 right-4 z-10 bg-card shadow-md gap-2"
+          onClick={handleMyLocation}
+          className="absolute bottom-4 right-4 z-10 bg-card shadow-lg gap-2 px-3 py-2"
         >
-          <Navigation2 className="w-4 h-4" />
-          Centralizar
+          <MapPin className="w-4 h-4 text-primary" />
+          Minha Localização
         </Button>
       )}
     </div>
