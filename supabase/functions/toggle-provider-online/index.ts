@@ -53,18 +53,34 @@ serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
+      logStep("No authorization header");
+      return new Response(JSON.stringify({ error: "Sessão expirada. Faça login novamente." }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 401,
       });
     }
 
     const token = authHeader.replace("Bearer ", "");
+    if (!token || token.length < 10) {
+      logStep("Invalid token format");
+      return new Response(JSON.stringify({ error: "Sessão inválida. Faça login novamente." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
+    
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    if (userError) {
+      logStep("Auth error", { message: userError.message });
+      return new Response(JSON.stringify({ error: "Sessão expirada. Faça login novamente." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
     const user = userData.user;
     if (!user) {
-      return new Response(JSON.stringify({ error: "User not authenticated" }), {
+      logStep("No user in session");
+      return new Response(JSON.stringify({ error: "Usuário não autenticado." }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 401,
       });

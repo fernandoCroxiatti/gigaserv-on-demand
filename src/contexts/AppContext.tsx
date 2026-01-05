@@ -1182,6 +1182,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         hasLocation: !!(providerData.current_lat && providerData.current_lng)
       });
 
+      // Verify session is valid before calling edge function
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        console.error('[ToggleOnline] No active session');
+        toast.error('Sessão expirada. Faça login novamente.');
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('toggle-provider-online', {
         body: {
           online: newStatus,
@@ -1193,7 +1201,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[ToggleOnline] Edge function error:', error);
+        toast.error('Erro ao alterar status. Tente novamente.');
+        return;
+      }
+
+      // Check for error in response body (e.g., auth errors returned as 200 with error field)
+      if (data?.error) {
+        console.error('[ToggleOnline] Response error:', data.error);
+        toast.error(data.error);
+        return;
+      }
 
       // Persist active_profile when going online so provider listeners/polling always activate after reload
       if (newStatus) {
@@ -1217,7 +1236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toast.success(newStatus ? 'Você está online! Aguardando chamados...' : 'Você está offline');
     } catch (error) {
       console.error('[ToggleOnline] Error toggling online status:', error);
-      toast.error('Erro ao alterar status');
+      toast.error('Erro ao alterar status. Verifique sua conexão.');
     }
   }, [authUser, providerData, canAccessProviderFeatures]);
 

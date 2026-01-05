@@ -80,9 +80,16 @@ export async function toggleProviderOnline(
   userId: string,
   online: boolean,
   location?: Location
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase.functions.invoke('toggle-provider-online', {
+    // Verify session is valid before calling edge function
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session) {
+      console.error('[ProviderService] No active session');
+      return { success: false, error: 'Sessão expirada. Faça login novamente.' };
+    }
+
+    const { data, error } = await supabase.functions.invoke('toggle-provider-online', {
       body: {
         online,
         location: location ? {
@@ -95,7 +102,13 @@ export async function toggleProviderOnline(
 
     if (error) {
       console.error('[ProviderService] Toggle error:', error);
-      return false;
+      return { success: false, error: 'Erro ao alterar status. Tente novamente.' };
+    }
+
+    // Check for error in response body
+    if (data?.error) {
+      console.error('[ProviderService] Toggle response error:', data.error);
+      return { success: false, error: data.error };
     }
 
     // Persist active_profile when going online
@@ -106,10 +119,10 @@ export async function toggleProviderOnline(
         .eq('user_id', userId);
     }
 
-    return true;
+    return { success: true };
   } catch (err) {
     console.error('[ProviderService] Toggle exception:', err);
-    return false;
+    return { success: false, error: 'Erro inesperado. Tente novamente.' };
   }
 }
 
