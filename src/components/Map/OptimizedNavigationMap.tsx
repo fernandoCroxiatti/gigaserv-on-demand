@@ -152,6 +152,10 @@ const dayModeStyles: google.maps.MapTypeStyle[] = [
 // Animation constants
 const ROTATION_LERP_FACTOR = 0.12;
 const POSITION_LERP_FACTOR = 0.15;
+// Centering interval (ms) - smoother experience, less aggressive
+const CENTERING_INTERVAL_MS = 2500; // 2.5 seconds between centering
+// Time to resume auto-centering after user interaction
+const USER_INTERACTION_TIMEOUT_MS = 10000; // 10 seconds
 
 /**
  * Calculate bearing between two points in degrees
@@ -247,6 +251,9 @@ export function OptimizedNavigationMap({
   // Smooth rotation and position state
   const [smoothRotation, setSmoothRotation] = useState(0);
   const [smoothPosition, setSmoothPosition] = useState<{ lat: number; lng: number } | null>(null);
+  
+  // Interval-based centering (not continuous)
+  const lastCenteringRef = useRef<number>(0);
   
   // Refs for animation
   const lastLocationRef = useRef<Location | null>(null);
@@ -371,25 +378,32 @@ export function OptimizedNavigationMap({
     };
   }, [smoothRotation]);
 
-  // Update map camera smoothly - FIXED: no rotation, just pan
+  // Update map camera smoothly - interval-based centering (not continuous)
+  // Marker position always updates, but camera centering is throttled for comfort
   useEffect(() => {
-    if (!map || !smoothPosition || isUserInteracting) return;
+    if (!map || !smoothPosition) return;
+    
+    // Always ensure map stays north-up and flat
+    const currentHeading = map.getHeading();
+    if (currentHeading !== 0) {
+      map.setHeading(0);
+    }
+    const currentTilt = map.getTilt();
+    if (currentTilt !== 0) {
+      map.setTilt(0);
+    }
+    
+    // Skip centering if user is interacting
+    if (isUserInteracting) return;
+    
+    // Throttle centering to CENTERING_INTERVAL_MS for smoother experience
+    const now = Date.now();
+    if (now - lastCenteringRef.current < CENTERING_INTERVAL_MS) return;
     
     if (followProvider) {
-      // Smooth pan to position
+      // Smooth pan to position (occurs every 2.5 seconds)
       map.panTo(smoothPosition);
-      
-      // FIXED: Ensure heading stays at 0 (north up)
-      const currentHeading = map.getHeading();
-      if (currentHeading !== 0) {
-        map.setHeading(0);
-      }
-      
-      // FIXED: Ensure tilt stays at 0 (flat view)
-      const currentTilt = map.getTilt();
-      if (currentTilt !== 0) {
-        map.setTilt(0);
-      }
+      lastCenteringRef.current = now;
       
       // Set appropriate zoom for navigation (fixed level)
       const currentZoom = map.getZoom();
@@ -432,6 +446,7 @@ export function OptimizedNavigationMap({
     mapInstance.setZoom(followProvider ? 17 : 16);
     
     // Track user interaction with auto-return timer (navigation mode only)
+    // Marker position always updates; only camera centering pauses
     const startInteraction = () => {
       setIsUserInteracting(true);
       if (userInteractionTimeoutRef.current) {
@@ -440,10 +455,13 @@ export function OptimizedNavigationMap({
     };
     
     const endInteraction = () => {
-      // Re-enable follow after 8 seconds of no interaction (navigation UX)
+      // Re-enable centering after USER_INTERACTION_TIMEOUT_MS of no interaction
+      // This allows user to explore the map briefly before auto-recentering
       userInteractionTimeoutRef.current = setTimeout(() => {
         setIsUserInteracting(false);
-      }, 8000);
+        // Reset centering timer so next position update triggers immediate center
+        lastCenteringRef.current = 0;
+      }, USER_INTERACTION_TIMEOUT_MS);
     };
     
     mapInstance.addListener('dragstart', startInteraction);

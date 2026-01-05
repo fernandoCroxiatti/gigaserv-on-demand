@@ -11,6 +11,8 @@ import {
   MapPin,
   Navigation,
   GitMerge,
+  Clock,
+  Route,
 } from 'lucide-react';
 import { NavigationInstruction } from '@/hooks/useNavigationInstructions';
 import { cn } from '@/lib/utils';
@@ -91,22 +93,31 @@ export function TurnByTurnDisplay({
         </div>
       )}
 
-      {/* ETA bar - Always visible with guaranteed values */}
-      <div className="px-3 py-2 flex items-center justify-between bg-secondary/50 border-t border-border/30">
-        <div className="flex items-center gap-4">
-          <div className="text-center">
+      {/* ETA bar - Clear layout with icons */}
+      <div className="px-3 py-2.5 flex items-center justify-between bg-secondary/50 border-t border-border/30">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary" />
+          <div>
             <span className="text-lg font-bold text-primary">
               {eta && eta !== '' ? eta : '< 1 min'}
             </span>
-            <p className="text-[10px] text-muted-foreground">Tempo restante</p>
+            <p className="text-[10px] text-muted-foreground leading-tight">restantes</p>
           </div>
-          <div className="w-px h-6 bg-border" />
-          <div className="text-center">
+        </div>
+        <div className="w-px h-8 bg-border" />
+        <div className="flex items-center gap-2">
+          <Route className="w-4 h-4 text-muted-foreground" />
+          <div>
             <span className="text-lg font-bold">
               {distance && distance !== '' ? distance : '< 100 m'}
             </span>
-            <p className="text-[10px] text-muted-foreground">Distância</p>
+            <p className="text-[10px] text-muted-foreground leading-tight">distância</p>
           </div>
+        </div>
+        <div className="w-px h-8 bg-border" />
+        <div className="flex items-center gap-1.5 bg-primary/10 text-primary px-2 py-1 rounded-full">
+          <Navigation className="w-3.5 h-3.5" />
+          <span className="text-xs font-medium">A caminho</span>
         </div>
       </div>
     </div>
