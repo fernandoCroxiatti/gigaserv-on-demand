@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { GoogleMap } from '@react-google-maps/api';
-import { useGoogleMaps } from './GoogleMapsProvider';
+import { useGoogleMaps } from '../Map/GoogleMapsProvider';
 import { Location } from '@/types/chamado';
-import { Loader2, AlertCircle, MapPin, ArrowLeft, Check, Navigation2 } from 'lucide-react';
+import { Loader2, AlertCircle, MapPin, ArrowLeft, Check, Navigation2, Search } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
 
-interface MapDestinationPickerProps {
+interface OriginMapPickerProps {
   initialCenter?: Location | null;
   onConfirm: (location: Location) => void;
   onCancel: () => void;
@@ -20,7 +20,7 @@ const mapContainerStyle = {
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
-  zoomControl: false, // We'll position our own
+  zoomControl: false,
   mapTypeControl: false,
   streetViewControl: false,
   fullscreenControl: false,
@@ -42,83 +42,135 @@ const mapOptions: google.maps.MapOptions = {
 const defaultCenter = { lat: -23.5505, lng: -46.6333 }; // São Paulo
 
 /**
- * MapDestinationPicker - Fullscreen overlay for selecting destination on map
+ * OriginMapPicker - Fullscreen overlay for selecting origin on map (Uber-style)
  * 
- * CAMERA LOCK RULES (MAXIMUM PRIORITY):
- * =====================================
- * This component implements a complete "camera lock" that blocks ALL automatic
- * camera movement from ANY source while the picker is active.
- * 
- * BLOCKED sources of camera movement:
- * - GPS location updates (user or provider)
- * - Origin field changes
- * - Address validation changes
- * - Form re-renders or state updates
- * - "Use my location" triggers from parent
- * - Navigation state changes
- * - Any prop changes from parent component
- * 
- * ALLOWED camera movement:
- * - User gestures (drag, pinch, zoom)
- * - Explicit "Recenter" button click (user-initiated)
- * 
- * IMPLEMENTATION:
- * - Creates completely NEW, INDEPENDENT GoogleMap instance
- * - Uses STATIC center computed ONCE on mount (stored in ref, never updated by props)
- * - Rendered via portal at document.body level to bypass all parent re-renders
- * - NO auto-centering, NO follow-user, NO GPS listeners
- * - Map center controlled EXCLUSIVELY by user gestures
- * - Ignores ALL prop updates after initial mount
- * 
- * On exit (confirm/cancel): Parent component restores normal map behavior
+ * Features:
+ * - Map as main element (occupies most of the screen)
+ * - Fixed center pin that user drags map to position
+ * - Search field at top for quick address lookup
+ * - Dynamic address resolution in footer
+ * - Clear instructional text
  */
-export function MapDestinationPicker({
+export function OriginMapPicker({
   initialCenter,
   onConfirm,
   onCancel,
-}: MapDestinationPickerProps) {
+}: OriginMapPickerProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
   
-  // CAMERA LOCK: Static center computed ONCE on mount, stored in ref
-  // This ref NEVER changes after mount, ensuring complete isolation from prop updates
+  // Static center computed ONCE on mount
   const staticCenterRef = useRef<{ lat: number; lng: number } | null>(null);
-  
-  // Initialize static center on first render only (lazy initialization)
   if (staticCenterRef.current === null) {
     staticCenterRef.current = initialCenter 
       ? { lat: initialCenter.lat, lng: initialCenter.lng }
       : defaultCenter;
   }
   
-  // Current map center (updated by user gestures, NOT by props)
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>(
     () => staticCenterRef.current || defaultCenter
   );
   
   const [isConfirming, setIsConfirming] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [resolvedAddress, setResolvedAddress] = useState<string>('');
+  const [searchValue, setSearchValue] = useState('');
+  const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [showPredictions, setShowPredictions] = useState(false);
   
-  // Flag to ensure we don't process any external updates after mount
   const isActiveRef = useRef(true);
   const dragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
+  const geocodeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
+  const placesService = useRef<google.maps.places.PlacesService | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Prevent body scroll and mark picker as active
+  // Initialize services
+  useEffect(() => {
+    if (isLoaded) {
+      if (!geocoderRef.current) {
+        geocoderRef.current = new google.maps.Geocoder();
+      }
+      if (!autocompleteService.current) {
+        autocompleteService.current = new google.maps.places.AutocompleteService();
+      }
+    }
+  }, [isLoaded]);
+
+  // Prevent body scroll
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     isActiveRef.current = true;
     
-    console.log('[MapDestinationPicker] Activated - map control isolated from all external state');
-    
     return () => {
       document.body.style.overflow = originalOverflow;
       isActiveRef.current = false;
-      console.log('[MapDestinationPicker] Deactivated - restoring normal map behavior');
     };
   }, []);
 
-  // Update center when map is idle (after drag/zoom) - ONLY from user gestures
+  // Reverse geocode on map center change (debounced)
+  useEffect(() => {
+    if (!geocoderRef.current || !mapCenter) return;
+
+    if (geocodeTimeoutRef.current) {
+      clearTimeout(geocodeTimeoutRef.current);
+    }
+
+    geocodeTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await geocoderRef.current!.geocode({ location: mapCenter });
+        if (response.results[0]) {
+          setResolvedAddress(response.results[0].formatted_address);
+        }
+      } catch (error) {
+        console.error('[OriginMapPicker] Geocode error:', error);
+      }
+    }, 300);
+
+    return () => {
+      if (geocodeTimeoutRef.current) {
+        clearTimeout(geocodeTimeoutRef.current);
+      }
+    };
+  }, [mapCenter]);
+
+  // Search predictions
+  useEffect(() => {
+    if (!searchValue.trim() || !autocompleteService.current) {
+      setPredictions([]);
+      return;
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      autocompleteService.current!.getPlacePredictions(
+        {
+          input: searchValue,
+          componentRestrictions: { country: 'br' },
+        },
+        (preds, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK) {
+            setPredictions(preds || []);
+          } else {
+            setPredictions([]);
+          }
+        }
+      );
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchValue]);
+
   const handleIdle = useCallback(() => {
     if (!map || !isActiveRef.current) return;
     
@@ -127,7 +179,6 @@ export function MapDestinationPicker({
       setMapCenter({ lat: center.lat(), lng: center.lng() });
     }
     
-    // End dragging state after small delay
     if (dragTimeoutRef.current) {
       clearTimeout(dragTimeoutRef.current);
     }
@@ -141,21 +192,20 @@ export function MapDestinationPicker({
   const handleDragStart = useCallback(() => {
     if (!isActiveRef.current) return;
     setIsDragging(true);
+    setShowPredictions(false);
     if (dragTimeoutRef.current) {
       clearTimeout(dragTimeoutRef.current);
     }
   }, []);
 
-  // On map load - set up isolated instance with NO external listeners
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
-    
-    // Only listen to user-initiated events (drag, idle)
-    // NO geolocation watchers, NO auto-center logic
     mapInstance.addListener('idle', handleIdle);
     mapInstance.addListener('dragstart', handleDragStart);
     
-    console.log('[MapDestinationPicker] Map loaded - user gesture control only');
+    // Initialize places service
+    const dummyDiv = document.createElement('div');
+    placesService.current = new google.maps.places.PlacesService(dummyDiv);
   }, [handleIdle, handleDragStart]);
 
   const onUnmount = useCallback(() => {
@@ -165,43 +215,19 @@ export function MapDestinationPicker({
     setMap(null);
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (dragTimeoutRef.current) {
-        clearTimeout(dragTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const handleConfirm = useCallback(async () => {
-    if (isConfirming || !mapCenter) return;
+    if (isConfirming || !mapCenter || !resolvedAddress) return;
     
     setIsConfirming(true);
     
-    try {
-      // Reverse geocode the selected location
-      const geocoder = new google.maps.Geocoder();
-      const response = await geocoder.geocode({ location: mapCenter });
-      const address = response.results[0]?.formatted_address || `${mapCenter.lat.toFixed(6)}, ${mapCenter.lng.toFixed(6)}`;
-      
-      onConfirm({
-        lat: mapCenter.lat,
-        lng: mapCenter.lng,
-        address,
-      });
-    } catch (error) {
-      console.error('[MapDestinationPicker] Geocode error:', error);
-      // Fallback to coords as address
-      onConfirm({
-        lat: mapCenter.lat,
-        lng: mapCenter.lng,
-        address: `${mapCenter.lat.toFixed(6)}, ${mapCenter.lng.toFixed(6)}`,
-      });
-    } finally {
-      setIsConfirming(false);
-    }
-  }, [mapCenter, onConfirm, isConfirming]);
+    onConfirm({
+      lat: mapCenter.lat,
+      lng: mapCenter.lng,
+      address: resolvedAddress,
+    });
+    
+    setIsConfirming(false);
+  }, [mapCenter, resolvedAddress, onConfirm, isConfirming]);
 
   const handleRecenter = useCallback(() => {
     if (!map || !navigator.geolocation) return;
@@ -226,51 +252,33 @@ export function MapDestinationPicker({
     map.setZoom((map.getZoom() || 15) - 1);
   }, [map]);
 
-  // State for resolved address
-  const [resolvedAddress, setResolvedAddress] = useState<string>('');
-  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
-  const geocodeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSelectPrediction = useCallback((prediction: google.maps.places.AutocompletePrediction) => {
+    if (!placesService.current || !map) return;
 
-  // Initialize geocoder
-  useEffect(() => {
-    if (isLoaded && !geocoderRef.current) {
-      geocoderRef.current = new google.maps.Geocoder();
-    }
-  }, [isLoaded]);
-
-  // Reverse geocode on map center change (debounced)
-  useEffect(() => {
-    if (!geocoderRef.current || !mapCenter) return;
-
-    if (geocodeTimeoutRef.current) {
-      clearTimeout(geocodeTimeoutRef.current);
-    }
-
-    geocodeTimeoutRef.current = setTimeout(async () => {
-      try {
-        const response = await geocoderRef.current!.geocode({ location: mapCenter });
-        if (response.results[0]) {
-          setResolvedAddress(response.results[0].formatted_address);
+    placesService.current.getDetails(
+      { placeId: prediction.place_id, fields: ['geometry', 'formatted_address'] },
+      (place, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
+          const newCenter = {
+            lat: place.geometry.location.lat(),
+            lng: place.geometry.location.lng(),
+          };
+          map.panTo(newCenter);
+          setMapCenter(newCenter);
+          setResolvedAddress(place.formatted_address || prediction.description);
         }
-      } catch (error) {
-        console.error('[MapDestinationPicker] Geocode error:', error);
+        setShowPredictions(false);
+        setSearchValue('');
+        inputRef.current?.blur();
       }
-    }, 300);
+    );
+  }, [map]);
 
-    return () => {
-      if (geocodeTimeoutRef.current) {
-        clearTimeout(geocodeTimeoutRef.current);
-      }
-    };
-  }, [mapCenter]);
-
-  // Render as portal to ensure maximum z-index
   const overlayContent = (
     <div 
       className="fixed inset-0 z-[9999] bg-background flex flex-col"
       style={{ touchAction: 'none' }}
     >
-      {/* Loading state */}
       {loadError && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center p-6">
@@ -291,7 +299,7 @@ export function MapDestinationPicker({
 
       {isLoaded && !loadError && (
         <>
-          {/* Fullscreen Map - CAMERA LOCK: center uses static ref, NOT props */}
+          {/* Fullscreen Map */}
           <div className="flex-1 relative">
             <GoogleMap
               mapContainerStyle={mapContainerStyle}
@@ -302,7 +310,7 @@ export function MapDestinationPicker({
               options={mapOptions}
             />
             
-            {/* Fixed center pin - always at map center */}
+            {/* Fixed center pin */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none z-10">
               <div className={cn(
                 "transition-transform duration-150",
@@ -316,38 +324,80 @@ export function MapDestinationPicker({
                   />
                 </div>
               </div>
-              {/* Shadow under pin */}
               <div className={cn(
                 "absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-2 w-6 h-2 bg-black/30 rounded-full blur-sm transition-all duration-150",
                 isDragging ? "w-4 h-1.5 opacity-50" : "w-6 h-2 opacity-100"
               )} />
             </div>
 
-            {/* Instructional overlay - centered above pin */}
+            {/* Instructional overlay */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[calc(100%+4rem)] pointer-events-none z-10">
               <div className={cn(
                 "bg-foreground/90 text-background px-4 py-2 rounded-full shadow-lg transition-opacity duration-200",
-                isDragging ? "opacity-0" : "opacity-100"
+                isDragging || showPredictions ? "opacity-0" : "opacity-100"
               )}>
-                <p className="text-sm font-medium whitespace-nowrap">Arraste o mapa para ajustar</p>
+                <p className="text-sm font-medium whitespace-nowrap">Arraste o mapa para marcar o local do veículo</p>
               </div>
             </div>
 
-            {/* Top safe area - Back button only */}
+            {/* Top safe area - Back button + Search */}
             <div className="absolute top-0 left-0 right-0 z-20 pt-[env(safe-area-inset-top)] px-4">
               <div className="flex items-center gap-3 pt-3">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={onCancel}
-                  className="h-12 w-12 rounded-full bg-card shadow-lg hover:bg-card/90"
+                  className="h-12 w-12 rounded-full bg-card shadow-lg hover:bg-card/90 flex-shrink-0"
                 >
                   <ArrowLeft className="w-6 h-6" />
                 </Button>
+                
+                {/* Search input */}
+                <div className="flex-1 relative">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-card rounded-xl shadow-lg">
+                    <Search className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={searchValue}
+                      onChange={(e) => {
+                        setSearchValue(e.target.value);
+                        setShowPredictions(true);
+                      }}
+                      onFocus={() => setShowPredictions(true)}
+                      placeholder="Buscar endereço ou ponto de referência"
+                      className="flex-1 bg-transparent text-sm font-medium focus:outline-none placeholder:text-muted-foreground"
+                      autoComplete="off"
+                    />
+                  </div>
+                  
+                  {/* Predictions dropdown */}
+                  {showPredictions && predictions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-card rounded-xl shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+                      {predictions.map((prediction) => (
+                        <button
+                          key={prediction.place_id}
+                          onClick={() => handleSelectPrediction(prediction)}
+                          className="w-full flex items-start gap-3 p-3 hover:bg-secondary transition-colors text-left border-b border-border last:border-b-0"
+                        >
+                          <MapPin className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {prediction.structured_formatting.main_text}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {prediction.structured_formatting.secondary_text}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Right side controls - Zoom + Recenter */}
+            {/* Right side controls */}
             <div className="absolute right-4 bottom-[180px] z-20 flex flex-col gap-2">
               <Button
                 variant="secondary"
@@ -379,13 +429,12 @@ export function MapDestinationPicker({
 
           {/* Bottom safe area - Address + Confirm button */}
           <div className="bg-card border-t border-border px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-            {/* Resolved address display */}
             <div className="flex items-start gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                 <MapPin className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground mb-0.5">Destino selecionado</p>
+                <p className="text-xs text-muted-foreground mb-0.5">Local do veículo</p>
                 <p className="text-sm font-medium text-foreground line-clamp-2">
                   {resolvedAddress || 'Movendo mapa...'}
                 </p>
@@ -406,7 +455,7 @@ export function MapDestinationPicker({
               ) : (
                 <>
                   <Check className="w-5 h-5 mr-2" />
-                  Confirmar destino
+                  Confirmar local do veículo
                 </>
               )}
             </Button>
@@ -416,8 +465,7 @@ export function MapDestinationPicker({
     </div>
   );
 
-  // Use portal to render at document root level, above everything
   return createPortal(overlayContent, document.body);
 }
 
-export { MapDestinationPicker as default };
+export { OriginMapPicker as default };
