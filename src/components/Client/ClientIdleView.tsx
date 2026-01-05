@@ -15,7 +15,7 @@ import { LocationPermissionModal } from '../Permissions/LocationPermissionModal'
 import { PermissionDeniedBanner } from '../Permissions/PermissionDeniedBanner';
 import { NotificationCTA } from '../Notifications/NotificationCTA';
 import { DestinationBottomSheet } from './DestinationBottomSheet';
-import { OriginSearchFullScreen } from './OriginSearchFullScreen';
+import { OriginMapPicker } from './OriginMapPicker';
 
 const NEARBY_RADIUS_KM = 15;
 
@@ -584,13 +584,17 @@ export function ClientIdleView() {
         originLocation={origem || userLocation}
       />
 
-      {/* Origin Full Screen Search */}
-      <OriginSearchFullScreen
-        open={originSearchOpen}
-        onClose={() => setOriginSearchOpen(false)}
-        onSelect={handleOrigemSelect}
-        initialValue={origemText}
-      />
+      {/* Origin Map Picker - Uber-style */}
+      {originSearchOpen && (
+        <OriginMapPicker
+          initialCenter={origem || userLocation}
+          onConfirm={(location) => {
+            handleOrigemSelect(location);
+            setOriginSearchOpen(false);
+          }}
+          onCancel={() => setOriginSearchOpen(false)}
+        />
+      )}
 
     </div>
     </>
