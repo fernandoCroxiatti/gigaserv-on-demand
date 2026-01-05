@@ -27,8 +27,7 @@ export function VehicleTypeSelector({ value, onChange }: VehicleTypeSelectorProp
   }, [value]);
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tipo de veículo</p>
+    <div>
       <div 
         ref={scrollRef}
         className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide snap-x snap-mandatory"
