@@ -145,6 +145,8 @@ export type Database = {
       }
       chamados: {
         Row: {
+          auto_finish_reason: string | null
+          auto_finished_at: string | null
           cancellation_category: string | null
           cancellation_reason: string | null
           cancelled_at: string | null
@@ -191,6 +193,8 @@ export type Database = {
           vehicle_type: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Insert: {
+          auto_finish_reason?: string | null
+          auto_finished_at?: string | null
           cancellation_category?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
@@ -237,6 +241,8 @@ export type Database = {
           vehicle_type?: Database["public"]["Enums"]["vehicle_type"] | null
         }
         Update: {
+          auto_finish_reason?: string | null
+          auto_finished_at?: string | null
           cancellation_category?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
