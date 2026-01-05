@@ -80,16 +80,20 @@ export async function toggleProviderOnline(
   userId: string,
   online: boolean,
   location?: Location
-): Promise<{ success: boolean; error?: string }> {
+): Promise<boolean> {
   try {
-    // Verify session is valid before calling edge function
-    const { data: session } = await supabase.auth.getSession();
-    if (!session?.session) {
+    // Ensure we have a valid session/token so the backend can authenticate
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) {
       console.error('[ProviderService] No active session');
-      return { success: false, error: 'Sessão expirada. Faça login novamente.' };
+      return false;
     }
 
     const { data, error } = await supabase.functions.invoke('toggle-provider-online', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: {
         online,
         location: location ? {
@@ -102,13 +106,12 @@ export async function toggleProviderOnline(
 
     if (error) {
       console.error('[ProviderService] Toggle error:', error);
-      return { success: false, error: 'Erro ao alterar status. Tente novamente.' };
+      return false;
     }
 
-    // Check for error in response body
     if (data?.error) {
       console.error('[ProviderService] Toggle response error:', data.error);
-      return { success: false, error: data.error };
+      return false;
     }
 
     // Persist active_profile when going online
@@ -119,10 +122,10 @@ export async function toggleProviderOnline(
         .eq('user_id', userId);
     }
 
-    return { success: true };
+    return true;
   } catch (err) {
     console.error('[ProviderService] Toggle exception:', err);
-    return { success: false, error: 'Erro inesperado. Tente novamente.' };
+    return false;
   }
 }
 

@@ -1182,15 +1182,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         hasLocation: !!(providerData.current_lat && providerData.current_lng)
       });
 
-      // Verify session is valid before calling edge function
       const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData?.session) {
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
         console.error('[ToggleOnline] No active session');
         toast.error('Sessão expirada. Faça login novamente.');
         return;
       }
 
       const { data, error } = await supabase.functions.invoke('toggle-provider-online', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: {
           online: newStatus,
           location: providerData.current_lat && providerData.current_lng ? {
