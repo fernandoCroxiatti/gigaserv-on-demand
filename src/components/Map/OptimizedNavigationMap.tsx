@@ -13,8 +13,6 @@ interface OptimizedNavigationMapProps {
   className?: string;
   followProvider?: boolean;
   providerHeading?: number | null;
-  /** Enable 3D tilt view for navigation */
-  enable3DTilt?: boolean;
   /** Show re-center button when user interacts */
   showRecenterButton?: boolean;
 }
@@ -154,7 +152,6 @@ const dayModeStyles: google.maps.MapTypeStyle[] = [
 // Animation constants
 const ROTATION_LERP_FACTOR = 0.12;
 const POSITION_LERP_FACTOR = 0.15;
-const MAP_ROTATION_LERP_FACTOR = 0.08;
 
 /**
  * Calculate bearing between two points in degrees
@@ -240,7 +237,6 @@ export function OptimizedNavigationMap({
   className = '',
   followProvider = true,
   providerHeading = null,
-  enable3DTilt = true,
   showRecenterButton = true,
 }: OptimizedNavigationMapProps) {
   const { isLoaded, loadError } = useGoogleMaps();
@@ -251,7 +247,6 @@ export function OptimizedNavigationMap({
   // Smooth rotation and position state
   const [smoothRotation, setSmoothRotation] = useState(0);
   const [smoothPosition, setSmoothPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [mapHeading, setMapHeading] = useState(0);
   
   // Refs for animation
   const lastLocationRef = useRef<Location | null>(null);
@@ -259,8 +254,6 @@ export function OptimizedNavigationMap({
   const currentRotationRef = useRef(0);
   const targetPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const currentPositionRef = useRef<{ lat: number; lng: number } | null>(null);
-  const targetMapHeadingRef = useRef(0);
-  const currentMapHeadingRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
 
   // Decode polyline only when it changes
@@ -274,7 +267,7 @@ export function OptimizedNavigationMap({
     }
   }, [routePolyline]);
 
-  // Get map options based on mode
+  // Get map options based on mode - FIXED: north always up, no rotation, no tilt
   const mapOptions = useMemo((): google.maps.MapOptions => ({
     disableDefaultUI: true,
     zoomControl: false,
@@ -285,11 +278,13 @@ export function OptimizedNavigationMap({
     // Allow gestures but track interaction
     gestureHandling: 'greedy',
     styles: isNightTime() ? nightModeStyles : dayModeStyles,
-    // Enable 3D tilt for navigation view
-    tilt: enable3DTilt && followProvider ? 60 : 0,
-    // Start with north up, will rotate with heading
+    // FIXED: No tilt - flat map view for stability
+    tilt: 0,
+    // FIXED: North always up - no map rotation
     heading: 0,
-  }), [enable3DTilt, followProvider]);
+    // Disable rotation gesture
+    rotateControl: false,
+  }), []);
 
   // Update targets when provider location/heading changes
   useEffect(() => {
@@ -325,7 +320,6 @@ export function OptimizedNavigationMap({
     }
     
     targetRotationRef.current = newTargetRotation;
-    targetMapHeadingRef.current = newTargetRotation;
     lastLocationRef.current = providerLocation;
   }, [providerLocation, providerHeading]);
 
@@ -363,17 +357,7 @@ export function OptimizedNavigationMap({
         }
       }
       
-      // Smooth map heading rotation (for navigation mode)
-      if (followProvider && !isUserInteracting) {
-        const currentMapHead = currentMapHeadingRef.current;
-        const targetMapHead = targetMapHeadingRef.current;
-        const newMapHeading = lerpAngle(currentMapHead, targetMapHead, MAP_ROTATION_LERP_FACTOR);
-        currentMapHeadingRef.current = newMapHeading;
-        
-        if (Math.abs(newMapHeading - mapHeading) > 0.5) {
-          setMapHeading(newMapHeading);
-        }
-      }
+      // FIXED: No map rotation - marker rotates, map stays north-up
       
       animationFrameRef.current = requestAnimationFrame(animate);
     };
@@ -385,9 +369,9 @@ export function OptimizedNavigationMap({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [smoothRotation, followProvider, isUserInteracting, mapHeading]);
+  }, [smoothRotation]);
 
-  // Update map camera smoothly
+  // Update map camera smoothly - FIXED: no rotation, just pan
   useEffect(() => {
     if (!map || !smoothPosition || isUserInteracting) return;
     
@@ -395,16 +379,25 @@ export function OptimizedNavigationMap({
       // Smooth pan to position
       map.panTo(smoothPosition);
       
-      // Rotate map to heading (road ahead always up)
-      map.setHeading(mapHeading);
+      // FIXED: Ensure heading stays at 0 (north up)
+      const currentHeading = map.getHeading();
+      if (currentHeading !== 0) {
+        map.setHeading(0);
+      }
       
-      // Set appropriate zoom for navigation
+      // FIXED: Ensure tilt stays at 0 (flat view)
+      const currentTilt = map.getTilt();
+      if (currentTilt !== 0) {
+        map.setTilt(0);
+      }
+      
+      // Set appropriate zoom for navigation (fixed level)
       const currentZoom = map.getZoom();
       if (currentZoom && currentZoom < 17) {
         map.setZoom(17);
       }
     }
-  }, [map, smoothPosition, followProvider, mapHeading, isUserInteracting]);
+  }, [map, smoothPosition, followProvider, isUserInteracting]);
 
   // Handle re-center button click
   const handleRecenter = useCallback(() => {
