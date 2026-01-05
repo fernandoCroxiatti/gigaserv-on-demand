@@ -9,6 +9,7 @@ import { useAdmin } from "./hooks/useAdmin";
 import { NotificationProvider } from "./components/Notifications/NotificationProvider";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 import { SafeSplashScreen } from "./components/SafeSplashScreen";
+import { AnimatedSplashScreen } from "./components/AnimatedSplashScreen";
 import { ProfileSelectionScreen } from "./components/ProfileSelectionScreen";
 import { useSafeInitialization } from "./hooks/useSafeInitialization";
 import { useAudioUnlock } from "./hooks/useAudioUnlock";
@@ -251,6 +252,7 @@ function AppRoutes() {
  */
 function SafeAppWrapper() {
   const {
+    isAnimatedSplashPhase,
     isSplashPhase,
     isProfileSelectPhase,
     isAuthCheckPhase,
@@ -258,6 +260,7 @@ function SafeAppWrapper() {
     selectProfile,
     markReady,
     selectedProfile,
+    onAnimatedSplashComplete,
   } = useSafeInitialization();
 
   const { loading: authLoading } = useAuth();
@@ -269,7 +272,12 @@ function SafeAppWrapper() {
     }
   }, [isAuthCheckPhase, authLoading, markReady]);
 
-  // Phase 1: Static splash screen
+  // Phase 0: Animated splash screen
+  if (isAnimatedSplashPhase) {
+    return <AnimatedSplashScreen onComplete={onAnimatedSplashComplete} />;
+  }
+
+  // Phase 1: Static splash screen (fallback during transitions)
   if (isSplashPhase) {
     return <SafeSplashScreen />;
   }
