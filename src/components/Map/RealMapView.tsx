@@ -1,13 +1,11 @@
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
-import { GoogleMap, Marker, DirectionsRenderer, Circle, Polyline } from '@react-google-maps/api';
+import { GoogleMap, Marker, DirectionsRenderer, Circle } from '@react-google-maps/api';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { Location, ServiceType } from '@/types/chamado';
-import { Loader2, AlertCircle, Navigation2, MapPin, Car } from 'lucide-react';
+import { Loader2, AlertCircle, Navigation2 } from 'lucide-react';
 import { ProviderMarkers } from './ProviderMarkers';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
-import { useRideTracking } from '@/hooks/useRideTracking';
-import { RideInfoPanel } from './RideInfoPanel';
 
 export interface MapProvider {
   id: string;
@@ -39,14 +37,6 @@ export interface MapProvider {
  *                 Has 8s auto-return timer after user interaction (intentional for navigation UX).
  *                 Used by: ProviderInServiceView, ClientInServiceView
  * 
- * ACTIVE RIDE MODE:
- * When a ride is active (detected by useRideTracking hook), the map automatically:
- * - Provider: Uses watchPosition() for real-time GPS tracking
- * - Client: Fetches provider location every 5 seconds from database
- * - Shows RideInfoPanel with time, distance, addresses, price
- * - Auto-follows the relevant position (provider location for both modes)
- * - Uses zoom level 16 for navigation
- * 
  * DESTINATION PICKER ISOLATION:
  * MapDestinationPicker creates a completely INDEPENDENT map instance via portal.
  * It ignores ALL external state, modes, and GPS-driven camera updates.
@@ -73,8 +63,6 @@ interface RealMapViewProps {
   onUserInteraction?: () => void;
   /** Show recenter button when in free mode */
   showRecenterButton?: boolean;
-  /** Disable ride tracking overlay (e.g., for destination picker) */
-  disableRideTracking?: boolean;
 }
 
 const mapContainerStyle = {
@@ -119,20 +107,6 @@ function getZoomForRadius(radiusKm: number): number {
   return 7;
 }
 
-// Car icon SVG for provider marker during active ride
-const CAR_ICON_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#1DB954" width="32" height="32">
-  <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
-</svg>
-`;
-
-// Person icon for client marker
-const PERSON_ICON_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#EF4444" width="28" height="28">
-  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-</svg>
-`;
-
 export function RealMapView({
   center,
   origem,
@@ -149,12 +123,10 @@ export function RealMapView({
   mode = 'free',
   onUserInteraction,
   showRecenterButton = true,
-  disableRideTracking = false,
 }: RealMapViewProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [rideDirections, setRideDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [userLocation, setUserLocation] = useState<Location | null>(null);
   
   // Track user interaction state for map centering - NO TIMERS
@@ -164,49 +136,30 @@ export function RealMapView({
   // Track if initial center was set
   const initialCenterSetRef = useRef(false);
 
-  // Ride tracking hook for automatic detection and tracking
-  const rideTracking = useRideTracking({
-    statusPollingInterval: 10000,
-    locationUpdateInterval: 5000,
-  });
-
-  // Previous provider location for smooth marker animation
-  const prevProviderLocationRef = useRef<Location | null>(null);
-
-  // Determine if we should show ride tracking overlay
-  const showRideOverlay = !disableRideTracking && rideTracking.isActiveRide;
-
-  // Calculate dynamic zoom based on search radius or ride mode
+  // Calculate dynamic zoom based on search radius
   const effectiveZoom = useMemo(() => {
-    // Use zoom 16 during active ride
-    if (showRideOverlay) return 16;
     if (zoom !== undefined) return zoom;
     if (showSearchRadius) return getZoomForRadius(searchRadius);
     return 15;
-  }, [zoom, showSearchRadius, searchRadius, showRideOverlay]);
+  }, [zoom, showSearchRadius, searchRadius]);
 
-  // Track if user has manually dragged the map
-  const hasUserDraggedRef = useRef(false);
-  
   /**
-   * GPS Location - SINGLE getCurrentPosition on mount ONLY
+   * GPS Location Updates - MARKER ONLY
    * 
-   * - Uses getCurrentPosition ONCE on initial load
-   * - NO watchPosition - map never moves automatically after load
-   * - User must click "Minha Localização" button to recenter
-   * - After user drags, map NEVER auto-centers
+   * This effect updates the user's MARKER position continuously.
+   * It does NOT move the map camera - that's controlled by mode and auto-follow logic.
    * 
-   * EXCEPTION: During active ride, tracking is handled by useRideTracking hook
+   * Separation principle:
+   * - userLocation state = marker position (always updated by GPS)
+   * - map.panTo = camera movement (only in follow/navigation mode, or explicit recenter)
    */
   useEffect(() => {
-    // Skip if ride tracking is active (it handles GPS)
-    if (showRideOverlay) return;
-    
     if (!showUserLocation || !navigator.geolocation) return;
     
-    // Get position ONCE on mount - with battery-saving options
-    navigator.geolocation.getCurrentPosition(
+    // Watch position for continuous marker updates
+    const watchId = navigator.geolocation.watchPosition(
       (position) => {
+        // Update marker position state - camera movement handled separately
         setUserLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
@@ -214,17 +167,13 @@ export function RealMapView({
         });
       },
       (error) => console.error('Geolocation error:', error),
-      { 
-        enableHighAccuracy: false, 
-        maximumAge: 30000, // Use cached position up to 30 seconds old
-        timeout: 10000 
-      }
+      { enableHighAccuracy: true, maximumAge: 5000 }
     );
     
-    // NO watchPosition - no automatic updates
-  }, [showUserLocation, showRideOverlay]);
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [showUserLocation]);
 
-  // Calculate route for regular mode
+  // Calculate route - unchanged
   useEffect(() => {
     if (!showRoute || !origem || !destino || !isLoaded) {
       setDirections(null);
@@ -248,92 +197,17 @@ export function RealMapView({
     );
   }, [showRoute, origem, destino, isLoaded]);
 
-  // Calculate route during active ride (provider -> client or current -> destination)
-  useEffect(() => {
-    if (!showRideOverlay || !isLoaded) {
-      setRideDirections(null);
-      return;
-    }
-
-    const providerLoc = rideTracking.providerLocation;
-    const clientLoc = rideTracking.clientLocation;
-    const destLoc = rideTracking.destinationLocation;
-
-    // Determine route endpoints based on mode and ride state
-    let routeOrigin: Location | null = null;
-    let routeDestination: Location | null = null;
-
-    if (rideTracking.mode === 'provider' && providerLoc) {
-      // Provider: show route to client (or destination if already at client)
-      routeOrigin = providerLoc;
-      routeDestination = destLoc || clientLoc;
-    } else if (rideTracking.mode === 'client' && providerLoc) {
-      // Client: show route from provider to client location
-      routeOrigin = providerLoc;
-      routeDestination = destLoc || clientLoc;
-    }
-
-    if (!routeOrigin || !routeDestination) {
-      setRideDirections(null);
-      return;
-    }
-
-    const directionsService = new google.maps.DirectionsService();
-    directionsService.route(
-      {
-        origin: { lat: routeOrigin.lat, lng: routeOrigin.lng },
-        destination: { lat: routeDestination.lat, lng: routeDestination.lng },
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK && result) {
-          setRideDirections(result);
-        } else {
-          console.error('Ride directions request failed:', status);
-          setRideDirections(null);
-        }
-      }
-    );
-  }, [
-    showRideOverlay,
-    isLoaded,
-    rideTracking.providerLocation?.lat,
-    rideTracking.providerLocation?.lng,
-    rideTracking.clientLocation?.lat,
-    rideTracking.clientLocation?.lng,
-    rideTracking.destinationLocation?.lat,
-    rideTracking.destinationLocation?.lng,
-    rideTracking.mode,
-  ]);
-
-  // Auto-follow provider location during active ride
-  useEffect(() => {
-    if (!showRideOverlay || !map || !rideTracking.providerLocation) return;
-    
-    // During active ride, don't respect user drag - always follow provider
-    // unless user explicitly drags during THIS ride session
-    if (!hasUserDraggedRef.current) {
-      map.panTo({ 
-        lat: rideTracking.providerLocation.lat, 
-        lng: rideTracking.providerLocation.lng 
-      });
-    }
-    
-    // Update previous location for animation
-    prevProviderLocationRef.current = rideTracking.providerLocation;
-  }, [showRideOverlay, map, rideTracking.providerLocation]);
-
-  // Handle user interaction - sets map to free mode permanently
-  // Once user drags, map NEVER auto-centers again (except during active ride refresh)
+  // Handle user interaction - sets map to free mode
+  // NO TIMERS - user must explicitly click recenter to restore follow
   const handleInteractionStart = useCallback(() => {
     setIsUserInteracting(true);
     hasUserInteractedRef.current = true;
-    hasUserDraggedRef.current = true; // Permanent flag - never auto-center after drag
     onUserInteraction?.();
   }, [onUserInteraction]);
 
   const handleInteractionEnd = useCallback(() => {
-    // NO auto-return - user dragged, so map stays where they left it
+    // NO auto-return timer - user must explicitly recenter
+    // This prevents any automatic recentering that could interfere with destination selection
   }, []);
 
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
@@ -352,80 +226,62 @@ export function RealMapView({
     setMap(null);
   }, []);
 
-  // Handle "Minha Localização" button click
-  // Uses getCurrentPosition to get fresh location and center map
-  const handleMyLocation = useCallback(() => {
-    if (!navigator.geolocation || !map) return;
+  // Handle recenter button click - explicit user action to restore follow
+  const handleRecenter = useCallback(() => {
+    setIsUserInteracting(false);
+    hasUserInteractedRef.current = false;
     
-    // Get fresh position with battery-saving options
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const newLocation = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          address: 'Sua localização',
-        };
-        setUserLocation(newLocation);
-        map.panTo({ lat: newLocation.lat, lng: newLocation.lng });
-        
-        // Reset interaction state so button hides
-        setIsUserInteracting(false);
-        hasUserInteractedRef.current = false;
-        hasUserDraggedRef.current = false; // Reset for ride tracking follow
-      },
-      (error) => console.error('Geolocation error:', error),
-      { 
-        enableHighAccuracy: false, 
-        maximumAge: 30000, 
-        timeout: 10000 
-      }
-    );
-  }, [map]);
-
-  // Handle recenter during active ride
-  const handleRideRecenter = useCallback(() => {
-    if (!map) return;
-    
-    if (rideTracking.providerLocation) {
-      map.panTo({
-        lat: rideTracking.providerLocation.lat,
-        lng: rideTracking.providerLocation.lng,
-      });
-      hasUserDraggedRef.current = false; // Reset to re-enable auto-follow
+    // Pan to center
+    if (map && center) {
+      map.panTo({ lat: center.lat, lng: center.lng });
+    } else if (map && userLocation) {
+      map.panTo({ lat: userLocation.lat, lng: userLocation.lng });
     }
-  }, [map, rideTracking.providerLocation]);
+  }, [map, center, userLocation]);
 
   /**
-   * Camera Auto-Follow Logic - SIMPLIFIED for TWA
+   * Camera Auto-Follow Logic - MODE-BASED
    * 
-   * CRITICAL: After user drags, map NEVER auto-centers again.
-   * User must explicitly click "Minha Localização" button.
+   * CRITICAL: This is the ONLY place that moves the map camera based on location.
    * 
    * Rules:
-   * - Set initial center ONCE on mount
-   * - If user has dragged (hasUserDraggedRef), NEVER auto-center
-   * - No watchPosition, no continuous updates
+   * - 'free' mode: Set initial center ONCE, then NEVER auto-center again.
+   *                User must click recenter button to restore follow.
+   * - 'follow' mode: Always auto-center on location updates.
+   * - 'navigation' mode: Auto-center unless user is interacting.
+   *                      (Navigation uses OptimizedNavigationMap with its own logic)
    * 
-   * EXCEPTION: During active ride, handled by separate effect above
+   * NOTE: MapDestinationPicker is COMPLETELY ISOLATED - it creates its own map
+   * instance and is unaffected by this effect or any mode changes.
    */
   useEffect(() => {
-    if (!map || showRideOverlay) return;
+    if (!map) return;
     
     const targetCenter = center || userLocation;
     if (!targetCenter) return;
     
-    // If user has EVER dragged the map, never auto-center
-    if (hasUserDraggedRef.current) {
+    // FREE MODE: Only set initial center once, never auto-center after
+    if (mode === 'free') {
+      if (!initialCenterSetRef.current) {
+        map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+        initialCenterSetRef.current = true;
+      }
+      // In free mode, GPS updates marker but NEVER moves camera
       return;
     }
     
-    // Only set initial center once
-    if (!initialCenterSetRef.current) {
+    // FOLLOW MODE: Always auto-center
+    if (mode === 'follow' && !isUserInteracting) {
       map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
-      initialCenterSetRef.current = true;
+      return;
     }
-    // NO auto-centering after initial load
-  }, [map, center, userLocation, showRideOverlay]);
+    
+    // NAVIGATION MODE: Auto-center unless user is interacting
+    // Note: Active navigation typically uses OptimizedNavigationMap, not this component
+    if (mode === 'navigation' && !isUserInteracting) {
+      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+    }
+  }, [map, center, userLocation, mode, isUserInteracting]);
 
   const handleMapClick = useCallback(
     async (e: google.maps.MapMouseEvent) => {
@@ -458,26 +314,6 @@ export function RealMapView({
     }));
   }, [providers]);
 
-  // Create car icon for provider marker during active ride
-  const carIcon = useMemo(() => {
-    if (!isLoaded) return undefined;
-    return {
-      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(CAR_ICON_SVG)}`,
-      scaledSize: new google.maps.Size(40, 40),
-      anchor: new google.maps.Point(20, 20),
-    };
-  }, [isLoaded]);
-
-  // Create person icon for client marker
-  const personIcon = useMemo(() => {
-    if (!isLoaded) return undefined;
-    return {
-      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(PERSON_ICON_SVG)}`,
-      scaledSize: new google.maps.Size(32, 32),
-      anchor: new google.maps.Point(16, 16),
-    };
-  }, [isLoaded]);
-
   if (loadError) {
     return (
       <div className={`flex items-center justify-center bg-secondary ${className}`}>
@@ -503,43 +339,17 @@ export function RealMapView({
     );
   }
 
-  // Determine map center based on mode
-  let mapCenter: { lat: number; lng: number };
-  if (showRideOverlay && rideTracking.providerLocation) {
-    mapCenter = { lat: rideTracking.providerLocation.lat, lng: rideTracking.providerLocation.lng };
-  } else if (center) {
-    mapCenter = { lat: center.lat, lng: center.lng };
-  } else if (userLocation) {
-    mapCenter = { lat: userLocation.lat, lng: userLocation.lng };
-  } else {
-    mapCenter = defaultCenter;
-  }
+  const mapCenter = center 
+    ? { lat: center.lat, lng: center.lng }
+    : userLocation 
+      ? { lat: userLocation.lat, lng: userLocation.lng }
+      : defaultCenter;
 
-  // Show "Minha Localização" button only if:
-  // - No active ride OR ride overlay is disabled
-  // - Geolocation is supported
-  // - User has interacted with map
-  const shouldShowMyLocation = !showRideOverlay && showRecenterButton && navigator.geolocation && hasUserDraggedRef.current;
+  // Determine if we should show recenter button
+  const shouldShowRecenter = showRecenterButton && hasUserInteractedRef.current && isUserInteracting && mode !== 'follow';
 
   return (
     <div className={cn("relative", className)}>
-      {/* Ride Info Panel - only during active ride */}
-      {showRideOverlay && (
-        <RideInfoPanel
-          elapsedTime={rideTracking.elapsedTime}
-          distanceTraveled={rideTracking.distanceTraveled}
-          originAddress={rideTracking.originAddress}
-          destinationAddress={rideTracking.destinationAddress}
-          estimatedPrice={rideTracking.estimatedPrice}
-          providerName={rideTracking.providerName}
-          clientName={rideTracking.clientName}
-          mode={rideTracking.mode}
-          rideStatus={rideTracking.rideStatus}
-          lastUpdate={rideTracking.lastUpdate}
-          onRefresh={rideTracking.refreshLocation}
-        />
-      )}
-
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={mapCenter}
@@ -549,8 +359,8 @@ export function RealMapView({
         onClick={handleMapClick}
         options={mapOptions}
       >
-        {/* Search radius circle - synced with slider value (only when no active ride) */}
-        {!showRideOverlay && showSearchRadius && mapCenter && (
+        {/* Search radius circle - synced with slider value */}
+        {showSearchRadius && mapCenter && (
           <Circle
             center={mapCenter}
             radius={searchRadius * 1000}
@@ -565,8 +375,8 @@ export function RealMapView({
           />
         )}
 
-        {/* User location marker - only when no active ride */}
-        {!showRideOverlay && showUserLocation && userLocation && (
+        {/* User location marker - always shows current GPS position */}
+        {showUserLocation && userLocation && (
           <Marker
             position={{ lat: userLocation.lat, lng: userLocation.lng }}
             icon={{
@@ -580,8 +390,8 @@ export function RealMapView({
           />
         )}
 
-        {/* Origin marker - only when no active ride */}
-        {!showRideOverlay && origem && !directions && (
+        {/* Origin marker */}
+        {origem && !directions && (
           <Marker
             position={{ lat: origem.lat, lng: origem.lng }}
             icon={{
@@ -595,8 +405,8 @@ export function RealMapView({
           />
         )}
 
-        {/* Destination marker - only when no active ride */}
-        {!showRideOverlay && destino && !directions && (
+        {/* Destination marker */}
+        {destino && !directions && (
           <Marker
             position={{ lat: destino.lat, lng: destino.lng }}
             icon={{
@@ -610,13 +420,11 @@ export function RealMapView({
           />
         )}
 
-        {/* Provider markers with animation - only when no active ride */}
-        {!showRideOverlay && (
-          <ProviderMarkers providers={providerMarkers} animate={animateProviders} />
-        )}
+        {/* Provider markers with animation */}
+        <ProviderMarkers providers={providerMarkers} animate={animateProviders} />
 
-        {/* Regular route - only when no active ride */}
-        {!showRideOverlay && directions && (
+        {/* Route */}
+        {directions && (
           <DirectionsRenderer
             directions={directions}
             options={{
@@ -629,93 +437,17 @@ export function RealMapView({
             }}
           />
         )}
-
-        {/* ACTIVE RIDE MARKERS AND ROUTE */}
-        {showRideOverlay && (
-          <>
-            {/* Provider marker (car icon) */}
-            {rideTracking.providerLocation && carIcon && (
-              <Marker
-                position={{ 
-                  lat: rideTracking.providerLocation.lat, 
-                  lng: rideTracking.providerLocation.lng 
-                }}
-                icon={carIcon}
-                zIndex={100}
-              />
-            )}
-
-            {/* Client/Origin marker (person icon) */}
-            {rideTracking.clientLocation && personIcon && (
-              <Marker
-                position={{ 
-                  lat: rideTracking.clientLocation.lat, 
-                  lng: rideTracking.clientLocation.lng 
-                }}
-                icon={personIcon}
-                zIndex={90}
-              />
-            )}
-
-            {/* Destination marker */}
-            {rideTracking.destinationLocation && (
-              <Marker
-                position={{ 
-                  lat: rideTracking.destinationLocation.lat, 
-                  lng: rideTracking.destinationLocation.lng 
-                }}
-                icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 12,
-                  fillColor: '#EF4444',
-                  fillOpacity: 1,
-                  strokeColor: '#ffffff',
-                  strokeWeight: 3,
-                }}
-                zIndex={80}
-              />
-            )}
-
-            {/* Route during active ride */}
-            {rideDirections && (
-              <DirectionsRenderer
-                directions={rideDirections}
-                options={{
-                  suppressMarkers: true, // We have our own markers
-                  polylineOptions: {
-                    strokeColor: '#1DB954',
-                    strokeWeight: 6,
-                    strokeOpacity: 0.9,
-                  },
-                }}
-              />
-            )}
-          </>
-        )}
       </GoogleMap>
       
-      {/* "Minha Localização" floating button - bottom right, visible after user drags (no active ride) */}
-      {shouldShowMyLocation && (
+      {/* Recenter button - shows when user has interacted with map */}
+      {shouldShowRecenter && (
         <Button
           variant="secondary"
           size="sm"
-          onClick={handleMyLocation}
-          className="absolute bottom-4 right-4 z-10 bg-card shadow-lg gap-2 px-3 py-2"
+          onClick={handleRecenter}
+          className="absolute bottom-4 right-4 z-10 bg-card shadow-md gap-2"
         >
-          <MapPin className="w-4 h-4 text-primary" />
-          Minha Localização
-        </Button>
-      )}
-
-      {/* Recenter button during active ride - only when user has dragged */}
-      {showRideOverlay && hasUserDraggedRef.current && (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleRideRecenter}
-          className="absolute bottom-4 right-4 z-10 bg-card shadow-lg gap-2 px-3 py-2"
-        >
-          <Navigation2 className="w-4 h-4 text-primary" />
+          <Navigation2 className="w-4 h-4" />
           Centralizar
         </Button>
       )}

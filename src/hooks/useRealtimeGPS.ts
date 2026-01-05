@@ -390,6 +390,11 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
     hasRealFixRef.current = false;
     setState(prev => ({ ...prev, loading: true, error: null, isApproximate: false }));
 
+    // Clear any existing watch
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+    
     // Clear existing timeout
     if (gpsTimeoutRef.current) {
       clearTimeout(gpsTimeoutRef.current);
@@ -403,23 +408,26 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
       }
     }, GPS_FIX_TIMEOUT_MS);
 
-    // Use getCurrentPosition ONCE instead of watchPosition
-    // This prevents automatic map recentering - user must manually refresh
-    navigator.geolocation.getCurrentPosition(
+    // Start continuous tracking with watchPosition - OPTIMIZED for WebView/Capacitor
+    watchIdRef.current = navigator.geolocation.watchPosition(
       handleSuccess,
       handleError,
       {
-        enableHighAccuracy: false, // Battery saving
-        timeout: 10000,
-        maximumAge: 30000, // Use cached position up to 30 seconds old
+        enableHighAccuracy, // Always true for navigation
+        timeout,
+        maximumAge, // Allow some caching for battery optimization
       }
     );
 
-    console.log('[GPS] Got initial position (no continuous tracking)');
-  }, [handleSuccess, handleError, useApproximateLocation]);
+    console.log('[GPS] Started real-time tracking, watchId:', watchIdRef.current);
+  }, [enableHighAccuracy, timeout, maximumAge, handleSuccess, handleError, useApproximateLocation]);
 
   const stopTracking = useCallback(() => {
-    // No more watchId to clear since we use getCurrentPosition
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      console.log('[GPS] Stopped tracking, cleared watchId:', watchIdRef.current);
+      watchIdRef.current = null;
+    }
     if (gpsTimeoutRef.current) {
       clearTimeout(gpsTimeoutRef.current);
       gpsTimeoutRef.current = null;
@@ -428,27 +436,7 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
-    console.log('[GPS] Stopped tracking');
   }, []);
-
-  // Manual refresh function - gets fresh position on demand
-  const refreshLocation = useCallback(() => {
-    if (!navigator.geolocation) return;
-    
-    setState(prev => ({ ...prev, loading: true }));
-    
-    navigator.geolocation.getCurrentPosition(
-      handleSuccess,
-      handleError,
-      {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 30000,
-      }
-    );
-    
-    console.log('[GPS] Manual location refresh requested');
-  }, [handleSuccess, handleError]);
 
   /**
    * Request wake lock to keep screen on during navigation (WebView optimization)
@@ -534,8 +522,7 @@ export function useRealtimeGPS(options: UseRealtimeGPSOptions = {}) {
     ...state,
     startTracking,
     stopTracking,
-    refreshLocation, // Manual refresh function
-    isTracking: false, // No continuous tracking anymore
+    isTracking: watchIdRef.current !== null,
     /** Smoothed position for fluid animation (if enableSmoothing is true) */
     smoothedLocation: smoothedPositionRef.current,
   };
