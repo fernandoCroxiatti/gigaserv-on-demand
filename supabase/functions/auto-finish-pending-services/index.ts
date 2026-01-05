@@ -69,18 +69,38 @@ Deno.serve(async (req) => {
 
           console.log(`[auto-finish] Successfully auto-finished chamado ${chamado.id}`)
           
-          // Create internal notification for the client
+          // Create targeted notifications only for the involved users
           try {
-            await supabase.from('internal_notifications').insert({
-              titulo: 'Serviço Finalizado Automaticamente',
-              texto: `Seu serviço foi finalizado automaticamente após ${AUTO_FINISH_TIMEOUT_MINUTES} minutos sem confirmação. O valor de R$ ${(chamado.valor || 0).toFixed(2)} foi processado normalmente.`,
-              publico: 'clientes',
-              publicada: true,
-              publicada_em: new Date().toISOString(),
-              destaque: false,
-            })
+            const notifications = []
+            
+            // Notification for the specific client
+            if (chamado.cliente_id) {
+              notifications.push({
+                user_id: chamado.cliente_id,
+                notification_type: 'auto_finish',
+                title: 'Serviço Finalizado Automaticamente',
+                body: `Seu serviço foi finalizado automaticamente após ${AUTO_FINISH_TIMEOUT_MINUTES} minutos sem confirmação. O valor de R$ ${(chamado.valor || 0).toFixed(2)} foi processado normalmente.`,
+                data: { chamado_id: chamado.id, type: 'auto_finish_client' },
+              })
+            }
+            
+            // Notification for the specific provider
+            if (chamado.prestador_id) {
+              notifications.push({
+                user_id: chamado.prestador_id,
+                notification_type: 'auto_finish',
+                title: 'Serviço Finalizado Automaticamente',
+                body: `O serviço foi finalizado automaticamente pelo sistema após ${AUTO_FINISH_TIMEOUT_MINUTES} minutos sem confirmação do cliente. Você já pode aceitar novos chamados.`,
+                data: { chamado_id: chamado.id, type: 'auto_finish_provider' },
+              })
+            }
+            
+            if (notifications.length > 0) {
+              await supabase.from('notification_history').insert(notifications)
+              console.log(`[auto-finish] Created ${notifications.length} targeted notifications for chamado ${chamado.id}`)
+            }
           } catch (notifError) {
-            console.warn('[auto-finish] Failed to create notification:', notifError)
+            console.warn('[auto-finish] Failed to create notifications:', notifError)
           }
 
           return { id: chamado.id, success: true }
