@@ -113,25 +113,25 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const lastGpsSignalRef = useRef<number>(Date.now());
   const gpsTimeoutCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
-  // OPTIMIZED: Route deviation detection with strict controls
-  // - 100m deviation threshold
-  // - 2 minute minimum between recalculations
-  // - 5 second confirmation before triggering
-  const { checkDeviation, clearRouteCache, resetRecalculateTimer } = useRouteDeviation({
-    maxDeviationMeters: 100, // Increased from 50m to reduce API calls
-    minTimeOffRoute: 5000, // 5 seconds to confirm deviation
-    minRecalculateInterval: 120000, // 2 MINUTES minimum between recalculations
-    onRecalculateNeeded: useCallback(() => {
-      if (mode === 'provider' && providerGPSLocation && currentDestination) {
-        // Silent recalculation - no toast for auto recalc
-        console.log('[Navigation] Auto-recalculating due to route deviation (controlled)');
-        forceRecalculateRoute(providerGPSLocation, currentDestination, chamado?.id || '', navigationPhase);
-      }
-    }, [mode, forceRecalculateRoute, navigationPhase]),
-  });
+  // Calculated values for current navigation phase
+  // These MUST be defined before hooks that depend on them
+  const hasDestination = chamado?.destino !== null;
+  const isGoingToClient = navigationPhase === 'to_client';
+  const currentDestination = isGoingToClient ? chamado?.origem : chamado?.destino;
+  
+  // Refs for stable callback access (avoids stale closure issues)
+  const currentDestinationRef = useRef(currentDestination);
+  currentDestinationRef.current = currentDestination;
+  
+  const navigationPhaseRef = useRef(navigationPhase);
+  navigationPhaseRef.current = navigationPhase;
+  
+  const chamadoIdRef = useRef(chamado?.id);
+  chamadoIdRef.current = chamado?.id;
 
   // Provider mode: use realtime GPS with throttled updates
   // GPS updates marker position LOCALLY only - no API calls
+  // MUST be declared BEFORE useRouteDeviation that references providerGPSLocation
   const { 
     location: providerGPSLocation, 
     error: gpsError, 
@@ -176,6 +176,32 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       }
     },
   });
+  
+  // Ref for providerGPSLocation for stable callback access
+  const providerGPSLocationRef = useRef(providerGPSLocation);
+  providerGPSLocationRef.current = providerGPSLocation;
+  
+  // OPTIMIZED: Route deviation detection with strict controls
+  // - 100m deviation threshold
+  // - 2 minute minimum between recalculations
+  // - 5 second confirmation before triggering
+  const { checkDeviation, clearRouteCache, resetRecalculateTimer } = useRouteDeviation({
+    maxDeviationMeters: 100, // Increased from 50m to reduce API calls
+    minTimeOffRoute: 5000, // 5 seconds to confirm deviation
+    minRecalculateInterval: 120000, // 2 MINUTES minimum between recalculations
+    onRecalculateNeeded: useCallback(() => {
+      const gpsLoc = providerGPSLocationRef.current;
+      const dest = currentDestinationRef.current;
+      const phase = navigationPhaseRef.current;
+      const id = chamadoIdRef.current;
+      
+      if (mode === 'provider' && gpsLoc && dest) {
+        // Silent recalculation - no toast for auto recalc
+        console.log('[Navigation] Auto-recalculating due to route deviation (controlled)');
+        forceRecalculateRoute(gpsLoc, dest, id || '', phase);
+      }
+    }, [mode, forceRecalculateRoute]),
+  });
 
   // NOTE: GPS timeout useEffect moved after currentDestination declaration
 
@@ -192,22 +218,15 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     ? availableProviders.find(p => p.id === chamado?.prestadorId) 
     : null;
 
-  if (!chamado) return null;
-
   // Valor correto da corrida (preferir valor confirmado; fallback para valor acordado)
   const serviceValue =
-    typeof chamado.valor === 'number' && chamado.valor > 0
+    typeof chamado?.valor === 'number' && chamado.valor > 0
       ? chamado.valor
-      : typeof chamado.valorProposto === 'number' && chamado.valorProposto > 0
+      : typeof chamado?.valorProposto === 'number' && chamado.valorProposto > 0
         ? chamado.valorProposto
         : 0;
 
-  const serviceConfig = SERVICE_CONFIG[chamado.tipoServico];
-  const hasDestination = chamado.destino !== null;
-  const isGoingToClient = navigationPhase === 'to_client';
-
-  // Current destination based on phase
-  const currentDestination = isGoingToClient ? chamado.origem : chamado.destino;
+  const serviceConfig = chamado ? SERVICE_CONFIG[chamado.tipoServico] : null;
 
   // GPS timeout detection - recalculate if GPS unavailable for 30+ seconds
   useEffect(() => {
@@ -234,7 +253,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   // Use navigation instructions hook for turn-by-turn and status
   const navigationState = useNavigationInstructions({
     providerLocation,
-    destination: currentDestination,
+    destination: currentDestination || undefined,
     phase: navigationPhase,
     isProvider: mode === 'provider',
   });
@@ -250,6 +269,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
   // Track last phase to detect changes (avoid stale closure issues)
   const lastReceivedPhaseRef = useRef<string>(navigationPhase);
+
+  // Note: Early return moved to after ALL hooks (React rules)
   
   // Sync ref and persist phase to local storage when it changes (fallback for reload recovery)
   useEffect(() => {
@@ -265,6 +286,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   // Load navigation state from database on mount (ONCE)
   // FALLBACK: Check local storage first for phase recovery after unexpected reload
   useEffect(() => {
+    if (!chamado?.id) return;
+    
     const loadNavigationState = async () => {
       // Check local storage for cached phase (fallback for reload recovery)
       const storageKey = `${PHASE_STORAGE_KEY_PREFIX}${chamado.id}`;
@@ -325,11 +348,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     };
 
     loadNavigationState();
-  }, [chamado.id]);
+  }, [chamado?.id]);
   
   // Subscribe to navigation updates (for syncing between client and provider)
   // CRITICAL: Client must update route data when provider changes phase (especially guincho 2nd phase)
   useEffect(() => {
+    if (!chamado?.id) return;
+    
     const channel = supabase
       .channel(`navigation-${chamado.id}`)
       .on(
@@ -398,12 +423,13 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chamado.id, mode]); // Removed navigationPhase to avoid recreating channel on phase change
+  }, [chamado?.id, mode]); // Removed navigationPhase to avoid recreating channel on phase change
 
   // Calculate route ONCE when phase changes (provider only)
   // CRITICAL: For guincho, must recalculate when changing from to_client to to_destination
   useEffect(() => {
     if (mode !== 'provider') return;
+    if (!chamado?.id) return;
     if (!providerLocation || !currentDestination) return;
     
     const routeKey = `${chamado.id}-${navigationPhase}`;
@@ -447,7 +473,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
     };
 
     doCalculateRoute();
-  }, [mode, navigationPhase, chamado.id, !!providerLocation, !!currentDestination]);
+  }, [mode, navigationPhase, chamado?.id, !!providerLocation, !!currentDestination]);
 
   // Update route data when routeData changes
   useEffect(() => {
@@ -497,6 +523,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   }, [chatMessages.length]);
 
   const handleConfirmArrival = async () => {
+    if (!chamado) return;
+    
     setShowArrivalDialog(false);
     setIsConfirming(true);
 
@@ -578,6 +606,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
 
   // When provider confirms they received direct payment
   const handleConfirmDirectPayment = async () => {
+    if (!chamado) return;
+    
     setShowDirectPaymentDialog(false);
     setIsConfirming(true);
 
@@ -646,6 +676,8 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   };
 
   const handleFinishService = async () => {
+    if (!chamado) return;
+    
     setShowFinishDialog(false);
     setIsConfirming(true);
 
@@ -671,6 +703,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   };
 
   const handleManualRecalculate = useCallback(async () => {
+    if (!chamado) return;
     if (!providerLocation || !currentDestination) {
       toast.error('Localização não disponível');
       return;
@@ -697,7 +730,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
       routeCalculatedRef.current = `${chamado.id}-${navigationPhase}`;
       toast.success('Rota atualizada!');
     }
-  }, [providerLocation, currentDestination, chamado.id, navigationPhase, forceRecalculateRoute, resetRecalculateTimer, clearRouteCache]);
+  }, [providerLocation, currentDestination, chamado?.id, navigationPhase, forceRecalculateRoute, resetRecalculateTimer, clearRouteCache]);
 
   // Format helpers
   function formatDistance(meters: number): string {
@@ -778,7 +811,7 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
             distance={remainingDistance.remainingDistanceText || distance || navigationState.distance}
             progress={remainingDistance.progress || navigationState.progress}
             phase={navigationPhase}
-            serviceType={chamado.tipoServico}
+            serviceType={chamado?.tipoServico || 'guincho'}
             providerName={provider?.name}
           />
         )}
