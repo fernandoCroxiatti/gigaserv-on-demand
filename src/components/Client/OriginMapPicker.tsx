@@ -171,42 +171,44 @@ export function OriginMapPicker({
     };
   }, [searchValue]);
 
-  const handleIdle = useCallback(() => {
-    if (!map || !isActiveRef.current) return;
-    
-    const center = map.getCenter();
-    if (center) {
-      setMapCenter({ lat: center.lat(), lng: center.lng() });
-    }
-    
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current);
-    }
-    dragTimeoutRef.current = setTimeout(() => {
-      if (isActiveRef.current) {
-        setIsDragging(false);
-      }
-    }, 100);
-  }, [map]);
-
-  const handleDragStart = useCallback(() => {
-    if (!isActiveRef.current) return;
-    setIsDragging(true);
-    setShowPredictions(false);
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current);
-    }
-  }, []);
-
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
-    mapInstance.addListener('idle', handleIdle);
-    mapInstance.addListener('dragstart', handleDragStart);
+    
+    // Trigger initial geocode for starting position
+    const center = mapInstance.getCenter();
+    if (center) {
+      const initialCenter = { lat: center.lat(), lng: center.lng() };
+      console.log('[OriginMapPicker] Initial center:', initialCenter);
+      setMapCenter(initialCenter);
+    }
+    
+    // Listen to idle event for center updates
+    mapInstance.addListener('idle', () => {
+      if (!isActiveRef.current) return;
+      const c = mapInstance.getCenter();
+      if (c) {
+        const newCenter = { lat: c.lat(), lng: c.lng() };
+        console.log('[OriginMapPicker] Map idle - center:', newCenter);
+        setMapCenter(newCenter);
+        
+        if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+        dragTimeoutRef.current = setTimeout(() => {
+          if (isActiveRef.current) setIsDragging(false);
+        }, 100);
+      }
+    });
+    
+    mapInstance.addListener('dragstart', () => {
+      if (!isActiveRef.current) return;
+      setIsDragging(true);
+      setShowPredictions(false);
+      if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+    });
     
     // Initialize places service
     const dummyDiv = document.createElement('div');
     placesService.current = new google.maps.places.PlacesService(dummyDiv);
-  }, [handleIdle, handleDragStart]);
+  }, []);
 
   const onUnmount = useCallback(() => {
     if (dragTimeoutRef.current) {

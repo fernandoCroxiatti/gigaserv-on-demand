@@ -118,45 +118,44 @@ export function MapDestinationPicker({
     };
   }, []);
 
-  // Update center when map is idle (after drag/zoom) - ONLY from user gestures
-  const handleIdle = useCallback(() => {
-    if (!map || !isActiveRef.current) return;
-    
-    const center = map.getCenter();
-    if (center) {
-      setMapCenter({ lat: center.lat(), lng: center.lng() });
-    }
-    
-    // End dragging state after small delay
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current);
-    }
-    dragTimeoutRef.current = setTimeout(() => {
-      if (isActiveRef.current) {
-        setIsDragging(false);
-      }
-    }, 100);
-  }, [map]);
-
-  const handleDragStart = useCallback(() => {
-    if (!isActiveRef.current) return;
-    setIsDragging(true);
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current);
-    }
-  }, []);
-
   // On map load - set up isolated instance with NO external listeners
   const onLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
     
+    // Trigger initial geocode for starting position
+    const center = mapInstance.getCenter();
+    if (center) {
+      const initialCenter = { lat: center.lat(), lng: center.lng() };
+      console.log('[MapDestinationPicker] Initial center:', initialCenter);
+      setMapCenter(initialCenter);
+    }
+    
     // Only listen to user-initiated events (drag, idle)
     // NO geolocation watchers, NO auto-center logic
-    mapInstance.addListener('idle', handleIdle);
-    mapInstance.addListener('dragstart', handleDragStart);
+    mapInstance.addListener('idle', () => {
+      if (!isActiveRef.current) return;
+      const c = mapInstance.getCenter();
+      if (c) {
+        const newCenter = { lat: c.lat(), lng: c.lng() };
+        console.log('[MapDestinationPicker] Map idle - center:', newCenter);
+        setMapCenter(newCenter);
+        
+        // End dragging state
+        if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+        dragTimeoutRef.current = setTimeout(() => {
+          if (isActiveRef.current) setIsDragging(false);
+        }, 100);
+      }
+    });
+    
+    mapInstance.addListener('dragstart', () => {
+      if (!isActiveRef.current) return;
+      setIsDragging(true);
+      if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+    });
     
     console.log('[MapDestinationPicker] Map loaded - user gesture control only');
-  }, [handleIdle, handleDragStart]);
+  }, []);
 
   const onUnmount = useCallback(() => {
     if (dragTimeoutRef.current) {
