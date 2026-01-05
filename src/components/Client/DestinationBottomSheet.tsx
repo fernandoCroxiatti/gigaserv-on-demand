@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, X, Clock, Loader2, Search, ArrowLeft } from 'lucide-react';
+import { MapPin, X, Clock, Loader2, Search, ArrowLeft, Map } from 'lucide-react';
 import { Location } from '@/types/chamado';
 import { AddressHistoryItem } from '@/hooks/useAddressHistory';
 import { useGoogleMaps } from '../Map/GoogleMapsProvider';
+import { MapDestinationPicker } from '../Map/MapDestinationPicker';
 
 interface DestinationBottomSheetProps {
   open: boolean;
@@ -11,6 +12,8 @@ interface DestinationBottomSheetProps {
   onSelect: (location: Location) => void;
   recentAddresses: AddressHistoryItem[];
   initialValue?: string;
+  /** Current origin location - used to center map picker if no initial destination */
+  originLocation?: Location | null;
 }
 
 /**
@@ -26,6 +29,7 @@ export function DestinationBottomSheet({
   onSelect,
   recentAddresses,
   initialValue = '',
+  originLocation,
 }: DestinationBottomSheetProps) {
   const { isLoaded } = useGoogleMaps();
   const [value, setValue] = useState(initialValue);
@@ -36,6 +40,9 @@ export function DestinationBottomSheet({
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
   const latestRequestId = useRef(0);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  
+  // Map picker state - Uber-style map selection
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   // Initialize Google services
   useEffect(() => {
@@ -170,6 +177,21 @@ export function DestinationBottomSheet({
     inputRef.current?.focus();
   };
 
+  // Handle map picker selection - Uber-style
+  const handleOpenMapPicker = () => {
+    setShowMapPicker(true);
+  };
+
+  const handleMapPickerConfirm = (location: Location) => {
+    setShowMapPicker(false);
+    onSelect(location);
+    onClose();
+  };
+
+  const handleMapPickerCancel = () => {
+    setShowMapPicker(false);
+  };
+
   const showRecent = !value.trim() && recentAddresses.length > 0;
   const showPredictions = predictions.length > 0;
 
@@ -235,6 +257,20 @@ export function DestinationBottomSheet({
                   </button>
                 )}
               </div>
+              
+              {/* Choose on map button - Uber style */}
+              <button
+                onClick={handleOpenMapPicker}
+                className="w-full flex items-center gap-3 p-3 bg-primary/10 rounded-xl hover:bg-primary/20 transition-colors mt-2"
+              >
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <Map className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-primary">Escolher no mapa</p>
+                  <p className="text-xs text-muted-foreground">Arraste para selecionar o local exato</p>
+                </div>
+              </button>
             </div>
 
             {/* Content area - scrollable */}
@@ -309,6 +345,15 @@ export function DestinationBottomSheet({
             </div>
           </motion.div>
         </>
+      )}
+      
+      {/* Map Destination Picker - Uber-style fullscreen map selection */}
+      {showMapPicker && (
+        <MapDestinationPicker
+          initialCenter={originLocation}
+          onConfirm={handleMapPickerConfirm}
+          onCancel={handleMapPickerCancel}
+        />
       )}
     </AnimatePresence>
   );

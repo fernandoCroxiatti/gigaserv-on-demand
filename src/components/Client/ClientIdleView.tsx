@@ -581,6 +581,7 @@ export function ClientIdleView() {
         onSelect={handleDestinoSelect}
         recentAddresses={recentAddresses}
         initialValue={destinoText}
+        originLocation={origem || userLocation}
       />
 
       {/* Origin Full Screen Search */}
