@@ -107,6 +107,11 @@ function mapDbChamadoToChamado(db: DbChamado): Chamado {
     directPaymentReceiptConfirmed: db.direct_payment_receipt_confirmed === true,
     directPaymentConfirmedAt: db.direct_payment_confirmed_at ? new Date(db.direct_payment_confirmed_at) : null,
 
+    // Auto-finish tracking
+    providerFinishRequestedAt: db.provider_finish_requested_at ? new Date(db.provider_finish_requested_at) : null,
+    autoFinishedAt: (db as any).auto_finished_at ? new Date((db as any).auto_finished_at) : null,
+    autoFinishReason: (db as any).auto_finish_reason || null,
+
     createdAt: new Date(db.created_at),
     updatedAt: new Date(db.updated_at),
   };
@@ -365,11 +370,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
               } else if (newStatus === 'pending_client_confirmation') {
                 toast.info('O prestador finalizou o serviço. Por favor, confirme.');
               } else if (newStatus === 'finished') {
-                toast.success('Serviço finalizado!');
+                // Check if it was auto-finished
+                const wasAutoFinished = (payload.new as any).auto_finished_at != null;
+                if (wasAutoFinished) {
+                  toast.info('Serviço finalizado automaticamente pelo sistema.');
+                } else {
+                  toast.success('Serviço finalizado!');
+                }
               }
             } else if (profile?.active_profile === 'provider') {
               if (newStatus === 'finished' && oldStatus === 'pending_client_confirmation') {
-                toast.success('Cliente confirmou a finalização!');
+                // Check if it was auto-finished
+                const wasAutoFinished = (payload.new as any).auto_finished_at != null;
+                if (wasAutoFinished) {
+                  toast.success('Serviço finalizado automaticamente. Você está liberado para novos atendimentos!');
+                } else {
+                  toast.success('Cliente confirmou a finalização!');
+                }
               } else if (newStatus === 'in_service' && oldStatus === 'pending_client_confirmation') {
                 toast.warning('Cliente reportou um problema. Verifique.');
               }

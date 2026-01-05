@@ -123,6 +123,11 @@ export interface Chamado {
   directPaymentReceiptConfirmed?: boolean;
   directPaymentConfirmedAt?: Date | null;
 
+  // Provider finish tracking for auto-finish feature
+  providerFinishRequestedAt?: Date | null;
+  autoFinishedAt?: Date | null;
+  autoFinishReason?: string | null;
+
   createdAt: Date;
   updatedAt: Date;
 }

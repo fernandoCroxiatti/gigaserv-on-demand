@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '../ui/button';
-import { CheckCircle, XCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, AlertTriangle, Clock, Timer } from 'lucide-react';
 import { SERVICE_CONFIG } from '@/types/chamado';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAutoFinishCountdown } from '@/hooks/useAutoFinishCountdown';
+import { useAutoFinishCheck } from '@/hooks/useAutoFinishCheck';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,17 +16,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Progress } from "@/components/ui/progress";
 
 /**
  * Client Pending Confirmation View
  * Shows when the provider has finished the service and is waiting for client confirmation.
  * Client can confirm that the service was completed or report an issue.
+ * Includes a countdown timer showing when the service will be auto-finished.
  */
 export function ClientPendingConfirmationView() {
   const { chamado, confirmServiceFinish, disputeServiceFinish } = useApp();
   const [isConfirming, setIsConfirming] = useState(false);
   const [showDisputeDialog, setShowDisputeDialog] = useState(false);
   const [isDisputing, setIsDisputing] = useState(false);
+
+  const { formattedTime, progressPercent, remainingMinutes, isExpired } = useAutoFinishCountdown(
+    chamado?.providerFinishRequestedAt
+  );
+
+  // Auto-finish check (client-side backup)
+  const handleAutoFinished = useCallback(() => {
+    toast.info('Serviço finalizado automaticamente pelo sistema.');
+  }, []);
+
+  useAutoFinishCheck({
+    chamadoId: chamado?.id,
+    status: chamado?.status,
+    providerFinishRequestedAt: chamado?.providerFinishRequestedAt,
+    onAutoFinished: handleAutoFinished,
+  });
 
   if (!chamado) return null;
 
@@ -61,8 +80,21 @@ export function ClientPendingConfirmationView() {
 
   return (
     <div className="h-full flex flex-col bg-background p-6">
+      {/* Urgent Banner */}
+      <div className="bg-orange-500 text-white rounded-xl p-4 mb-4 animate-pulse">
+        <div className="flex items-center gap-3">
+          <Timer className="w-6 h-6 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-bold text-sm">Confirmação Pendente</p>
+            <p className="text-xs opacity-90">
+              Confirme o serviço para liberar o prestador
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="text-center mb-8 pt-8">
+      <div className="text-center mb-6 pt-4">
         <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <AlertTriangle className="w-10 h-10 text-orange-500" />
         </div>
@@ -72,8 +104,31 @@ export function ClientPendingConfirmationView() {
         </p>
       </div>
 
+      {/* Countdown Timer */}
+      <div className="bg-muted rounded-xl p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-orange-500" />
+            <span className="text-sm font-medium">Tempo restante</span>
+          </div>
+          <span className={`text-xl font-bold tabular-nums ${remainingMinutes <= 2 ? 'text-destructive' : 'text-orange-500'}`}>
+            {isExpired ? '00:00' : formattedTime}
+          </span>
+        </div>
+        <Progress 
+          value={progressPercent} 
+          className="h-2"
+        />
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          {isExpired 
+            ? 'O serviço será finalizado automaticamente a qualquer momento.'
+            : `O serviço será finalizado automaticamente em ${remainingMinutes} minuto${remainingMinutes !== 1 ? 's' : ''}.`
+          }
+        </p>
+      </div>
+
       {/* Service Details */}
-      <div className="bg-card rounded-xl p-4 mb-6 shadow-card">
+      <div className="bg-card rounded-xl p-4 mb-4 shadow-card">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-3xl">{serviceConfig.icon}</span>
           <div className="flex-1">
@@ -91,7 +146,7 @@ export function ClientPendingConfirmationView() {
       </div>
 
       {/* Info Box */}
-      <div className="bg-muted/50 rounded-xl p-4 mb-8">
+      <div className="bg-muted/50 rounded-xl p-4 mb-4">
         <p className="text-sm text-muted-foreground text-center">
           Ao confirmar, você indica que o serviço foi realizado conforme combinado.
           Se houver algum problema, clique em "Reportar Problema".
