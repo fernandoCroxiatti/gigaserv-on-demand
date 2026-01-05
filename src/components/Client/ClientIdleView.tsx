@@ -255,7 +255,7 @@ export function ClientIdleView() {
       />
       
       {/* Provider status - Compact floating card */}
-      <div className="absolute top-20 left-3 right-3 z-10 space-y-2">
+      <div className="absolute top-3 left-3 right-3 z-10 space-y-2">
         {/* Notification CTA - Solicita permissão em gesto explícito */}
         {shouldShowNotifCTA && (
           <NotificationCTA
