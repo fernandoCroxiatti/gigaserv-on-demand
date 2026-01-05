@@ -264,7 +264,7 @@ export function ProviderIdleView() {
 
       {/* Notification CTA - Solicita permissão em gesto explícito */}
       {shouldShowNotifCTA && (
-        <div className="absolute top-20 left-3 right-3 z-20">
+        <div className="absolute top-3 left-3 right-3 z-20">
           <NotificationCTA
             userType="provider"
             permission={notifPermission}
@@ -276,7 +276,7 @@ export function ProviderIdleView() {
 
       {/* Location error/denied banner */}
       {(geoError || locationDenied) && !dismissedLocationBanner && (
-        <div className={`absolute ${shouldShowNotifCTA ? 'top-36' : 'top-20'} left-3 right-3 z-10`}>
+        <div className={`absolute ${shouldShowNotifCTA ? 'top-20' : 'top-3'} left-3 right-3 z-10`}>
           {locationDenied ? (
             <PermissionDeniedBanner 
               type="location"
@@ -291,7 +291,7 @@ export function ProviderIdleView() {
         </div>
       )}
 
-      <div className={`absolute ${shouldShowNotifCTA ? (((geoError || locationDenied) && !dismissedLocationBanner) ? 'top-52' : 'top-36') : ((geoError || locationDenied) && !dismissedLocationBanner ? 'top-36' : 'top-20')} left-3 right-3 z-10 animate-slide-down`}>
+      <div className={`absolute ${shouldShowNotifCTA ? (((geoError || locationDenied) && !dismissedLocationBanner) ? 'top-36' : 'top-20') : ((geoError || locationDenied) && !dismissedLocationBanner ? 'top-20' : 'top-3')} left-3 right-3 z-10 animate-slide-down`}>
         <div className={`bg-card rounded-xl px-4 py-3 shadow-sm ${isOnline ? 'ring-1 ring-provider-primary/20' : ''}`}>
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">

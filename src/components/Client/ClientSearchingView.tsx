@@ -173,7 +173,7 @@ export function ClientSearchingView() {
       {/* Search overlay */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Top search status - more compact */}
-        <div className="absolute top-20 left-3 right-3 pointer-events-auto">
+        <div className="absolute top-3 left-3 right-3 pointer-events-auto">
           <SearchingIndicator
             state={searchState}
             currentRadius={currentRadius}
