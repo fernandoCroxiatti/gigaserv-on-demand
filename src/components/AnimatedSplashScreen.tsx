@@ -37,42 +37,39 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
     return () => timers.forEach(clearTimeout);
   }, [onComplete]);
 
-  const iconSize = 64; // w-16 = 64px
-  const containerSize = 280;
-  const radius = (containerSize / 2) - (iconSize / 2); // Distance from center to icon center
+  // Responsive icon sizing using clamp for min/max limits
+  const iconSizeCss = 'clamp(48px, 7vw, 72px)';
+  const containerSizeCss = 'clamp(220px, 45vw, 340px)';
 
   return (
     <div 
-      className="fixed inset-0 z-[9999] overflow-hidden"
+      className="fixed inset-0 z-[9999] overflow-hidden flex items-center justify-center"
       style={{
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         minHeight: '-webkit-fill-available',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
         background: 'linear-gradient(145deg, #1b8a1b 0%, #28b840 40%, #3ed95a 100%)'
       }}
     >
       {/* Central container - perfectly centered */}
       <div 
-        className="relative"
+        className="relative flex items-center justify-center"
         style={{ 
-          width: containerSize, 
-          height: containerSize,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
+          width: containerSizeCss, 
+          height: containerSizeCss,
+          aspectRatio: '1 / 1'
         }}
       >
         
         {/* Decorative circle arc */}
         <motion.svg
-          className="absolute"
-          width={containerSize}
-          height={containerSize}
-          viewBox={`0 0 ${containerSize} ${containerSize}`}
-          style={{ top: 0, left: 0 }}
+          className="absolute inset-0 w-full h-full"
+          viewBox="0 0 280 280"
+          preserveAspectRatio="xMidYMid meet"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={stage >= 4 ? { 
             opacity: 0.3, 
@@ -86,9 +83,9 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
           }}
         >
           <circle 
-            cx={containerSize / 2} 
-            cy={containerSize / 2} 
-            r={(containerSize / 2) - 10} 
+            cx={140} 
+            cy={140} 
+            r={130} 
             fill="none" 
             stroke="rgba(255,255,255,0.25)" 
             strokeWidth="2"
@@ -100,8 +97,8 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
         <motion.div
           className="absolute rounded-full pointer-events-none"
           style={{
-            width: 180,
-            height: 180,
+            width: '65%',
+            height: '65%',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
@@ -123,14 +120,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
             top: 0,
             left: '50%',
             transform: 'translateX(-50%)',
-            width: iconSize,
-            height: iconSize
+            width: iconSizeCss,
+            height: iconSizeCss
           }}
           initial={{ opacity: 0, scale: 0.5, y: 20 }}
           animate={stage >= 1 ? { opacity: 1, scale: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
         >
-          <img src={iconGuincho} alt="Guincho" className="w-16 h-auto drop-shadow-lg" />
+          <img src={iconGuincho} alt="Guincho" className="w-full h-auto drop-shadow-lg" style={{ maxWidth: '100%' }} />
         </motion.div>
 
         {/* Icon 2: Chaveiro - Right (3h) */}
@@ -140,14 +137,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
             top: '50%',
             right: 0,
             transform: 'translateY(-50%)',
-            width: iconSize,
-            height: iconSize
+            width: iconSizeCss,
+            height: iconSizeCss
           }}
           initial={{ opacity: 0, scale: 0.5, x: -20 }}
           animate={stage >= 2 ? { opacity: 1, scale: 1, x: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
         >
-          <img src={iconChaveiro} alt="Chaveiro" className="w-16 h-auto drop-shadow-lg" />
+          <img src={iconChaveiro} alt="Chaveiro" className="w-full h-auto drop-shadow-lg" style={{ maxWidth: '100%' }} />
         </motion.div>
 
         {/* Icon 3: Mecânica - Bottom (6h) */}
@@ -157,14 +154,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
             bottom: 0,
             left: '50%',
             transform: 'translateX(-50%)',
-            width: iconSize,
-            height: iconSize
+            width: iconSizeCss,
+            height: iconSizeCss
           }}
           initial={{ opacity: 0, scale: 0.5, y: -20 }}
           animate={stage >= 3 ? { opacity: 1, scale: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
         >
-          <img src={iconMecanica} alt="Mecânica" className="w-16 h-auto drop-shadow-lg" />
+          <img src={iconMecanica} alt="Mecânica" className="w-full h-auto drop-shadow-lg" style={{ maxWidth: '100%' }} />
         </motion.div>
 
         {/* Icon 4: Borracharia - Left (9h) */}
@@ -174,14 +171,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
             top: '50%',
             left: 0,
             transform: 'translateY(-50%)',
-            width: iconSize,
-            height: iconSize
+            width: iconSizeCss,
+            height: iconSizeCss
           }}
           initial={{ opacity: 0, scale: 0.5, x: 20 }}
           animate={stage >= 4 ? { opacity: 1, scale: 1, x: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
         >
-          <img src={iconBorracharia} alt="Borracharia" className="w-16 h-auto drop-shadow-lg" />
+          <img src={iconBorracharia} alt="Borracharia" className="w-full h-auto drop-shadow-lg" style={{ maxWidth: '100%' }} />
         </motion.div>
 
         {/* Center: Logo + Location Pin */}
