@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,62 +45,93 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } },
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      logStep("No authorization header");
-      return new Response(JSON.stringify({ error: "Sessão expirada. Faça login novamente." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+    const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      logStep("No/invalid authorization header");
+      return new Response(
+        JSON.stringify({ error: "Sessão expirada. Faça login novamente." }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401,
+        },
+      );
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace("Bearer ", "").trim();
     if (!token || token.length < 10) {
       logStep("Invalid token format");
-      return new Response(JSON.stringify({ error: "Sessão inválida. Faça login novamente." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+      return new Response(
+        JSON.stringify({ error: "Sessão inválida. Faça login novamente." }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401,
+        },
+      );
     }
-    
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) {
-      logStep("Auth error", { message: userError.message });
-      return new Response(JSON.stringify({ error: "Sessão expirada. Faça login novamente." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+
+    // Validate token using an ANON client + Authorization header.
+    // This avoids "Auth session missing!" errors that can happen when calling getUser(jwt)
+    // on a service-role client without a bound session.
+    const authClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    });
+
+    let userId: string | null = null;
+    const authAny = authClient.auth as any;
+
+    if (typeof authAny.getClaims === "function") {
+      const { data: claimsData, error: claimsError } = await authAny.getClaims(token);
+      if (claimsError || !claimsData?.claims?.sub) {
+        logStep("Auth error", { message: claimsError?.message || "missing claims" });
+        return new Response(
+          JSON.stringify({ error: "Sessão expirada. Faça login novamente." }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 401,
+          },
+        );
+      }
+      userId = claimsData.claims.sub;
+    } else {
+      const { data: userData, error: userError } = await authClient.auth.getUser(token);
+      if (userError || !userData?.user) {
+        logStep("Auth error", { message: userError?.message || "missing user" });
+        return new Response(
+          JSON.stringify({ error: "Sessão expirada. Faça login novamente." }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 401,
+          },
+        );
+      }
+      userId = userData.user.id;
     }
-    const user = userData.user;
-    if (!user) {
-      logStep("No user in session");
-      return new Response(JSON.stringify({ error: "Usuário não autenticado." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
-    }
+
+    // Use service role only for DB updates (bypasses RLS), scoped by the validated userId.
+    const adminClient = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
 
     const body = (await req.json()) as ToggleBody;
     const nowIso = new Date().toISOString();
 
     logStep("Toggle request", {
-      userId: user.id,
+      userId,
       online: body.online,
       hasLocation: !!(body.location?.lat && body.location?.lng),
     });
 
     // Update profile active_profile when going online
     if (body.online) {
-      await supabaseClient
+      await adminClient
         .from("profiles")
         .update({ active_profile: "provider" })
-        .eq("user_id", user.id);
+        .eq("user_id", userId);
     }
 
     const update: Record<string, unknown> = {
@@ -125,10 +156,10 @@ serve(async (req) => {
       }
     }
 
-    const { error: updateErr } = await supabaseClient
+    const { error: updateErr } = await adminClient
       .from("provider_data")
       .update(update)
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     if (updateErr) {
       logStep("ERROR updating provider_data", { message: updateErr.message });
@@ -136,7 +167,7 @@ serve(async (req) => {
     }
 
     logStep("Status changed", {
-      userId: user.id,
+      userId,
       newStatus: body.online ? "ONLINE" : "OFFLINE",
       ts: nowIso,
     });
