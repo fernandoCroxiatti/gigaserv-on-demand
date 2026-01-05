@@ -280,6 +280,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return;
           }
           
+          // Handle finished status - clear state to return to idle
+          if (updated.status === 'finished' && chamado.status !== 'finished') {
+            const wasAutoFinished = updated.autoFinishedAt != null;
+            setChamado(updated);
+            
+            if (profile?.active_profile === 'provider') {
+              if (wasAutoFinished) {
+                toast.success('Serviço finalizado automaticamente. Você está liberado para novos atendimentos!');
+              } else {
+                toast.success('Cliente confirmou a finalização!');
+              }
+            } else {
+              if (wasAutoFinished) {
+                toast.info('Serviço finalizado automaticamente pelo sistema.');
+              } else {
+                toast.success('Serviço finalizado!');
+              }
+            }
+            
+            // Clear state after brief delay to show finish message
+            setTimeout(() => {
+              setChamado(null);
+              setChatMessages([]);
+              setIncomingRequest(null);
+            }, 2000);
+            return;
+          }
+          
           setChamado(updated);
           
           // Notify client of provider acceptance
@@ -377,9 +405,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 } else {
                   toast.success('Serviço finalizado!');
                 }
+                // Clear chamado state to show finished view, then reset after delay
+                setTimeout(() => {
+                  setChamado(null);
+                  setChatMessages([]);
+                }, 3000);
               }
             } else if (profile?.active_profile === 'provider') {
-              if (newStatus === 'finished' && oldStatus === 'pending_client_confirmation') {
+              if (newStatus === 'finished') {
                 // Check if it was auto-finished
                 const wasAutoFinished = (payload.new as any).auto_finished_at != null;
                 if (wasAutoFinished) {
@@ -387,6 +420,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 } else {
                   toast.success('Cliente confirmou a finalização!');
                 }
+                // Clear chamado state to return provider to idle view
+                setTimeout(() => {
+                  setChamado(null);
+                  setChatMessages([]);
+                  setIncomingRequest(null);
+                }, 2000);
               } else if (newStatus === 'in_service' && oldStatus === 'pending_client_confirmation') {
                 toast.warning('Cliente reportou um problema. Verifique.');
               }
