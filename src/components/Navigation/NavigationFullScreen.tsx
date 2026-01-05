@@ -25,7 +25,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { SERVICE_CONFIG } from '@/types/chamado';
+import { Chamado, SERVICE_CONFIG } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -71,8 +71,42 @@ function normalizePhase(phase: string | null): NavigationPhase {
 // Local storage key for phase persistence fallback (prevents regression on unexpected reload)
 const PHASE_STORAGE_KEY_PREFIX = 'nav_phase_';
 
+interface NavigationFullScreenInnerProps extends NavigationFullScreenProps {
+  chamado: Chamado;
+  finishService: () => Promise<void>;
+  profile: any;
+  availableProviders: any[];
+  cancelChamado: () => Promise<void> | void;
+  chatMessages: any[];
+}
+
 export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
   const { chamado, finishService, profile, availableProviders, cancelChamado, chatMessages } = useApp();
+
+  if (!chamado) return null;
+
+  return (
+    <NavigationFullScreenInner
+      mode={mode}
+      chamado={chamado}
+      finishService={finishService}
+      profile={profile}
+      availableProviders={availableProviders}
+      cancelChamado={cancelChamado}
+      chatMessages={chatMessages}
+    />
+  );
+}
+
+function NavigationFullScreenInner({
+  mode,
+  chamado,
+  finishService,
+  profile,
+  availableProviders,
+  cancelChamado,
+  chatMessages,
+}: NavigationFullScreenInnerProps) {
   const [navigationPhase, setNavigationPhase] = useState<NavigationPhase>('to_client');
   const [routePolyline, setRoutePolyline] = useState<string>('');
   const [eta, setEta] = useState<string>('');
@@ -562,11 +596,12 @@ export function NavigationFullScreen({ mode }: NavigationFullScreenProps) {
         })
         .eq('id', chamado.id);
 
-      // Force immediate route recalculation with current GPS position
-      if (providerGPSLocation) {
+      // Force immediate route recalculation with current position (prefer providerLocation as fallback)
+      const currentPos = providerLocation || providerGPSLocation;
+      if (currentPos) {
         console.log('[Navigation] Phase 2: Calculating route from current position to destination');
         const result = await forceRecalculateRoute(
-          providerGPSLocation,
+          currentPos,
           newDestination,
           chamado.id,
           'to_destination'
