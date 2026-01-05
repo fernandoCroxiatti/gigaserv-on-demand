@@ -37,22 +37,42 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
     return () => timers.forEach(clearTimeout);
   }, [onComplete]);
 
+  const iconSize = 64; // w-16 = 64px
+  const containerSize = 280;
+  const radius = (containerSize / 2) - (iconSize / 2); // Distance from center to icon center
+
   return (
     <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
+      className="fixed inset-0 z-[9999] overflow-hidden"
       style={{
+        width: '100vw',
+        height: '100vh',
+        minHeight: '-webkit-fill-available',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         background: 'linear-gradient(145deg, #1b8a1b 0%, #28b840 40%, #3ed95a 100%)'
       }}
     >
-      {/* Central container - centered in viewport */}
-      <div className="relative flex items-center justify-center" style={{ width: 300, height: 300 }}>
+      {/* Central container - perfectly centered */}
+      <div 
+        className="relative"
+        style={{ 
+          width: containerSize, 
+          height: containerSize,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
         
         {/* Decorative circle arc */}
         <motion.svg
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-          width="280"
-          height="280"
-          viewBox="0 0 280 280"
+          className="absolute"
+          width={containerSize}
+          height={containerSize}
+          viewBox={`0 0 ${containerSize} ${containerSize}`}
+          style={{ top: 0, left: 0 }}
           initial={{ opacity: 0, scale: 0.8 }}
           animate={stage >= 4 ? { 
             opacity: 0.3, 
@@ -66,9 +86,9 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
           }}
         >
           <circle 
-            cx="140" 
-            cy="140" 
-            r="130" 
+            cx={containerSize / 2} 
+            cy={containerSize / 2} 
+            r={(containerSize / 2) - 10} 
             fill="none" 
             stroke="rgba(255,255,255,0.25)" 
             strokeWidth="2"
@@ -78,10 +98,13 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
 
         {/* Glow effect */}
         <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+          className="absolute rounded-full pointer-events-none"
           style={{
-            width: 200,
-            height: 200,
+            width: 180,
+            height: 180,
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
             background: 'radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%)',
             filter: 'blur(15px)',
           }}
@@ -95,7 +118,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
 
         {/* Icon 1: Guincho - Top (12h) */}
         <motion.div
-          className="absolute top-0 left-1/2 -translate-x-1/2 flex items-center justify-center"
+          className="absolute flex items-center justify-center"
+          style={{ 
+            top: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: iconSize,
+            height: iconSize
+          }}
           initial={{ opacity: 0, scale: 0.5, y: 20 }}
           animate={stage >= 1 ? { opacity: 1, scale: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
@@ -105,7 +135,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
 
         {/* Icon 2: Chaveiro - Right (3h) */}
         <motion.div
-          className="absolute top-1/2 right-0 -translate-y-1/2 flex items-center justify-center"
+          className="absolute flex items-center justify-center"
+          style={{ 
+            top: '50%',
+            right: 0,
+            transform: 'translateY(-50%)',
+            width: iconSize,
+            height: iconSize
+          }}
           initial={{ opacity: 0, scale: 0.5, x: -20 }}
           animate={stage >= 2 ? { opacity: 1, scale: 1, x: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
@@ -115,7 +152,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
 
         {/* Icon 3: Mecânica - Bottom (6h) */}
         <motion.div
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 flex items-center justify-center"
+          className="absolute flex items-center justify-center"
+          style={{ 
+            bottom: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: iconSize,
+            height: iconSize
+          }}
           initial={{ opacity: 0, scale: 0.5, y: -20 }}
           animate={stage >= 3 ? { opacity: 1, scale: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
@@ -125,7 +169,14 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
 
         {/* Icon 4: Borracharia - Left (9h) */}
         <motion.div
-          className="absolute top-1/2 left-0 -translate-y-1/2 flex items-center justify-center"
+          className="absolute flex items-center justify-center"
+          style={{ 
+            top: '50%',
+            left: 0,
+            transform: 'translateY(-50%)',
+            width: iconSize,
+            height: iconSize
+          }}
           initial={{ opacity: 0, scale: 0.5, x: 20 }}
           animate={stage >= 4 ? { opacity: 1, scale: 1, x: 0 } : {}}
           transition={{ duration: 0.5, ease: "backOut" }}
@@ -135,7 +186,12 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onCo
 
         {/* Center: Logo + Location Pin */}
         <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
+          className="absolute flex flex-col items-center justify-center"
+          style={{ 
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}
           initial={{ opacity: 0, scale: 0.5 }}
           animate={stage >= 6 ? { opacity: 1, scale: 1 } : {}}
           transition={{ duration: 0.6, ease: "backOut" }}
