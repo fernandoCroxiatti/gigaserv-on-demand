@@ -6,7 +6,6 @@ import { safeLocalStorage } from '@/lib/safeStorage';
  * Boot phases for safe initialization
  */
 export type BootPhase = 
-  | 'animated_splash'  // Animated splash screen with icons
   | 'splash'           // Initial static splash - no logic runs
   | 'initializing'     // Basic JS loaded, checking environment
   | 'profile_select'   // Show profile selection (client/provider)
@@ -25,22 +24,60 @@ interface SafeInitializationState {
  */
 export function useSafeInitialization() {
   const [state, setState] = useState<SafeInitializationState>({
-    phase: 'animated_splash',
+    phase: 'splash',
     isNative: false,
     selectedProfile: null,
     error: null,
   });
 
-  // Called when animated splash completes
-  const onAnimatedSplashComplete = useCallback(() => {
-    // Check if we're in a native app environment
-    const isNative = Capacitor.isNativePlatform();
-    
-    setState(prev => ({
-      ...prev,
-      isNative,
-      phase: 'profile_select',
-    }));
+  // Phase 1: Show splash briefly, then welcome screen
+  // NO API calls, NO auth checks, NO location - just static UI
+  useEffect(() => {
+    let mounted = true;
+
+    const showWelcomeScreen = async () => {
+      try {
+        // Brief splash screen display
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (!mounted) return;
+
+        // Check if we're in a native app environment
+        const isNative = Capacitor.isNativePlatform();
+
+        setState(prev => ({
+          ...prev,
+          isNative,
+          phase: 'initializing',
+        }));
+
+        // Brief delay for native bridge stability
+        await new Promise(resolve => setTimeout(resolve, isNative ? 200 : 50));
+
+        if (!mounted) return;
+
+        // ALWAYS show welcome/presentation screen first
+        setState(prev => ({
+          ...prev,
+          phase: 'profile_select',
+        }));
+      } catch (error) {
+        console.error('[SafeInit] Initialization error:', error);
+        if (mounted) {
+          setState(prev => ({
+            ...prev,
+            error: error instanceof Error ? error : new Error('Unknown initialization error'),
+            phase: 'profile_select',
+          }));
+        }
+      }
+    };
+
+    showWelcomeScreen();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Called when user clicks "Começar" - ONLY then start auth check
@@ -79,8 +116,6 @@ export function useSafeInitialization() {
     selectProfile,
     markReady,
     resetToProfileSelection,
-    onAnimatedSplashComplete,
-    isAnimatedSplashPhase: state.phase === 'animated_splash',
     isSplashPhase: state.phase === 'splash' || state.phase === 'initializing',
     isProfileSelectPhase: state.phase === 'profile_select',
     isAuthCheckPhase: state.phase === 'auth_check',
