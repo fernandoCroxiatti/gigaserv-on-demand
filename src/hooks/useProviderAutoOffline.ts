@@ -34,8 +34,12 @@ export function useProviderAutoOffline({ userId, isOnline }: UseProviderAutoOffl
 
     try {
       // Não aguardar (eventos de fechamento não gostam de async) e nunca quebrar fluxo
-      void supabase.functions.invoke('toggle-provider-online', {
-        body: { online: false },
+      void supabase.auth.getSession().then(({ data }) => {
+        const token = data.session?.access_token;
+        void supabase.functions.invoke('toggle-provider-online', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: { online: false },
+        });
       });
     } catch {
       // Silencioso por design
