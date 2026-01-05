@@ -35,9 +35,14 @@ export function GlobalDrawer() {
   const isProvider = user?.activeProfile === 'provider';
 
   const handleSignOut = async () => {
-    await signOut();
+    // Close drawer first
     setOpen(false);
+    
+    // Navigate to auth page immediately (don't wait for signOut)
     navigate('/auth');
+    
+    // Then sign out (will clear session in background)
+    await signOut();
   };
 
   const handleDeleteAccount = async () => {
