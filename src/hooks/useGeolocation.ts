@@ -84,7 +84,9 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
   const handleError = useCallback((error: any) => {
     if (!isMountedRef.current) return;
 
-    let errorMessage = 'Erro ao obter localização';
+    console.error('[useGeolocation] Handling error:', error);
+    
+    let errorMessage = 'Erro ao obter localização. Verifique se o GPS está ativado.';
     let permissionStatus: PermissionState = state.permissionStatus;
     
     // Check if it's a GeolocationPositionError
@@ -95,15 +97,19 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
           permissionStatus = 'denied';
           break;
         case 2: // POSITION_UNAVAILABLE
-          errorMessage = 'Localização indisponível. Verifique se o GPS está ativado.';
+          errorMessage = 'GPS indisponível. Verifique se o GPS está ativado e tente novamente.';
           break;
         case 3: // TIMEOUT
-          errorMessage = 'Tempo esgotado ao obter localização. Tente novamente.';
+          errorMessage = 'Tempo esgotado. Vá para um local com melhor sinal e tente novamente.';
           break;
       }
-    } else if (error?.message?.includes('permission')) {
+    } else if (error?.message?.includes('permission') || error?.message?.includes('Permission')) {
       errorMessage = 'Permissão de localização negada. Ative nas configurações do dispositivo.';
       permissionStatus = 'denied';
+    } else if (error?.message?.includes('timeout') || error?.message?.includes('Timeout')) {
+      errorMessage = 'Tempo esgotado. Vá para um local com melhor sinal e tente novamente.';
+    } else if (error?.message?.includes('unavailable') || error?.message?.includes('Unavailable')) {
+      errorMessage = 'GPS indisponível. Verifique se o GPS está ativado.';
     }
     
     setState(prev => ({
@@ -152,12 +158,14 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
       }
 
       // Get current position
+      console.log('[useGeolocation] Getting current position...');
       const position = await getCurrentPosition();
+      console.log('[useGeolocation] Position result:', position);
       
       if (position && isMountedRef.current) {
         await updatePosition(position);
       } else if (isMountedRef.current) {
-        handleError({ message: 'Não foi possível obter a localização.' });
+        handleError({ code: 2, message: 'GPS indisponível. Verifique se o GPS está ativado.' });
       }
 
       // Start watching if enabled
@@ -177,14 +185,18 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
 
   // Refresh location (requires previous permission)
   const refresh = useCallback(async () => {
+    console.log('[useGeolocation] Refresh called, status:', state.permissionStatus);
+    
     if (state.permissionStatus === 'granted' || hasRequestedRef.current) {
       setState(prev => ({ ...prev, loading: true, error: null }));
       
       const position = await getCurrentPosition();
+      console.log('[useGeolocation] Refresh position:', position);
+      
       if (position && isMountedRef.current) {
         await updatePosition(position);
       } else if (isMountedRef.current) {
-        handleError({ message: 'Não foi possível obter a localização.' });
+        handleError({ code: 2, message: 'GPS indisponível. Verifique se o GPS está ativado.' });
       }
     } else {
       await requestLocation();
