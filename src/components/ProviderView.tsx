@@ -65,10 +65,18 @@ export function ProviderView() {
     );
   }
 
+  // Determine if we have an active ride (to prevent duplicate cards)
+  const hasActiveRide = chamado && ['accepted', 'negotiating', 'awaiting_payment', 'in_service', 'pending_client_confirmation'].includes(status);
+
+  // Only show IncomingRequestCard when:
+  // 1. There's an incomingRequest AND
+  // 2. There's NO active ride already in progress
+  const shouldShowIncomingRequest = incomingRequest && !hasActiveRide;
+
   return (
     <>
-      {/* Incoming request overlay */}
-      {incomingRequest && <IncomingRequestCard />}
+      {/* Incoming request overlay - only when no active ride */}
+      {shouldShowIncomingRequest && <IncomingRequestCard />}
       
       {/* State-driven UI - render based on chamado status */}
       {(() => {
