@@ -135,6 +135,10 @@ export function RealMapView({
   
   // Track if initial center was set
   const initialCenterSetRef = useRef(false);
+  
+  // Store the center used for initial map render - prevents re-centering on prop changes
+  // In 'free' mode, this is set ONCE and never updated, ensuring complete camera isolation
+  const [stableCenter, setStableCenter] = useState<{ lat: number; lng: number } | null>(null);
 
   // Calculate dynamic zoom based on search radius
   const effectiveZoom = useMemo(() => {
@@ -231,11 +235,11 @@ export function RealMapView({
     setIsUserInteracting(false);
     hasUserInteractedRef.current = false;
     
-    // Pan to center
-    if (map && center) {
-      map.panTo({ lat: center.lat, lng: center.lng });
-    } else if (map && userLocation) {
-      map.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+    // Pan to current center (prioritize origem, then userLocation)
+    const targetCenter = center || userLocation;
+    if (map && targetCenter) {
+      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+      setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
     }
   }, [map, center, userLocation]);
 
@@ -264,6 +268,7 @@ export function RealMapView({
     if (mode === 'free') {
       if (!initialCenterSetRef.current) {
         map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+        setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
         initialCenterSetRef.current = true;
       }
       // In free mode, GPS updates marker but NEVER moves camera
@@ -273,6 +278,7 @@ export function RealMapView({
     // FOLLOW MODE: Always auto-center
     if (mode === 'follow' && !isUserInteracting) {
       map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+      setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
       return;
     }
     
@@ -280,6 +286,7 @@ export function RealMapView({
     // Note: Active navigation typically uses OptimizedNavigationMap, not this component
     if (mode === 'navigation' && !isUserInteracting) {
       map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+      setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
     }
   }, [map, center, userLocation, mode, isUserInteracting]);
 
@@ -339,14 +346,19 @@ export function RealMapView({
     );
   }
 
-  const mapCenter = center 
-    ? { lat: center.lat, lng: center.lng }
-    : userLocation 
-      ? { lat: userLocation.lat, lng: userLocation.lng }
-      : defaultCenter;
+  // Use stableCenter for 'free' mode to prevent re-centering on prop changes
+  // For other modes, use the calculated mapCenter
+  const mapCenter = mode === 'free' && stableCenter
+    ? stableCenter
+    : center 
+      ? { lat: center.lat, lng: center.lng }
+      : userLocation 
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : defaultCenter;
 
   // Determine if we should show recenter button
-  const shouldShowRecenter = showRecenterButton && hasUserInteractedRef.current && isUserInteracting && mode !== 'follow';
+  // In 'free' mode, show button after any user interaction (drag/zoom)
+  const shouldShowRecenter = showRecenterButton && mode === 'free' && hasUserInteractedRef.current;
 
   return (
     <div className={cn("relative", className)}>
