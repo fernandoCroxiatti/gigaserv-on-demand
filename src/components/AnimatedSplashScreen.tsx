@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 interface AnimatedSplashScreenProps {
   onComplete: () => void;
@@ -7,127 +7,150 @@ interface AnimatedSplashScreenProps {
 
 export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onComplete }) => {
   const [stage, setStage] = useState(0);
-  // Stages: 0=initial, 1=icons appearing, 2=circle pulse, 3=logo appears, 4=complete
+  // Stages: 0=initial, 1-4=icons appearing, 5=circle pulse, 6=logo appears, 7=complete
 
   useEffect(() => {
     const timers: NodeJS.Timeout[] = [];
     
-    // Stage 1: Start icons appearing (after 200ms)
-    timers.push(setTimeout(() => setStage(1), 200));
+    // Stage 1-4: Icons appearing one by one (600ms each)
+    // Start after 500ms initial delay
+    timers.push(setTimeout(() => setStage(1), 500));      // Icon 1 at 500ms
+    timers.push(setTimeout(() => setStage(2), 1100));     // Icon 2 at 1100ms
+    timers.push(setTimeout(() => setStage(3), 1700));     // Icon 3 at 1700ms
+    timers.push(setTimeout(() => setStage(4), 2300));     // Icon 4 at 2300ms
     
-    // Stage 2: Circle pulse (after all icons appear: 200 + 4*300 = 1400ms)
-    timers.push(setTimeout(() => setStage(2), 1500));
+    // Stage 5: Circle pulse (after all icons: 2300 + 600 = 2900ms)
+    timers.push(setTimeout(() => setStage(5), 2900));
     
-    // Stage 3: Logo appears (after pulse: 1500 + 700 = 2200ms)
-    timers.push(setTimeout(() => setStage(3), 2200));
+    // Stage 6: Logo appears (after pulse: 2900 + 1000 = 3900ms)
+    timers.push(setTimeout(() => setStage(6), 3900));
     
-    // Stage 4: Complete and navigate (after pause: 2200 + 600 = 2800ms)
+    // Stage 7: Complete and navigate (after logo + pause: 3900 + 700 + 400 = 5000ms)
     timers.push(setTimeout(() => {
-      setStage(4);
+      setStage(7);
       onComplete();
-    }, 2800));
+    }, 5000));
 
     return () => timers.forEach(clearTimeout);
   }, [onComplete]);
 
-  // Service icons positions (circular arrangement)
-  const iconPositions = [
-    { x: 0, y: -100, delay: 0 },      // Top - Tow truck
-    { x: 100, y: 0, delay: 0.3 },     // Right - Locksmith
-    { x: 0, y: 100, delay: 0.6 },     // Bottom - Mechanic
-    { x: -100, y: 0, delay: 0.9 },    // Left - Tire/Borracharia
-  ];
+  // Circle radius for icon positioning
+  const radius = 110;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
       style={{
         background: 'linear-gradient(135deg, #1a7a1a 0%, #2ecc40 50%, #3dd956 100%)'
       }}
     >
-      {/* Decorative circle */}
-      <motion.div
-        className="absolute w-72 h-72 rounded-full border border-white/20"
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={stage >= 1 ? { 
-          opacity: 0.3, 
-          scale: 1,
-          rotate: stage >= 2 ? 360 : 0
-        } : {}}
-        transition={{ 
-          duration: stage >= 2 ? 0.8 : 0.5,
-          ease: "easeOut"
-        }}
-      />
+      {/* Central container for positioning */}
+      <div className="relative" style={{ width: radius * 2.5, height: radius * 2.5 }}>
+        
+        {/* Decorative circle border */}
+        <motion.div
+          className="absolute rounded-full border-2 border-white/20"
+          style={{
+            width: radius * 2 + 40,
+            height: radius * 2 + 40,
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={stage >= 4 ? { 
+            opacity: 0.4, 
+            scale: 1,
+            rotate: stage >= 5 ? 360 : 0
+          } : {}}
+          transition={{ 
+            duration: stage >= 5 ? 1 : 0.5,
+            ease: "easeInOut"
+          }}
+        />
 
-      {/* Service Icons */}
-      <div className="relative w-72 h-72 flex items-center justify-center">
-        {/* Tow Truck - Top */}
+        {/* Tow Truck - Top (12h position) */}
         <motion.div
           className="absolute"
-          style={{ transform: `translate(${iconPositions[0].x}px, ${iconPositions[0].y}px)` }}
+          style={{
+            left: '50%',
+            top: '50%',
+            marginLeft: -32,
+            marginTop: -radius - 24,
+          }}
           initial={{ opacity: 0, scale: 0.5 }}
           animate={stage >= 1 ? { opacity: 1, scale: 1 } : {}}
-          transition={{ delay: iconPositions[0].delay, duration: 0.4, ease: "backOut" }}
+          transition={{ duration: 0.5, ease: "backOut" }}
         >
           <TowTruckIcon />
         </motion.div>
 
-        {/* Locksmith - Right */}
+        {/* Locksmith - Right (3h position) */}
         <motion.div
           className="absolute"
-          style={{ transform: `translate(${iconPositions[1].x}px, ${iconPositions[1].y}px)` }}
+          style={{
+            left: '50%',
+            top: '50%',
+            marginLeft: radius - 8,
+            marginTop: -28,
+          }}
           initial={{ opacity: 0, scale: 0.5 }}
-          animate={stage >= 1 ? { opacity: 1, scale: 1 } : {}}
-          transition={{ delay: iconPositions[1].delay, duration: 0.4, ease: "backOut" }}
+          animate={stage >= 2 ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.5, ease: "backOut" }}
         >
           <LocksmithIcon />
         </motion.div>
 
-        {/* Mechanic - Bottom */}
+        {/* Mechanic - Bottom (6h position) */}
         <motion.div
           className="absolute"
-          style={{ transform: `translate(${iconPositions[2].x}px, ${iconPositions[2].y}px)` }}
+          style={{
+            left: '50%',
+            top: '50%',
+            marginLeft: -32,
+            marginTop: radius - 8,
+          }}
           initial={{ opacity: 0, scale: 0.5 }}
-          animate={stage >= 1 ? { opacity: 1, scale: 1 } : {}}
-          transition={{ delay: iconPositions[2].delay, duration: 0.4, ease: "backOut" }}
+          animate={stage >= 3 ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.5, ease: "backOut" }}
         >
           <MechanicIcon />
         </motion.div>
 
-        {/* Tire Service - Left */}
+        {/* Tire Service - Left (9h position) */}
         <motion.div
           className="absolute"
-          style={{ transform: `translate(${iconPositions[3].x}px, ${iconPositions[3].y}px)` }}
+          style={{
+            left: '50%',
+            top: '50%',
+            marginLeft: -radius - 48,
+            marginTop: -28,
+          }}
           initial={{ opacity: 0, scale: 0.5 }}
-          animate={stage >= 1 ? { opacity: 1, scale: 1 } : {}}
-          transition={{ delay: iconPositions[3].delay, duration: 0.4, ease: "backOut" }}
+          animate={stage >= 4 ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.5, ease: "backOut" }}
         >
           <TireServiceIcon />
         </motion.div>
 
-        {/* Center Location Pin */}
+        {/* Center: Location Pin + Logo */}
         <motion.div
-          className="absolute z-10"
-          initial={{ opacity: 0, scale: 0 }}
-          animate={stage >= 3 ? { opacity: 1, scale: 1 } : {}}
-          transition={{ duration: 0.4, ease: "backOut" }}
+          className="absolute flex flex-col items-center"
+          style={{
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={stage >= 6 ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.7, ease: "backOut" }}
         >
           <LocationPinIcon />
+          <h1 className="text-3xl font-bold text-white tracking-wider mt-2 whitespace-nowrap">
+            GIGA <span className="text-2xl font-normal">S.O.S</span>
+          </h1>
         </motion.div>
       </div>
-
-      {/* Logo Text */}
-      <motion.div
-        className="absolute flex flex-col items-center"
-        style={{ marginTop: '160px' }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={stage >= 3 ? { opacity: 1, y: 0 } : {}}
-        transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
-      >
-        <h1 className="text-4xl font-bold text-white tracking-wider">
-          GIGA <span className="text-3xl font-normal">S.O.S</span>
-        </h1>
-      </motion.div>
     </div>
   );
 };
