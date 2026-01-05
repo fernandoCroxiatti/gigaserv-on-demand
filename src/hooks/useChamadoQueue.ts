@@ -156,9 +156,9 @@ export function useChamadoQueue({
       // Clean up old cooldowns
       cleanupCooldowns();
       
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session) {
-        console.log(`[ChamadoQueue] Poll #${pollId} - No session, skipping`);
+      const { data: session, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session.session?.access_token) {
+        console.log(`[ChamadoQueue] Poll #${pollId} - No valid session, skipping`);
         return;
       }
 

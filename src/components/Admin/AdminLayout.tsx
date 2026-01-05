@@ -45,8 +45,8 @@ export function AdminLayout() {
   useHighSeverityAlerts();
 
   const handleLogout = async () => {
-    await signOut();
     navigate('/auth');
+    await signOut();
   };
 
   return (

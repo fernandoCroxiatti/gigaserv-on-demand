@@ -8,6 +8,9 @@ let cachedSession: Session | null = null;
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
 
+// Flag to prevent session revalidation after intentional logout
+let isLoggingOut = false;
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(cachedUser);
   const [session, setSession] = useState<Session | null>(cachedSession);
@@ -20,6 +23,12 @@ export function useAuth() {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
+        // CRITICAL: Ignore auth state changes during logout to prevent reactivation
+        if (isLoggingOut) {
+          console.log('[useAuth] Ignoring auth state change during logout:', event);
+          return;
+        }
+
         cachedSession = newSession;
         cachedUser = newSession?.user ?? null;
         isInitialized = true;
@@ -35,6 +44,9 @@ export function useAuth() {
     // Only fetch session once globally
     if (!initPromise) {
       initPromise = supabase.auth.getSession().then(({ data: { session } }) => {
+        // Don't set session if we're logging out
+        if (isLoggingOut) return;
+
         cachedSession = session;
         cachedUser = session?.user ?? null;
         isInitialized = true;
@@ -45,7 +57,7 @@ export function useAuth() {
           setLoading(false);
         }
       });
-    } else if (isInitialized) {
+    } else if (isInitialized && !isLoggingOut) {
       // Already initialized, just use cached values
       setSession(cachedSession);
       setUser(cachedUser);
@@ -59,9 +71,32 @@ export function useAuth() {
   }, []);
 
   const signOut = async () => {
+    console.log('[useAuth] Starting logout...');
+    
+    // Set flag BEFORE any async operations to prevent race conditions
+    isLoggingOut = true;
+    
+    // Clear cached state immediately
     cachedUser = null;
     cachedSession = null;
-    await supabase.auth.signOut();
+    
+    // Update local state immediately
+    setUser(null);
+    setSession(null);
+    
+    try {
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+      console.log('[useAuth] Logout completed');
+    } catch (error) {
+      console.error('[useAuth] Logout error:', error);
+    } finally {
+      // Reset flag after a delay to allow any pending auth events to be ignored
+      setTimeout(() => {
+        isLoggingOut = false;
+        console.log('[useAuth] Logout flag reset');
+      }, 1000);
+    }
   };
 
   return { user, session, loading, signOut };

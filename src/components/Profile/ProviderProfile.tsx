@@ -166,8 +166,8 @@ export function ProviderProfile() {
   }, [navigate]);
 
   const handleSignOut = async () => {
-    await signOut();
     navigate('/auth');
+    await signOut();
   };
 
   const handleDeleteAccount = async () => {

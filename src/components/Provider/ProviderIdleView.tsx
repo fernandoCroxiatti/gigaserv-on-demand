@@ -78,24 +78,17 @@ export function ProviderIdleView() {
   const isRegistrationComplete = providerData?.registration_complete === true;
   const hasValidLocation = !!(providerData?.current_lat && providerData?.current_lng);
 
-  // Provider online sync - prevents ghost providers and handles reconnection
-  const handleStatusLost = useCallback(() => {
-    console.warn('[ProviderIdle] Status lost! Re-syncing...');
-    toast.warning('Conexão perdida. Reconectando...');
-  }, []);
-
+  // Provider online sync - sends heartbeats with location while online
+  // IMPORTANT: Does NOT force online state - respects manual toggle
   const handleReconnected = useCallback(() => {
     console.log('[ProviderIdle] Reconnected successfully');
-    if (isOnline) {
-      toast.success('Conexão restabelecida!');
-    }
-  }, [isOnline]);
+    // Silent - don't spam user with toasts on every reconnection
+  }, []);
 
   useProviderOnlineSync({
     userId: authUser?.id || null,
     isOnline,
     hasLocation: hasValidLocation,
-    onStatusLost: handleStatusLost,
     onReconnected: handleReconnected
   });
 
