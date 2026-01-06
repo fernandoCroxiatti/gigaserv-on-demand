@@ -16,6 +16,8 @@ interface ChamadoRow {
   destino_address: string | null;
   valor: number | null;
   provider_amount: number | null;
+  commission_percentage: number | null;
+  commission_amount: number | null;
   payment_status: string | null;
   created_at: string;
 }
@@ -44,7 +46,7 @@ export function ProviderRidesHistoryTab() {
     const loadRides = async () => {
       const { data, error } = await supabase
         .from('chamados')
-        .select('id, status, tipo_servico, origem_address, destino_address, valor, provider_amount, payment_status, created_at')
+        .select('id, status, tipo_servico, origem_address, destino_address, valor, provider_amount, commission_percentage, commission_amount, payment_status, created_at')
         .eq('prestador_id', user.id)
         .eq('status', 'finished')
         .order('created_at', { ascending: false });
