@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, isLoggingOutState } from '@/hooks/useAuth';
 import { Menu, User, Landmark, FileText, Shield, Scale, LogOut, Trash2, Star, AlertTriangle, Loader2, CreditCard, HelpCircle, Receipt, Car } from 'lucide-react';
 import { Button } from './ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,18 +31,28 @@ export function GlobalDrawer() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const isProvider = user?.activeProfile === 'provider';
 
   const handleSignOut = async () => {
-    // Close drawer first
+    // Prevent double-click
+    if (loggingOut || isLoggingOutState()) {
+      return;
+    }
+    
+    setLoggingOut(true);
+    
+    // Close drawer immediately
     setOpen(false);
     
     // Navigate to auth page immediately (don't wait for signOut)
-    navigate('/auth');
+    navigate('/auth', { replace: true });
     
-    // Then sign out (will clear session in background)
+    // Then sign out (will clear session in background with timeout protection)
     await signOut();
+    
+    setLoggingOut(false);
   };
 
   const handleDeleteAccount = async () => {
@@ -248,10 +258,11 @@ export function GlobalDrawer() {
           <div className="border-t border-border pt-3 mt-auto">
             <button
               onClick={handleSignOut}
-              className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors text-muted-foreground"
+              disabled={loggingOut}
+              className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-secondary transition-colors text-muted-foreground disabled:opacity-50"
             >
-              <LogOut className="w-5 h-5" />
-              <span>Sair da conta</span>
+              {loggingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+              <span>{loggingOut ? 'Saindo...' : 'Sair da conta'}</span>
             </button>
             
             <AlertDialog>

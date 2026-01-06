@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, isLoggingOutState } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { Button } from '../ui/button';
 import { 
@@ -52,6 +52,7 @@ export function ClientProfile() {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [clientStats, setClientStats] = useState({ totalRides: 0, averageRating: undefined as number | undefined });
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -93,8 +94,11 @@ export function ClientProfile() {
   };
 
   const handleSignOut = async () => {
+    if (loggingOut || isLoggingOutState()) return;
+    setLoggingOut(true);
+    navigate('/auth', { replace: true });
     await signOut();
-    navigate('/auth');
+    setLoggingOut(false);
   };
 
   const handleDeleteAccount = async () => {

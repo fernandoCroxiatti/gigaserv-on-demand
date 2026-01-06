@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppProvider, useOptionalApp } from "./contexts/AppContext";
 import { GoogleMapsProvider } from "./components/Map/GoogleMapsProvider";
-import { useAuth } from "./hooks/useAuth";
+import { useAuth, isLoggingOutState } from "./hooks/useAuth";
 import { useAdmin } from "./hooks/useAdmin";
 import { NotificationProvider } from "./components/Notifications/NotificationProvider";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
@@ -101,6 +101,12 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+
+  // CRITICAL: During logout, immediately show children (auth page) without loading
+  // This prevents the "Carregando..." infinite loop
+  if (isLoggingOutState()) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (
