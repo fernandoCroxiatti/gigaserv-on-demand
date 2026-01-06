@@ -195,10 +195,14 @@ export function calculateFee(
 /**
  * DETERMINE EFFECTIVE FEE RATE
  * 
- * Priority order:
+ * Priority order (STRICT - same as backend):
  * 1. Exemption (if active) → 0%
- * 2. Individual rate (if configured) → use it
+ * 2. Individual rate (if customFeeEnabled = true) → use it EXCLUSIVELY
  * 3. Global rate (default) → use it
+ * 
+ * IMPORTANT: Custom fee is EXCLUSIVE to the provider.
+ * NEVER mix custom fee with global fee.
+ * If customFeeEnabled is true, IGNORE global rate completely.
  * 
  * This function is PURE and does not modify any state.
  */
@@ -219,18 +223,27 @@ export function getEffectiveFeeRate(params: EffectiveFeeParams): EffectiveFeeRes
     }
   }
   
-  // Priority 2: Individual rate (if custom fee is enabled and valid)
-  if (customFeeEnabled && typeof individualRate === 'number' && individualRate >= 0 && individualRate <= 100) {
-    console.log('[FeeCalculator] Using provider individual rate:', individualRate, 'fixed:', individualFixedFee);
+  // Priority 2: Individual rate (if custom fee is ENABLED for this provider)
+  // IMPORTANT: Check customFeeEnabled FIRST - this is the gatekeeper
+  if (customFeeEnabled === true) {
+    // Use individual rate even if it's 0 (that's a valid custom rate)
+    const percentage = typeof individualRate === 'number' ? individualRate : 0;
+    const fixedFee = typeof individualFixedFee === 'number' ? individualFixedFee : 0;
+    
+    console.log('[FeeCalculator] Using INDIVIDUAL rate (custom fee enabled):', { 
+      percentage, 
+      fixedFee,
+      customFeeEnabled,
+    });
     return {
-      percentage: individualRate,
-      fixedFee: typeof individualFixedFee === 'number' ? individualFixedFee : 0,
+      percentage,
+      fixedFee,
       source: 'individual',
     };
   }
   
-  // Priority 3: Global rate (default)
-  console.log('[FeeCalculator] Using global rate:', globalRate);
+  // Priority 3: Global rate (default - only when customFeeEnabled is false/undefined)
+  console.log('[FeeCalculator] Using GLOBAL rate:', globalRate);
   return {
     percentage: globalRate,
     fixedFee: 0,

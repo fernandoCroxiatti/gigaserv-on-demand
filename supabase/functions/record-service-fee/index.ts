@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { calculateProviderFee } from "../_shared/feeCalculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +17,11 @@ function isValidUUID(id: unknown): id is string {
 interface RecordFeeRequest {
   chamado_id: string;
 }
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[RECORD-SERVICE-FEE] ${step}${detailsStr}`);
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -40,12 +46,14 @@ serve(async (req) => {
 
     // Validate chamado_id format (UUID)
     if (!isValidUUID(chamado_id)) {
-      console.error("Invalid chamado_id format:", chamado_id);
+      logStep("Invalid chamado_id format", { chamado_id });
       return new Response(
         JSON.stringify({ error: "Formato de chamado_id inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    logStep("Processing chamado", { chamado_id });
 
     // Get chamado details
     const { data: chamado, error: chamadoError } = await supabaseAdmin
@@ -55,7 +63,7 @@ serve(async (req) => {
       .single();
 
     if (chamadoError || !chamado) {
-      console.error("Error fetching chamado:", chamadoError);
+      logStep("Chamado not found", { error: chamadoError });
       return new Response(
         JSON.stringify({ error: "Chamado not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -70,7 +78,7 @@ serve(async (req) => {
       .single();
 
     if (existingFee) {
-      console.log("Fee already recorded for chamado:", chamado_id);
+      logStep("Fee already recorded", { chamado_id, fee_id: existingFee.id });
       return new Response(
         JSON.stringify({ message: "Fee already recorded", fee_id: existingFee.id }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -81,40 +89,41 @@ serve(async (req) => {
     const serviceValue = Number(chamado.valor) || 0;
     
     if (!providerId || serviceValue <= 0) {
+      logStep("Invalid chamado data", { providerId, serviceValue });
       return new Response(
         JSON.stringify({ error: "Invalid chamado: missing provider or value" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get commission percentage from app_settings
-    const { data: commissionSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "app_commission_percentage")
-      .single();
+    logStep("Calculating fee for provider", { providerId, serviceValue });
 
-    // Handle both formats: { value: 15 } or just 15
-    let commissionPercentage = 15;
-    if (commissionSetting?.value) {
-      if (typeof commissionSetting.value === 'object' && 'value' in (commissionSetting.value as object)) {
-        commissionPercentage = Number((commissionSetting.value as { value: number }).value);
-      } else {
-        commissionPercentage = Number(commissionSetting.value);
-      }
-    }
+    // =================================================================
+    // USE CENTRALIZED FEE CALCULATOR - ISOLATED BY PROVIDER_ID
+    // This ensures each provider gets their own correct fee rate
+    // =================================================================
+    const feeCalculation = await calculateProviderFee(
+      supabaseAdmin,
+      providerId,
+      serviceValue
+    );
 
-    // OFFICIAL FEE CALCULATION (audit-ready)
-    // Formula: valorTaxa = valorCorrida × (taxaAppPercentual / 100)
-    const rawFeeAmount = serviceValue * (commissionPercentage / 100);
-    // Round to 2 decimal places (financial standard)
-    const feeAmount = Math.round(rawFeeAmount * 100) / 100;
-    // valorLiquidoPrestador = valorCorrida - valorTaxa
-    const providerNetAmount = Math.round((serviceValue - feeAmount) * 100) / 100;
+    const feePercentage = feeCalculation.feePercentage;
+    const feeAmount = feeCalculation.applicationFeeAmountCentavos / 100; // Convert to BRL
+    const providerNetAmount = feeCalculation.providerReceivesCentavos / 100; // Convert to BRL
+
+    logStep("Fee calculated", {
+      providerId,
+      serviceValue,
+      feePercentage,
+      feeAmount,
+      providerNetAmount,
+      feeSource: feeCalculation.feeSource,
+    });
 
     // INVARIANT CHECKS (required for compliance)
     if (feeAmount < 0 || providerNetAmount < 0) {
-      console.error("Invariant violation: negative values", { feeAmount, providerNetAmount });
+      logStep("Invariant violation: negative values", { feeAmount, providerNetAmount });
       return new Response(
         JSON.stringify({ error: "Cálculo inválido: valores negativos" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -124,7 +133,7 @@ serve(async (req) => {
     // Check sum invariant with tolerance
     const sum = Math.round((feeAmount + providerNetAmount) * 100) / 100;
     if (Math.abs(sum - serviceValue) > 0.01) {
-      console.error("Invariant violation: sum mismatch", { sum, serviceValue });
+      logStep("Invariant violation: sum mismatch", { sum, serviceValue });
       return new Response(
         JSON.stringify({ error: "Erro de arredondamento no cálculo" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -144,11 +153,13 @@ serve(async (req) => {
       chamado_id: chamado_id,
       provider_id: providerId,
       service_value: serviceValue,
-      fee_percentage: commissionPercentage,
+      fee_percentage: feePercentage,
       fee_amount: feeAmount,
       fee_type: feeType,
       status: feeType === "STRIPE" ? "PAGO" : "DEVENDO",
     };
+
+    logStep("Creating fee record", feeData);
 
     const { data: newFee, error: feeError } = await supabaseAdmin
       .from("provider_fees")
@@ -157,7 +168,7 @@ serve(async (req) => {
       .single();
 
     if (feeError) {
-      console.error("Error creating fee:", feeError);
+      logStep("Error creating fee", { error: feeError });
       return new Response(
         JSON.stringify({ error: "Failed to create fee record" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -185,7 +196,11 @@ serve(async (req) => {
         })
         .eq("user_id", providerId);
 
-      console.log(`Updated provider ${providerId} pending balance: ${newBalance} (${percentUsed.toFixed(1)}% of limit)`);
+      logStep("Updated provider balance", { 
+        providerId, 
+        newBalance, 
+        percentUsed: `${percentUsed.toFixed(1)}%` 
+      });
 
       // Check if should send 70% warning notification
       if (percentUsed >= 70 && percentUsed < 100) {
@@ -194,7 +209,7 @@ serve(async (req) => {
         
         // Only send if not warned in last 24 hours
         if (!lastWarning || lastWarning < oneDayAgo) {
-          console.log(`Sending 70% warning to provider ${providerId}`);
+          logStep("Sending 70% warning notification", { providerId, percentUsed });
           
           try {
             // Send push notification
@@ -220,25 +235,31 @@ serve(async (req) => {
               .update({ pending_fee_warning_sent_at: new Date().toISOString() })
               .eq("user_id", providerId);
               
-            console.log(`70% warning notification sent to provider ${providerId}`);
+            logStep("Warning notification sent", { providerId });
           } catch (notifError) {
-            console.error(`Failed to send warning notification:`, notifError);
+            logStep("Failed to send warning notification", { error: notifError });
           }
         }
       }
     }
 
-    // Update chamado with commission info
+    // Update chamado with commission info (using provider-specific rate)
     await supabaseAdmin
       .from("chamados")
       .update({
-        commission_percentage: commissionPercentage,
+        commission_percentage: feePercentage,
         commission_amount: feeAmount,
         provider_amount: serviceValue - feeAmount,
       })
       .eq("id", chamado_id);
 
-    console.log(`Fee recorded for chamado ${chamado_id}: type=${feeType}, amount=${feeAmount}`);
+    logStep("Fee recorded successfully", {
+      chamado_id,
+      feeType,
+      feeAmount,
+      feePercentage,
+      feeSource: feeCalculation.feeSource,
+    });
 
     return new Response(
       JSON.stringify({
@@ -246,6 +267,8 @@ serve(async (req) => {
         fee: newFee,
         fee_type: feeType,
         fee_amount: feeAmount,
+        fee_percentage: feePercentage,
+        fee_source: feeCalculation.feeSource,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -253,8 +276,7 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     const errorStack = error instanceof Error ? error.stack : undefined;
-    console.error("Error in record-service-fee:", { message: errorMessage, stack: errorStack });
-    // Return generic message to client, keep details in server logs
+    logStep("ERROR", { message: errorMessage, stack: errorStack });
     return new Response(
       JSON.stringify({ error: "Erro ao registrar taxa. Tente novamente." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { calculateProviderFee } from "../_shared/feeCalculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,39 +134,38 @@ serve(async (req) => {
     }
     logStep("Payment method verified", { brand: paymentMethod.card?.brand, last4: paymentMethod.card?.last4 });
 
-    // Get app commission percentage
-    const { data: settings } = await supabaseClient
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'app_commission_percentage')
-      .single();
+    // =================================================================
+    // USE CENTRALIZED FEE CALCULATOR - ISOLATED BY PROVIDER_ID
+    // This ensures each provider gets their own correct fee rate
+    // =================================================================
+    const feeCalculation = await calculateProviderFee(
+      supabaseClient,
+      chamado.prestador_id,
+      chamado.valor
+    );
 
-    const commissionPercentage = settings?.value?.value || 15;
-    logStep("Commission percentage", { percentage: commissionPercentage });
-
-    // Calculate amounts (in centavos)
-    const totalAmountCentavos = Math.round(chamado.valor * 100);
-    const applicationFeeAmount = Math.round(totalAmountCentavos * (commissionPercentage / 100));
-    
-    logStep("Payment amounts calculated", {
-      total: totalAmountCentavos,
-      applicationFee: applicationFeeAmount,
-      providerReceives: totalAmountCentavos - applicationFeeAmount,
+    logStep("Fee calculated", {
+      providerId: chamado.prestador_id,
+      serviceValue: chamado.valor,
+      feePercentage: feeCalculation.feePercentage,
+      applicationFee: feeCalculation.applicationFeeAmountCentavos,
+      providerReceives: feeCalculation.providerReceivesCentavos,
+      feeSource: feeCalculation.feeSource,
     });
 
     // Get origin for return_url
     const origin = req.headers.get("origin") || "https://giga-sos.lovable.app";
     
-    // Create PaymentIntent with saved card
+    // Create PaymentIntent with saved card using provider-specific fee
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: totalAmountCentavos,
+      amount: feeCalculation.totalAmountCentavos,
       currency: "brl",
       customer: customerId,
       payment_method: payment_method_id,
       off_session: false,
       confirm: true,
       return_url: `${origin}/`,
-      application_fee_amount: applicationFeeAmount,
+      application_fee_amount: feeCalculation.applicationFeeAmountCentavos,
       transfer_data: {
         destination: providerData.stripe_account_id,
       },
@@ -174,7 +174,8 @@ serve(async (req) => {
         cliente_id: user.id,
         prestador_id: chamado.prestador_id,
         tipo_servico: chamado.tipo_servico,
-        commission_percentage: commissionPercentage.toString(),
+        commission_percentage: feeCalculation.feePercentage.toString(),
+        fee_source: feeCalculation.feeSource,
         payment_method_type: 'saved_card',
       },
     });
@@ -193,9 +194,9 @@ serve(async (req) => {
         .from('chamados')
         .update({
           stripe_payment_intent_id: paymentIntent.id,
-          commission_percentage: commissionPercentage,
-          commission_amount: applicationFeeAmount / 100,
-          provider_amount: (totalAmountCentavos - applicationFeeAmount) / 100,
+          commission_percentage: feeCalculation.feePercentage,
+          commission_amount: feeCalculation.applicationFeeAmountCentavos / 100,
+          provider_amount: feeCalculation.providerReceivesCentavos / 100,
           payment_provider: 'stripe',
           payment_method: 'saved_card',
         })
@@ -220,9 +221,9 @@ serve(async (req) => {
         .from('chamados')
         .update({
           stripe_payment_intent_id: paymentIntent.id,
-          commission_percentage: commissionPercentage,
-          commission_amount: applicationFeeAmount / 100,
-          provider_amount: (totalAmountCentavos - applicationFeeAmount) / 100,
+          commission_percentage: feeCalculation.feePercentage,
+          commission_amount: feeCalculation.applicationFeeAmountCentavos / 100,
+          provider_amount: feeCalculation.providerReceivesCentavos / 100,
           payment_provider: 'stripe',
           payment_method: 'saved_card',
           payment_status: 'paid_stripe',
@@ -247,7 +248,6 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
     logStep("ERROR", { message: errorMessage, stack: errorStack });
-    // Return generic message to client, keep details in server logs
     return new Response(JSON.stringify({ error: "Erro ao processar pagamento. Tente novamente." }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

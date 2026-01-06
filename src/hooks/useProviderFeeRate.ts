@@ -102,25 +102,33 @@ export function useProviderFeeRate(providerId: string | null): ProviderFeeData {
         ? promotionAppliesToProvider(promotionConfig, providerId)
         : false;
 
-      // Determine effective rate based on priority
+      // Determine effective rate based on strict priority:
+      // 1. Promotion (if active for this provider)
+      // 2. Custom fee (if customFeeEnabled = true) - EXCLUSIVE to provider
+      // 3. Global rate
+      // NEVER mix custom fee with global fee!
       let effectivePercentage = globalRate;
       let effectiveFixedFee = 0;
       let feeSource: 'promotion' | 'individual' | 'global' = 'global';
       let promotionEndDate: Date | null = null;
 
       if (hasActivePromotion && promotionConfig) {
+        // Priority 1: Promotion
         effectivePercentage = promotionConfig.promotional_commission;
         effectiveFixedFee = 0;
         feeSource = 'promotion';
         promotionEndDate = promotionConfig.end_date ? new Date(promotionConfig.end_date) : null;
-        console.log('[useProviderFeeRate] Using promotion rate:', effectivePercentage);
-      } else if (customFeeEnabled && typeof individualRate === 'number' && individualRate >= 0) {
-        effectivePercentage = individualRate;
+        console.log('[useProviderFeeRate] Using PROMOTION rate:', effectivePercentage, 'for provider:', providerId);
+      } else if (customFeeEnabled === true) {
+        // Priority 2: Custom fee - EXCLUSIVE to this provider
+        // Use the individual rate even if it's 0 (that's a valid custom rate)
+        effectivePercentage = typeof individualRate === 'number' ? individualRate : 0;
         effectiveFixedFee = typeof individualFixedFee === 'number' ? individualFixedFee : 0;
         feeSource = 'individual';
-        console.log('[useProviderFeeRate] Using individual rate:', effectivePercentage);
+        console.log('[useProviderFeeRate] Using INDIVIDUAL rate:', effectivePercentage, 'fixed:', effectiveFixedFee, 'for provider:', providerId);
       } else {
-        console.log('[useProviderFeeRate] Using global rate:', globalRate);
+        // Priority 3: Global rate (only when customFeeEnabled is false/null)
+        console.log('[useProviderFeeRate] Using GLOBAL rate:', globalRate, 'for provider:', providerId);
       }
 
       setData({

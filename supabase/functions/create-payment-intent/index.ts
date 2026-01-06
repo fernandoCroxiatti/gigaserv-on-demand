@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { calculateProviderFee } from "../_shared/feeCalculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -200,99 +201,30 @@ serve(async (req) => {
       transfersEnabled: stripeAccount.capabilities?.transfers
     });
 
-    // Get app commission percentage (global rate)
-    const { data: settings } = await supabaseClient
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'app_commission_percentage')
-      .single();
+    // =================================================================
+    // USE CENTRALIZED FEE CALCULATOR - ISOLATED BY PROVIDER_ID
+    // This ensures each provider gets their own correct fee rate
+    // Priority: 1. Promotion, 2. Custom fee, 3. Global
+    // =================================================================
+    const feeCalculation = await calculateProviderFee(
+      supabaseClient,
+      chamado.prestador_id,
+      chamado.valor
+    );
 
-    const globalCommissionPercentage = settings?.value?.value || 15;
+    const commissionPercentage = feeCalculation.feePercentage;
+    const totalAmountCentavos = feeCalculation.totalAmountCentavos;
+    const applicationFeeAmount = feeCalculation.applicationFeeAmountCentavos;
+    const feeSource = feeCalculation.feeSource;
     
-    // Check for active promotion campaign
-    const { data: promoSettings } = await supabaseClient
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'provider_fee_promotion')
-      .maybeSingle();
-
-    let promoConfig = promoSettings?.value as {
-      enabled?: boolean;
-      promotional_commission?: number;
-      start_date?: string;
-      end_date?: string;
-      scope?: 'global' | 'specific_provider';
-      specific_provider_id?: string;
-    } | null;
-
-    // Check if promotion is active and applies to this provider
-    let isPromotionActive = false;
-    let promotionalCommission = 0;
-    
-    if (promoConfig?.enabled && promoConfig.start_date && promoConfig.end_date) {
-      const now = new Date();
-      const startDate = new Date(promoConfig.start_date);
-      const endDate = new Date(promoConfig.end_date);
-      
-      if (now >= startDate && now <= endDate) {
-        // Check scope
-        if (promoConfig.scope === 'global') {
-          isPromotionActive = true;
-          promotionalCommission = promoConfig.promotional_commission ?? 0;
-        } else if (promoConfig.scope === 'specific_provider' && 
-                   promoConfig.specific_provider_id === chamado.prestador_id) {
-          isPromotionActive = true;
-          promotionalCommission = promoConfig.promotional_commission ?? 0;
-        }
-      }
-    }
-    
-    // Determine effective commission: 
-    // Priority: 1. Active promotion, 2. Custom fee, 3. Global
-    let commissionPercentage = globalCommissionPercentage;
-    let customFixedFee = 0;
-    let feeSource = 'global';
-    
-    if (isPromotionActive) {
-      commissionPercentage = promotionalCommission;
-      feeSource = 'promotion';
-      logStep("Using promotion fee", { 
-        percentage: commissionPercentage, 
-        startDate: promoConfig?.start_date,
-        endDate: promoConfig?.end_date,
-        scope: promoConfig?.scope,
-        providerId: chamado.prestador_id 
-      });
-    } else if (providerData.custom_fee_enabled) {
-      if (typeof providerData.custom_fee_percentage === 'number') {
-        commissionPercentage = providerData.custom_fee_percentage;
-      }
-      if (typeof providerData.custom_fee_fixed === 'number') {
-        customFixedFee = providerData.custom_fee_fixed;
-      }
-      feeSource = 'individual';
-      logStep("Using custom fee for provider", { 
-        percentage: commissionPercentage, 
-        fixedFee: customFixedFee,
-        providerId: chamado.prestador_id 
-      });
-    } else {
-      logStep("Using global commission", { percentage: commissionPercentage });
-    }
-
-    // Calculate amounts (in centavos)
-    const totalAmountCentavos = Math.round(chamado.valor * 100);
-    // Application fee = percentage fee + fixed fee (in centavos)
-    const percentageFeeAmount = Math.round(totalAmountCentavos * (commissionPercentage / 100));
-    const fixedFeeAmountCentavos = Math.round(customFixedFee * 100);
-    const applicationFeeAmount = percentageFeeAmount + fixedFeeAmountCentavos;
-    
-    logStep("Payment amounts calculated", {
+    logStep("Fee calculated via centralized calculator", {
+      providerId: chamado.prestador_id,
+      serviceValue: chamado.valor,
       total: totalAmountCentavos,
-      percentageFee: percentageFeeAmount,
-      fixedFee: fixedFeeAmountCentavos,
+      percentageFee: feeCalculation.percentageFeeAmountCentavos,
+      fixedFee: feeCalculation.fixedFeeAmountCentavos,
       applicationFee: applicationFeeAmount,
-      providerReceives: totalAmountCentavos - applicationFeeAmount,
+      providerReceives: feeCalculation.providerReceivesCentavos,
       feeSource: feeSource,
     });
 
@@ -414,9 +346,9 @@ serve(async (req) => {
       .from('chamados')
       .update({
         stripe_payment_intent_id: paymentIntent.id,
-        commission_percentage: commissionPercentage,
-        commission_amount: applicationFeeAmount / 100,
-        provider_amount: (totalAmountCentavos - applicationFeeAmount) / 100,
+        commission_percentage: feeCalculation.feePercentage,
+        commission_amount: feeCalculation.applicationFeeAmountCentavos / 100,
+        provider_amount: feeCalculation.providerReceivesCentavos / 100,
         payment_provider: 'stripe',
         payment_method: payment_method_type, // Track the payment method used
       })
@@ -430,9 +362,10 @@ serve(async (req) => {
     logStep("PaymentIntent ready for client", {
       paymentIntentId: paymentIntent.id,
       paymentMethod: payment_method_type,
-      amountBRL: (totalAmountCentavos / 100).toFixed(2),
-      applicationFeeBRL: (applicationFeeAmount / 100).toFixed(2),
-      providerReceivesBRL: ((totalAmountCentavos - applicationFeeAmount) / 100).toFixed(2),
+      amountBRL: (feeCalculation.totalAmountCentavos / 100).toFixed(2),
+      applicationFeeBRL: (feeCalculation.applicationFeeAmountCentavos / 100).toFixed(2),
+      providerReceivesBRL: (feeCalculation.providerReceivesCentavos / 100).toFixed(2),
+      feeSource: feeCalculation.feeSource,
     });
 
     // Response includes all data needed for frontend to handle payment
@@ -441,8 +374,9 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       client_secret: paymentIntent.client_secret,
       payment_intent_id: paymentIntent.id,
-      amount: totalAmountCentavos,
-      application_fee: applicationFeeAmount,
+      amount: feeCalculation.totalAmountCentavos,
+      application_fee: feeCalculation.applicationFeeAmountCentavos,
+      fee_source: feeCalculation.feeSource,
       publishable_key: Deno.env.get("VITE_STRIPE_PUBLIC_KEY"),
       payment_method_type: payment_method_type,
       currency: 'brl',
