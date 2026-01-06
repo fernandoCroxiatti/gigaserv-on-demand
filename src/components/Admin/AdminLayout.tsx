@@ -17,7 +17,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, isLoggingOutState } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { useHighSeverityAlerts } from '@/hooks/useHighSeverityAlerts';
 
@@ -45,7 +45,8 @@ export function AdminLayout() {
   useHighSeverityAlerts();
 
   const handleLogout = async () => {
-    navigate('/auth');
+    if (isLoggingOutState()) return;
+    navigate('/auth', { replace: true });
     await signOut();
   };
 

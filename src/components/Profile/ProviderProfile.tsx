@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, isLoggingOutState } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useProviderFinancialData } from '@/hooks/useProviderFinancialData';
 import { Button } from '../ui/button';
@@ -72,6 +72,7 @@ export function ProviderProfile() {
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Stripe Connect state
   const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
@@ -166,8 +167,11 @@ export function ProviderProfile() {
   }, [navigate]);
 
   const handleSignOut = async () => {
-    navigate('/auth');
+    if (loggingOut || isLoggingOutState()) return;
+    setLoggingOut(true);
+    navigate('/auth', { replace: true });
     await signOut();
+    setLoggingOut(false);
   };
 
   const handleDeleteAccount = async () => {
