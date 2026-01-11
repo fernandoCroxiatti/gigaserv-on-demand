@@ -80,3 +80,18 @@ verify_jwt = true
 
 [functions.generate-notification-image]
 verify_jwt = true
+
+[functions.onesignal-push]
+verify_jwt = false
+
+[functions.check-cpf-exists]
+verify_jwt = false
+
+[functions.check-phone-exists]
+verify_jwt = false
+
+[functions.process-scheduled-notifications]
+verify_jwt = false
+
+[functions.auto-finish-pending-services]
+verify_jwt = false
