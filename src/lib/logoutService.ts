@@ -11,6 +11,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { oneSignalLogout } from '@/lib/oneSignal';
 
 // Maximum time to wait for signOut before forcing local logout
 const SIGNOUT_TIMEOUT_MS = 5000;
@@ -137,15 +138,17 @@ export async function performLogout(
       });
     }
     
-    // Step 3: Remove all realtime channels (parallel with signOut)
+    // Step 3: Remove all realtime channels (parallel with signOut and OneSignal logout)
     // Step 4: Execute signOut with timeout
+    // Step 5: Logout from OneSignal
     // Do these in parallel for speed
     await Promise.all([
       removeAllRealtimeChannels(),
       executeSignOutWithTimeout(),
+      oneSignalLogout().catch(err => console.warn('[LogoutService] OneSignal logout error:', err)),
     ]);
     
-    // Step 5: Clear local data
+    // Step 6: Clear local data
     clearLocalData();
     
     console.log('[LogoutService] Logout completed successfully');
