@@ -157,6 +157,7 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "https://giga-sos.lovable.app";
     
     // Create PaymentIntent with saved card using provider-specific fee
+    // CRITICAL: Use manual capture for card payments (hold now, capture on service completion)
     const paymentIntent = await stripe.paymentIntents.create({
       amount: feeCalculation.totalAmountCentavos,
       currency: "brl",
@@ -164,6 +165,7 @@ serve(async (req) => {
       payment_method: payment_method_id,
       off_session: false,
       confirm: true,
+      capture_method: 'manual', // HOLD payment, don't capture immediately
       return_url: `${origin}/`,
       application_fee_amount: feeCalculation.applicationFeeAmountCentavos,
       transfer_data: {
@@ -180,9 +182,10 @@ serve(async (req) => {
       },
     });
 
-    logStep("PaymentIntent created and confirmed", { 
+    logStep("PaymentIntent created with manual capture", { 
       paymentIntentId: paymentIntent.id,
       status: paymentIntent.status,
+      captureMethod: 'manual',
     });
 
     // Check if payment requires additional action (3D Secure)
@@ -199,6 +202,7 @@ serve(async (req) => {
           provider_amount: feeCalculation.providerReceivesCentavos / 100,
           payment_provider: 'stripe',
           payment_method: 'saved_card',
+          payment_status: 'pending',
         })
         .eq('id', chamado_id);
 
@@ -212,9 +216,43 @@ serve(async (req) => {
       });
     }
 
-    // Payment succeeded
+    // Payment authorized (requires_capture) - money is held
+    if (paymentIntent.status === 'requires_capture') {
+      logStep("Payment authorized successfully (money held)", {
+        paymentIntentId: paymentIntent.id,
+        amountHeld: feeCalculation.totalAmountCentavos,
+      });
+
+      // Update chamado - payment is authorized but not captured yet
+      await supabaseClient
+        .from('chamados')
+        .update({
+          stripe_payment_intent_id: paymentIntent.id,
+          commission_percentage: feeCalculation.feePercentage,
+          commission_amount: feeCalculation.applicationFeeAmountCentavos / 100,
+          provider_amount: feeCalculation.providerReceivesCentavos / 100,
+          payment_provider: 'stripe',
+          payment_method: 'saved_card',
+          payment_status: 'pending', // Authorized but not captured
+          payment_authorized_at: new Date().toISOString(),
+          status: 'in_service', // Start the service - money is secured
+        })
+        .eq('id', chamado_id);
+
+      return new Response(JSON.stringify({
+        success: true,
+        authorized: true,
+        payment_intent_id: paymentIntent.id,
+        message: "Pagamento autorizado. Valor será capturado ao finalizar o serviço.",
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // Payment succeeded immediately (shouldn't happen with manual capture, but handle it)
     if (paymentIntent.status === 'succeeded') {
-      logStep("Payment succeeded immediately");
+      logStep("Payment succeeded immediately (unexpected with manual capture)");
 
       // Update chamado
       await supabaseClient
@@ -228,6 +266,7 @@ serve(async (req) => {
           payment_method: 'saved_card',
           payment_status: 'paid_stripe',
           payment_completed_at: new Date().toISOString(),
+          payment_captured_at: new Date().toISOString(),
           status: 'in_service',
         })
         .eq('id', chamado_id);

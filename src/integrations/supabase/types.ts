@@ -168,6 +168,9 @@ export type Database = {
           origem_address: string
           origem_lat: number
           origem_lng: number
+          payment_authorized_at: string | null
+          payment_canceled_at: string | null
+          payment_captured_at: string | null
           payment_completed_at: string | null
           payment_method: string | null
           payment_provider: string | null
@@ -216,6 +219,9 @@ export type Database = {
           origem_address: string
           origem_lat: number
           origem_lng: number
+          payment_authorized_at?: string | null
+          payment_canceled_at?: string | null
+          payment_captured_at?: string | null
           payment_completed_at?: string | null
           payment_method?: string | null
           payment_provider?: string | null
@@ -264,6 +270,9 @@ export type Database = {
           origem_address?: string
           origem_lat?: number
           origem_lng?: number
+          payment_authorized_at?: string | null
+          payment_canceled_at?: string | null
+          payment_captured_at?: string | null
           payment_completed_at?: string | null
           payment_method?: string | null
           payment_provider?: string | null

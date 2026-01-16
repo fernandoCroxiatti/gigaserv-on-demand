@@ -995,11 +995,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // For CLIENT canceling or DURING/AFTER service: full cancel
       console.log('[CancelChamado] Client or post-service cancel');
       
+      // Cancel payment authorization if it exists (releases held funds)
+      try {
+        await supabase.functions.invoke('cancel-payment-authorization', {
+          body: { chamado_id: chamado.id, reason: 'client_cancellation' }
+        });
+        console.log('[CancelChamado] Payment authorization cancelled');
+      } catch (cancelPaymentErr) {
+        console.error('[CancelChamado] Error cancelling payment:', cancelPaymentErr);
+      }
+      
       const { error } = await supabase
         .from('chamados')
         .update({ status: 'canceled' })
         .eq('id', chamado.id)
-        .eq('cliente_id', authUser.id); // Only update if this client owns the chamado
+        .eq('cliente_id', authUser.id);
 
       if (error) {
         console.error('[CancelChamado] Error canceling:', error);
@@ -1072,6 +1082,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })
             .eq('user_id', chamado.prestadorId);
         }
+      }
+
+      // Capture payment if it was a card payment (held authorization)
+      try {
+        const { error: captureError } = await supabase.functions.invoke('capture-payment', {
+          body: { chamado_id: chamado.id }
+        });
+        
+        if (captureError) {
+          console.error('Error capturing payment:', captureError);
+        } else {
+          console.log('Payment captured successfully for chamado:', chamado.id);
+        }
+      } catch (captureErr) {
+        console.error('Error invoking capture-payment:', captureErr);
       }
 
       // Record service fee automatically

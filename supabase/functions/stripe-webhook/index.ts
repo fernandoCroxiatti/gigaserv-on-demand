@@ -105,6 +105,7 @@ serve(async (req) => {
           amount: paymentIntent.amount,
           metadata: paymentIntent.metadata,
           paymentMethodTypes: paymentIntent.payment_method_types,
+          captureMethod: paymentIntent.capture_method,
         });
 
         const chamadoId = paymentIntent.metadata?.chamado_id;
@@ -120,6 +121,8 @@ serve(async (req) => {
           if (existingChamado?.payment_status !== 'paid_stripe') {
             const paymentMethod = paymentIntent.payment_method_types?.includes('pix') ? 'pix' : 'card';
             
+            // For card payments with manual capture, this event fires after capture
+            // For PIX, it fires after payment confirmation
             const { error } = await supabaseClient
               .from('chamados')
               .update({
@@ -127,6 +130,7 @@ serve(async (req) => {
                 status: 'in_service',
                 payment_completed_at: new Date().toISOString(),
                 payment_method: paymentMethod,
+                payment_captured_at: paymentMethod === 'card' ? new Date().toISOString() : null,
               })
               .eq('id', chamadoId);
 
@@ -137,6 +141,36 @@ serve(async (req) => {
             }
           } else {
             logStep("Chamado already paid, skipping update", { chamadoId });
+          }
+        }
+        break;
+      }
+
+      // NEW: Handle authorization hold (requires_capture status after confirmation)
+      case "payment_intent.amount_capturable_updated": {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        logStep("Payment authorized (amount capturable)", { 
+          paymentIntentId: paymentIntent.id,
+          amountCapturable: paymentIntent.amount_capturable,
+          status: paymentIntent.status,
+        });
+
+        const chamadoId = paymentIntent.metadata?.chamado_id;
+        if (chamadoId && paymentIntent.status === 'requires_capture') {
+          // Payment is authorized (held) - update chamado
+          const { error } = await supabaseClient
+            .from('chamados')
+            .update({
+              payment_status: 'pending', // Authorized but not captured
+              payment_authorized_at: new Date().toISOString(),
+              status: 'in_service', // Service can start - money is secured
+            })
+            .eq('id', chamadoId);
+
+          if (error) {
+            logStep("Error updating chamado for authorization", { error: error.message });
+          } else {
+            logStep("Chamado updated with authorization", { chamadoId });
           }
         }
         break;
