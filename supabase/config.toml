@@ -95,3 +95,9 @@ verify_jwt = false
 
 [functions.auto-finish-pending-services]
 verify_jwt = false
+
+[functions.capture-payment]
+verify_jwt = false
+
+[functions.cancel-payment-authorization]
+verify_jwt = false

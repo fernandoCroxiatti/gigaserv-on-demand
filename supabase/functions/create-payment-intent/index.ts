@@ -287,9 +287,18 @@ serve(async (req) => {
       },
     };
 
-    // Add PIX-specific options for expiration (15 minutes)
-    // This generates QR Code and copy-paste code directly via PaymentIntent
-    if (payment_method_type === 'pix') {
+    // CARD PAYMENTS: Use manual capture (hold/authorize first, capture on service completion)
+    // PIX PAYMENTS: Use automatic capture (immediate payment)
+    if (payment_method_type === 'card') {
+      // CRITICAL: Manual capture for cards - money is held until service is finished
+      // This protects both client (can cancel and get refund) and platform (guaranteed payment)
+      paymentIntentOptions.capture_method = 'manual';
+      logStep("Card payment with manual capture (authorization hold)", {
+        captureMethod: 'manual',
+        description: 'Payment will be held until service completion',
+      });
+    } else if (payment_method_type === 'pix') {
+      // PIX: Automatic capture with expiration
       paymentIntentOptions.payment_method_options = {
         pix: {
           expires_after_seconds: PIX_EXPIRATION_SECONDS,
@@ -300,6 +309,7 @@ serve(async (req) => {
         expiresIn: '15 minutes',
         willGenerateQRCode: true,
         willGenerateCopyPasteCode: true,
+        captureMethod: 'automatic',
       });
     }
 
@@ -342,6 +352,9 @@ serve(async (req) => {
     });
 
     // Update chamado with payment intent
+    // For card payments with manual capture, set status as 'pending' (authorized but not captured)
+    const paymentStatusForCard = payment_method_type === 'card' ? 'pending' : undefined;
+    
     const { error: updateError } = await supabaseClient
       .from('chamados')
       .update({
@@ -351,6 +364,7 @@ serve(async (req) => {
         provider_amount: feeCalculation.providerReceivesCentavos / 100,
         payment_provider: 'stripe',
         payment_method: payment_method_type, // Track the payment method used
+        ...(paymentStatusForCard && { payment_status: paymentStatusForCard }),
       })
       .eq('id', chamado_id);
 
@@ -362,6 +376,7 @@ serve(async (req) => {
     logStep("PaymentIntent ready for client", {
       paymentIntentId: paymentIntent.id,
       paymentMethod: payment_method_type,
+      captureMethod: payment_method_type === 'card' ? 'manual' : 'automatic',
       amountBRL: (feeCalculation.totalAmountCentavos / 100).toFixed(2),
       applicationFeeBRL: (feeCalculation.applicationFeeAmountCentavos / 100).toFixed(2),
       providerReceivesBRL: (feeCalculation.providerReceivesCentavos / 100).toFixed(2),
