@@ -160,6 +160,7 @@ export const getCurrentPosition = async (): Promise<{ lat: number; lng: number }
     console.error('[CapacitorPermissions] Capacitor geolocation error:', error?.message || error);
     return null;
   }
+};
 
 export const watchPosition = (
   callback: (position: { lat: number; lng: number }) => void,
