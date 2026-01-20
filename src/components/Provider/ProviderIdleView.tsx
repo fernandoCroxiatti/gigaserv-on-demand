@@ -4,7 +4,7 @@ import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
 import { Power, Radar, Star, MapPin, Settings2, Check, AlertCircle, ChevronDown, Ban } from 'lucide-react';
 import { Slider } from '../ui/slider';
-import { useGeolocation } from '@/hooks/useGeolocation';
+import { useTWAGeolocation } from '@/hooks/useTWAGeolocation';
 import { SERVICE_CONFIG, ServiceType, Location } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -22,27 +22,30 @@ import { useProviderAutoOffline } from '@/hooks/useProviderAutoOffline';
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
 /**
- * PROVIDER IDLE VIEW
+ * PROVIDER IDLE VIEW - TWA OPTIMIZED
  * 
- * Cross-platform consistent rendering.
- * Resets state on mount and visibility change.
- * Uses backend as single source of truth.
+ * Uses Web Geolocation API exclusively for TWA compatibility.
+ * Never blocks UI - app opens instantly, GPS refines in background.
+ * Once "ready", never goes back to "locating" automatically.
  */
 
 export function ProviderIdleView() {
   const { user, toggleProviderOnline, setProviderRadarRange, setProviderServices, updateProviderLocation, providerData } = useApp();
   const { user: authUser } = useAuth();
+  
+  // TWA-optimized geolocation: fast first fix, background refinement
   const { 
     location, 
+    status: gpsStatus,
     error: geoError, 
-    requestLocation,
+    accuracy: gpsAccuracy,
+    isReady: gpsReady,
+    isLocating: gpsLocating,
+    hasLocation,
+    isPermissionDenied: locationDenied,
+    startLocating,
     refresh: refreshLocation,
-    permissionStatus,
-    isGranted: locationGranted,
-    isDenied: locationDenied,
-    needsPermission: locationNeedsPermission,
-    loading: locationLoading
-  } = useGeolocation({ watch: true, autoRequest: false });
+  } = useTWAGeolocation({ autoStart: true });
   
   const [showServiceConfig, setShowServiceConfig] = useState(false);
   const [stripeVerified, setStripeVerified] = useState(false);
@@ -80,8 +83,8 @@ export function ProviderIdleView() {
   const isRegistrationComplete = providerData?.registration_complete === true;
   
   // CRITICAL: Validate that location is FRESH (not from database cache)
-  // A valid location must come from GPS hook, not from providerData
-  const hasFreshGpsLocation = !!(location && location.lat && location.lng);
+  // With TWA hook, hasLocation means we have a real GPS fix
+  const hasFreshGpsLocation = hasLocation;
   const latestLocationRef = useRef<Location | null>(null);
 
   // Fallback center (visual only): last known DB position so the map can render instantly.
@@ -94,22 +97,14 @@ export function ProviderIdleView() {
       }
     : undefined;
 
-  const gpsStatus: 'locating' | 'ready' | 'error' = locationDenied
-    ? 'error'
-    : hasFreshGpsLocation
-      ? 'ready'
-      : geoError
-        ? 'error'
-        : 'locating';
-
   useEffect(() => {
     latestLocationRef.current = location;
   }, [location]);
 
   // Stop any "waiting" UI once we have a real fix (background GPS succeeded)
   useEffect(() => {
-    if (hasFreshGpsLocation) setWaitingForGps(false);
-  }, [hasFreshGpsLocation]);
+    if (gpsReady) setWaitingForGps(false);
+  }, [gpsReady]);
 
   // Provider online sync - sends heartbeats with location while online
   // IMPORTANT: Does NOT force online state - respects manual toggle
@@ -132,13 +127,7 @@ export function ProviderIdleView() {
     isOnline
   });
 
-  // GPS em background: se já tem permissão, inicia captura automaticamente sem bloquear UI
-  useEffect(() => {
-    if (locationGranted && !hasFreshGpsLocation && !locationLoading) {
-      console.log('[ProviderIdle] Auto-requesting GPS in background on mount');
-      requestLocation();
-    }
-  }, [locationGranted, hasFreshGpsLocation, locationLoading, requestLocation]);
+  // TWA hook auto-starts, no manual trigger needed
 
   useEffect(() => {
     const checkStripeStatus = async () => {
@@ -177,13 +166,13 @@ export function ProviderIdleView() {
     checkFinancialStatus();
   }, [authUser?.id, checkDebtLimit, checkProviderCanAccept]);
 
-  // Handle pending toggle online after location permission granted
+  // Handle pending toggle online after location ready
   useEffect(() => {
-    if (locationGranted && pendingToggleOnlineRef.current) {
+    if (gpsReady && pendingToggleOnlineRef.current) {
       pendingToggleOnlineRef.current = false;
       proceedWithToggleOnline();
     }
-  }, [locationGranted]);
+  }, [gpsReady]);
 
   const toggleService = (service: ServiceType) => {
     const newServices = currentServices.includes(service)
@@ -282,7 +271,8 @@ export function ProviderIdleView() {
       return;
     }
 
-    if (locationNeedsPermission || !locationGranted) {
+    // If GPS not ready yet, show modal to wait
+    if (!gpsReady && gpsStatus !== 'error') {
       // Show location explanation modal first
       pendingToggleOnlineRef.current = true;
       setShowLocationModal(true);
@@ -297,8 +287,8 @@ export function ProviderIdleView() {
     setLocationPermissionLoading(true);
     setShowLocationModal(false);
     
-    // Request the actual system permission
-    requestLocation();
+    // Request the actual system permission via TWA hook
+    startLocating();
     setLocationPermissionLoading(false);
   };
 
@@ -376,10 +366,18 @@ export function ProviderIdleView() {
         <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-3">
           
           {/* NON-BLOCKING GPS status indicator (small, subtle) */}
-          {gpsStatus === 'locating' && !isOnline && (
+          {gpsLocating && !isOnline && (
             <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-xs text-muted-foreground animate-fade-in">
               <MapPin className="w-3.5 h-3.5 animate-pulse" />
               <span>Atualizando localização...</span>
+            </div>
+          )}
+          
+          {/* Show accuracy when refining */}
+          {gpsStatus === 'refining' && gpsAccuracy && !isOnline && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-provider-primary/10 rounded-lg text-xs text-provider-primary animate-fade-in">
+              <Check className="w-3.5 h-3.5" />
+              <span>Localização: ±{Math.round(gpsAccuracy)}m</span>
             </div>
           )}
 
