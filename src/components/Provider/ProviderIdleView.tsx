@@ -29,7 +29,6 @@ const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chav
  * Uses backend as single source of truth.
  */
 
-
 export function ProviderIdleView() {
   const { user, toggleProviderOnline, setProviderRadarRange, setProviderServices, updateProviderLocation, providerData } = useApp();
   const { user: authUser } = useAuth();
@@ -37,6 +36,7 @@ export function ProviderIdleView() {
     location, 
     error: geoError, 
     requestLocation,
+    refresh: refreshLocation,
     permissionStatus,
     isGranted: locationGranted,
     isDenied: locationDenied,
@@ -47,6 +47,7 @@ export function ProviderIdleView() {
   const [showServiceConfig, setShowServiceConfig] = useState(false);
   const [stripeVerified, setStripeVerified] = useState(false);
   const [checkingStripe, setCheckingStripe] = useState(true);
+  const [waitingForGps, setWaitingForGps] = useState(false);
   const navigate = useNavigate();
   
   const { checkDebtLimit, checkProviderCanAccept } = useAntiFraud();
@@ -71,12 +72,16 @@ export function ProviderIdleView() {
   const [dismissedLocationBanner, setDismissedLocationBanner] = useState(false);
   
   const pendingToggleOnlineRef = useRef(false);
+  const gpsValidationAttemptRef = useRef(0);
   
   const isOnline = user?.providerData?.online || false;
   const radarRange = user?.providerData?.radarRange || 15;
   const currentServices = (providerData?.services_offered as ServiceType[]) || ['guincho'];
   const isRegistrationComplete = providerData?.registration_complete === true;
-  const hasValidLocation = !!(providerData?.current_lat && providerData?.current_lng);
+  
+  // CRITICAL: Validate that location is FRESH (not from database cache)
+  // A valid location must come from GPS hook, not from providerData
+  const hasFreshGpsLocation = !!(location && location.lat && location.lng);
 
   // Provider online sync - sends heartbeats with location while online
   // IMPORTANT: Does NOT force online state - respects manual toggle
@@ -88,7 +93,7 @@ export function ProviderIdleView() {
   useProviderOnlineSync({
     userId: authUser?.id || null,
     isOnline,
-    hasLocation: hasValidLocation,
+    hasLocation: hasFreshGpsLocation,
     onReconnected: handleReconnected
   });
 
@@ -98,6 +103,15 @@ export function ProviderIdleView() {
     userId: authUser?.id || null,
     isOnline
   });
+
+  // CRITICAL: Auto-request fresh GPS location on mount if permission already granted
+  // This ensures we get real GPS on first app open, not cached data
+  useEffect(() => {
+    if (locationGranted && !hasFreshGpsLocation && !locationLoading) {
+      console.log('[ProviderIdle] Auto-requesting fresh GPS location on mount');
+      requestLocation();
+    }
+  }, [locationGranted, hasFreshGpsLocation, locationLoading, requestLocation]);
 
   useEffect(() => {
     const checkStripeStatus = async () => {
@@ -155,27 +169,48 @@ export function ProviderIdleView() {
   };
 
   const proceedWithToggleOnline = async () => {
-    // Ensure we have a valid location before going online
-    if (!location) {
-      console.log('[ProviderIdle] No location yet, waiting...');
-      toast.info('Obtendo sua localização...');
-      // Wait a bit for location
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    // CRITICAL: Only proceed if we have FRESH GPS location (not cached/old)
+    if (!hasFreshGpsLocation) {
+      console.log('[ProviderIdle] No fresh GPS location - cannot go online');
+      setWaitingForGps(true);
+      toast.info('Aguarde, obtendo sua localização atual...');
+      
+      // Request fresh location
+      await refreshLocation();
+      
+      // Check again after refresh
+      if (!location) {
+        // Wait up to 10 seconds for GPS to respond
+        const maxAttempts = 5;
+        gpsValidationAttemptRef.current = 0;
+        
+        while (gpsValidationAttemptRef.current < maxAttempts && !location) {
+          gpsValidationAttemptRef.current++;
+          console.log(`[ProviderIdle] Waiting for GPS (attempt ${gpsValidationAttemptRef.current}/${maxAttempts})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        if (!location) {
+          setWaitingForGps(false);
+          toast.error('Não foi possível obter sua localização. Verifique se o GPS está ativado.');
+          return;
+        }
+      }
     }
     
-    // Update location in DB first if we have it
-    if (location) {
-      console.log('[ProviderIdle] Updating location before going online:', location);
-      await updateProviderLocation({ 
-        lat: location.lat, 
-        lng: location.lng, 
-        address: location.address 
-      });
-    }
+    setWaitingForGps(false);
+    
+    // CRITICAL: Update location in DB with FRESH GPS coordinates before going online
+    console.log('[ProviderIdle] Updating location with FRESH GPS before going online:', location);
+    await updateProviderLocation({ 
+      lat: location!.lat, 
+      lng: location!.lng, 
+      address: location!.address 
+    });
     
     await toggleProviderOnline();
     
-    console.log('[ProviderIdle] Toggle online complete');
+    console.log('[ProviderIdle] Toggle online complete with fresh location');
   };
 
   const handleToggleOnline = async () => {
@@ -255,6 +290,29 @@ export function ProviderIdleView() {
     <div className="relative h-full provider-theme">
       <RealMapView className="absolute inset-0" center={location || undefined} showSearchRadius={isOnline} searchRadius={radarRange} />
 
+      {/* GPS Loading Overlay - shown when waiting for fresh GPS */}
+      {!hasFreshGpsLocation && !geoError && !locationDenied && (
+        <div className="absolute inset-0 z-30 bg-background/80 flex items-center justify-center">
+          <div className="bg-card rounded-2xl p-6 shadow-lg text-center space-y-3 max-w-xs mx-4">
+            <div className="w-12 h-12 rounded-full bg-provider-primary/10 flex items-center justify-center mx-auto animate-pulse">
+              <MapPin className="w-6 h-6 text-provider-primary" />
+            </div>
+            <h3 className="font-semibold text-base">Obtendo sua localização...</h3>
+            <p className="text-sm text-muted-foreground">
+              Aguarde enquanto obtemos sua posição atual via GPS
+            </p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={requestLocation}
+              disabled={locationLoading}
+            >
+              {locationLoading ? 'Aguardando GPS...' : 'Tentar novamente'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Notification CTA - Solicita permissão em gesto explícito */}
       {shouldShowNotifCTA && (
         <div className="absolute top-3 left-3 right-3 z-20">
@@ -333,9 +391,9 @@ export function ProviderIdleView() {
               variant={isOnline ? 'outline' : 'provider'} 
               onClick={handleToggleOnline} 
               className={`h-10 px-5 font-semibold ${isOnline ? 'border-provider-primary text-provider-primary hover:bg-provider-primary/10' : ''}`}
-              disabled={checkingStripe || locationLoading}
+              disabled={checkingStripe || locationLoading || waitingForGps}
             >
-              {locationLoading ? 'Obtendo GPS...' : isOnline ? 'Ficar offline' : 'Ficar online'}
+              {(locationLoading || waitingForGps) ? 'Obtendo GPS...' : isOnline ? 'Ficar offline' : 'Ficar online'}
             </Button>
           </div>
 

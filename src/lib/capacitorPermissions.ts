@@ -122,7 +122,7 @@ export const getCurrentPosition = async (): Promise<{ lat: number; lng: number }
           console.error('[CapacitorPermissions] Web geolocation error:', error.code, error.message);
           resolve(null);
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     });
   }
@@ -132,7 +132,7 @@ export const getCurrentPosition = async (): Promise<{ lat: number; lng: number }
     const position = await Geolocation.getCurrentPosition({
       enableHighAccuracy: true,
       timeout: 15000,
-      maximumAge: 30000,
+      maximumAge: 0, // CRITICAL: Never use cached position
     });
     
     console.log('[CapacitorPermissions] Capacitor position:', position.coords);
@@ -162,7 +162,7 @@ export const watchPosition = (
         });
       },
       errorCallback,
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
 
