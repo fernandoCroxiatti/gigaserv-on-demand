@@ -315,30 +315,13 @@ export function ProviderIdleView() {
 
   return (
     <div className="relative h-full provider-theme">
-      <RealMapView className="absolute inset-0" center={location || undefined} showSearchRadius={isOnline} searchRadius={radarRange} />
-
-      {/* GPS Loading Overlay - shown when waiting for fresh GPS */}
-      {!hasFreshGpsLocation && !locationDenied && (
-        <div className="absolute inset-0 z-30 bg-background/80 flex items-center justify-center">
-          <div className="bg-card rounded-2xl p-6 shadow-lg text-center space-y-3 max-w-xs mx-4">
-            <div className="w-12 h-12 rounded-full bg-provider-primary/10 flex items-center justify-center mx-auto animate-pulse">
-              <MapPin className="w-6 h-6 text-provider-primary" />
-            </div>
-            <h3 className="font-semibold text-base">Obtendo sua localização...</h3>
-            <p className="text-sm text-muted-foreground">
-              {geoError || 'Aguarde enquanto obtemos sua posição atual via GPS'}
-            </p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={requestLocation}
-              disabled={locationLoading}
-            >
-              {locationLoading ? 'Aguardando GPS...' : 'Tentar novamente'}
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Map opens instantly with fallback center (last DB position) until real GPS arrives */}
+      <RealMapView 
+        className="absolute inset-0" 
+        center={location || fallbackCenter} 
+        showSearchRadius={isOnline} 
+        searchRadius={radarRange} 
+      />
 
       {/* Notification CTA - Solicita permissão em gesto explícito */}
       {shouldShowNotifCTA && (
@@ -353,23 +336,16 @@ export function ProviderIdleView() {
       )}
 
       {/* Location error/denied banner */}
-      {(geoError || locationDenied) && !dismissedLocationBanner && (
+      {locationDenied && !dismissedLocationBanner && (
         <div className={`absolute ${shouldShowNotifCTA ? 'top-20' : 'top-3'} left-3 right-3 z-10`}>
-          {locationDenied ? (
-            <PermissionDeniedBanner 
-              type="location"
-              onDismiss={() => setDismissedLocationBanner(true)}
-            />
-          ) : geoError ? (
-            <div className="bg-destructive/10 rounded-xl px-4 py-3 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-destructive flex-shrink-0" />
-              <p className="text-sm text-destructive">{geoError}</p>
-            </div>
-          ) : null}
+          <PermissionDeniedBanner 
+            type="location"
+            onDismiss={() => setDismissedLocationBanner(true)}
+          />
         </div>
       )}
 
-      <div className={`absolute ${shouldShowNotifCTA ? (((geoError || locationDenied) && !dismissedLocationBanner) ? 'top-36' : 'top-20') : ((geoError || locationDenied) && !dismissedLocationBanner ? 'top-20' : 'top-3')} left-3 right-3 z-10 animate-slide-down`}>
+      <div className={`absolute ${shouldShowNotifCTA ? (locationDenied && !dismissedLocationBanner ? 'top-36' : 'top-20') : (locationDenied && !dismissedLocationBanner ? 'top-20' : 'top-3')} left-3 right-3 z-10 animate-slide-down`}>
         <div className={`bg-card rounded-xl px-4 py-3 shadow-sm ${isOnline ? 'ring-1 ring-provider-primary/20' : ''}`}>
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">
@@ -399,6 +375,14 @@ export function ProviderIdleView() {
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
         <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-3">
           
+          {/* NON-BLOCKING GPS status indicator (small, subtle) */}
+          {gpsStatus === 'locating' && !isOnline && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-xs text-muted-foreground animate-fade-in">
+              <MapPin className="w-3.5 h-3.5 animate-pulse" />
+              <span>Atualizando localização...</span>
+            </div>
+          )}
+
           {/* 1. STATUS - Highest priority: Online/Offline toggle */}
           <div className={`flex items-center justify-between gap-3 p-3 rounded-xl ${
             isOnline ? 'bg-provider-primary/10 ring-1 ring-provider-primary/30' : 'bg-secondary/50'
@@ -411,16 +395,22 @@ export function ProviderIdleView() {
               </div>
               <div>
                 <p className="font-semibold text-sm">{isOnline ? 'Você está online' : 'Você está offline'}</p>
-                <p className="text-xs text-muted-foreground">{isOnline ? 'Recebendo chamados' : 'Ative para receber chamados'}</p>
+                <p className="text-xs text-muted-foreground">
+                  {isOnline 
+                    ? 'Recebendo chamados' 
+                    : waitingForGps 
+                      ? 'Aguardando GPS para ficar online...'
+                      : 'Ative para receber chamados'}
+                </p>
               </div>
             </div>
             <Button 
               variant={isOnline ? 'outline' : 'provider'} 
               onClick={handleToggleOnline} 
               className={`h-10 px-5 font-semibold ${isOnline ? 'border-provider-primary text-provider-primary hover:bg-provider-primary/10' : ''}`}
-              disabled={checkingStripe || locationLoading || waitingForGps}
+              disabled={checkingStripe || waitingForGps}
             >
-              {(locationLoading || waitingForGps) ? 'Obtendo GPS...' : isOnline ? 'Ficar offline' : 'Ficar online'}
+              {waitingForGps ? 'Localizando...' : isOnline ? 'Ficar offline' : 'Ficar online'}
             </Button>
           </div>
 
