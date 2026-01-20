@@ -4,8 +4,8 @@ import { RealMapView } from '../Map/RealMapView';
 import { Button } from '../ui/button';
 import { Power, Radar, Star, MapPin, Settings2, Check, AlertCircle, ChevronDown, Ban } from 'lucide-react';
 import { Slider } from '../ui/slider';
-import { useTWAGeolocation } from '@/hooks/useTWAGeolocation';
-import { SERVICE_CONFIG, ServiceType, Location } from '@/types/chamado';
+import { useGeolocation } from '@/hooks/useGeolocation';
+import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -22,35 +22,31 @@ import { useProviderAutoOffline } from '@/hooks/useProviderAutoOffline';
 const ALL_SERVICES: ServiceType[] = ['guincho', 'borracharia', 'mecanica', 'chaveiro'];
 
 /**
- * PROVIDER IDLE VIEW - TWA OPTIMIZED
+ * PROVIDER IDLE VIEW
  * 
- * Uses Web Geolocation API exclusively for TWA compatibility.
- * Never blocks UI - app opens instantly, GPS refines in background.
- * Once "ready", never goes back to "locating" automatically.
+ * Cross-platform consistent rendering.
+ * Resets state on mount and visibility change.
+ * Uses backend as single source of truth.
  */
+
 
 export function ProviderIdleView() {
   const { user, toggleProviderOnline, setProviderRadarRange, setProviderServices, updateProviderLocation, providerData } = useApp();
   const { user: authUser } = useAuth();
-  
-  // TWA-optimized geolocation: fast first fix, background refinement
   const { 
     location, 
-    status: gpsStatus,
     error: geoError, 
-    accuracy: gpsAccuracy,
-    isReady: gpsReady,
-    isLocating: gpsLocating,
-    hasLocation,
-    isPermissionDenied: locationDenied,
-    startLocating,
-    refresh: refreshLocation,
-  } = useTWAGeolocation({ autoStart: true });
+    requestLocation,
+    permissionStatus,
+    isGranted: locationGranted,
+    isDenied: locationDenied,
+    needsPermission: locationNeedsPermission,
+    loading: locationLoading
+  } = useGeolocation({ watch: true, autoRequest: false });
   
   const [showServiceConfig, setShowServiceConfig] = useState(false);
   const [stripeVerified, setStripeVerified] = useState(false);
   const [checkingStripe, setCheckingStripe] = useState(true);
-  const [waitingForGps, setWaitingForGps] = useState(false);
   const navigate = useNavigate();
   
   const { checkDebtLimit, checkProviderCanAccept } = useAntiFraud();
@@ -75,36 +71,12 @@ export function ProviderIdleView() {
   const [dismissedLocationBanner, setDismissedLocationBanner] = useState(false);
   
   const pendingToggleOnlineRef = useRef(false);
-  const gpsValidationAttemptRef = useRef(0);
   
   const isOnline = user?.providerData?.online || false;
   const radarRange = user?.providerData?.radarRange || 15;
   const currentServices = (providerData?.services_offered as ServiceType[]) || ['guincho'];
   const isRegistrationComplete = providerData?.registration_complete === true;
-  
-  // CRITICAL: Validate that location is FRESH (not from database cache)
-  // With TWA hook, hasLocation means we have a real GPS fix
-  const hasFreshGpsLocation = hasLocation;
-  const latestLocationRef = useRef<Location | null>(null);
-
-  // Fallback center (visual only): last known DB position so the map can render instantly.
-  // IMPORTANT: This MUST NOT be used to go online or receive chamados.
-  const fallbackCenter: Location | undefined = !hasFreshGpsLocation && providerData?.current_lat && providerData?.current_lng
-    ? {
-        lat: Number(providerData.current_lat),
-        lng: Number(providerData.current_lng),
-        address: providerData.current_address || 'Última localização',
-      }
-    : undefined;
-
-  useEffect(() => {
-    latestLocationRef.current = location;
-  }, [location]);
-
-  // Stop any "waiting" UI once we have a real fix (background GPS succeeded)
-  useEffect(() => {
-    if (gpsReady) setWaitingForGps(false);
-  }, [gpsReady]);
+  const hasValidLocation = !!(providerData?.current_lat && providerData?.current_lng);
 
   // Provider online sync - sends heartbeats with location while online
   // IMPORTANT: Does NOT force online state - respects manual toggle
@@ -116,7 +88,7 @@ export function ProviderIdleView() {
   useProviderOnlineSync({
     userId: authUser?.id || null,
     isOnline,
-    hasLocation: hasFreshGpsLocation,
+    hasLocation: hasValidLocation,
     onReconnected: handleReconnected
   });
 
@@ -126,8 +98,6 @@ export function ProviderIdleView() {
     userId: authUser?.id || null,
     isOnline
   });
-
-  // TWA hook auto-starts, no manual trigger needed
 
   useEffect(() => {
     const checkStripeStatus = async () => {
@@ -166,13 +136,13 @@ export function ProviderIdleView() {
     checkFinancialStatus();
   }, [authUser?.id, checkDebtLimit, checkProviderCanAccept]);
 
-  // Handle pending toggle online after location ready
+  // Handle pending toggle online after location permission granted
   useEffect(() => {
-    if (gpsReady && pendingToggleOnlineRef.current) {
+    if (locationGranted && pendingToggleOnlineRef.current) {
       pendingToggleOnlineRef.current = false;
       proceedWithToggleOnline();
     }
-  }, [gpsReady]);
+  }, [locationGranted]);
 
   const toggleService = (service: ServiceType) => {
     const newServices = currentServices.includes(service)
@@ -185,48 +155,27 @@ export function ProviderIdleView() {
   };
 
   const proceedWithToggleOnline = async () => {
-    // RULE: never go online without a confirmed real GPS fix.
-    if (!hasFreshGpsLocation) {
-      setWaitingForGps(true);
-      void refreshLocation();
-      return;
+    // Ensure we have a valid location before going online
+    if (!location) {
+      console.log('[ProviderIdle] No location yet, waiting...');
+      toast.info('Obtendo sua localização...');
+      // Wait a bit for location
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
-
-    const loc = latestLocationRef.current;
-    if (!loc) {
-      setWaitingForGps(true);
-      void refreshLocation();
-      return;
+    
+    // Update location in DB first if we have it
+    if (location) {
+      console.log('[ProviderIdle] Updating location before going online:', location);
+      await updateProviderLocation({ 
+        lat: location.lat, 
+        lng: location.lng, 
+        address: location.address 
+      });
     }
-
-    // Anti-cache: if same as last saved AND last update is old, force a new fix (background) and keep offline.
-    const lastLat = providerData?.current_lat ?? null;
-    const lastLng = providerData?.current_lng ?? null;
-    const lastUpdatedAt = providerData?.updated_at ? Date.parse(providerData.updated_at) : null;
-    const isOld = lastUpdatedAt ? (Date.now() - lastUpdatedAt) > 10 * 60 * 1000 : true;
-    const sameAsDb = lastLat !== null && lastLng !== null &&
-      Math.abs(loc.lat - lastLat) < 0.00001 &&
-      Math.abs(loc.lng - lastLng) < 0.00001;
-
-    if (sameAsDb && isOld) {
-      setWaitingForGps(true);
-      void refreshLocation();
-      return;
-    }
-
-    setWaitingForGps(false);
-
-    // Update location in DB with FRESH GPS coordinates before going online
-    console.log('[ProviderIdle] Updating location with FRESH GPS before going online:', loc);
-    await updateProviderLocation({
-      lat: loc.lat,
-      lng: loc.lng,
-      address: loc.address,
-    });
-
+    
     await toggleProviderOnline();
-
-    console.log('[ProviderIdle] Toggle online complete with fresh location');
+    
+    console.log('[ProviderIdle] Toggle online complete');
   };
 
   const handleToggleOnline = async () => {
@@ -271,8 +220,7 @@ export function ProviderIdleView() {
       return;
     }
 
-    // If GPS not ready yet, show modal to wait
-    if (!gpsReady && gpsStatus !== 'error') {
+    if (locationNeedsPermission || !locationGranted) {
       // Show location explanation modal first
       pendingToggleOnlineRef.current = true;
       setShowLocationModal(true);
@@ -287,8 +235,8 @@ export function ProviderIdleView() {
     setLocationPermissionLoading(true);
     setShowLocationModal(false);
     
-    // Request the actual system permission via TWA hook
-    startLocating();
+    // Request the actual system permission
+    requestLocation();
     setLocationPermissionLoading(false);
   };
 
@@ -305,15 +253,7 @@ export function ProviderIdleView() {
 
   return (
     <div className="relative h-full provider-theme">
-      {/* Map opens instantly with fallback center (last DB position) until real GPS arrives */}
-      {/* animateToCenter enables smooth flyTo when GPS location arrives */}
-      <RealMapView 
-        className="absolute inset-0" 
-        center={location || fallbackCenter} 
-        showSearchRadius={isOnline} 
-        searchRadius={radarRange}
-        animateToCenter={gpsReady}
-      />
+      <RealMapView className="absolute inset-0" center={location || undefined} showSearchRadius={isOnline} searchRadius={radarRange} />
 
       {/* Notification CTA - Solicita permissão em gesto explícito */}
       {shouldShowNotifCTA && (
@@ -328,16 +268,23 @@ export function ProviderIdleView() {
       )}
 
       {/* Location error/denied banner */}
-      {locationDenied && !dismissedLocationBanner && (
+      {(geoError || locationDenied) && !dismissedLocationBanner && (
         <div className={`absolute ${shouldShowNotifCTA ? 'top-20' : 'top-3'} left-3 right-3 z-10`}>
-          <PermissionDeniedBanner 
-            type="location"
-            onDismiss={() => setDismissedLocationBanner(true)}
-          />
+          {locationDenied ? (
+            <PermissionDeniedBanner 
+              type="location"
+              onDismiss={() => setDismissedLocationBanner(true)}
+            />
+          ) : geoError ? (
+            <div className="bg-destructive/10 rounded-xl px-4 py-3 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-destructive flex-shrink-0" />
+              <p className="text-sm text-destructive">{geoError}</p>
+            </div>
+          ) : null}
         </div>
       )}
 
-      <div className={`absolute ${shouldShowNotifCTA ? (locationDenied && !dismissedLocationBanner ? 'top-36' : 'top-20') : (locationDenied && !dismissedLocationBanner ? 'top-20' : 'top-3')} left-3 right-3 z-10 animate-slide-down`}>
+      <div className={`absolute ${shouldShowNotifCTA ? (((geoError || locationDenied) && !dismissedLocationBanner) ? 'top-36' : 'top-20') : ((geoError || locationDenied) && !dismissedLocationBanner ? 'top-20' : 'top-3')} left-3 right-3 z-10 animate-slide-down`}>
         <div className={`bg-card rounded-xl px-4 py-3 shadow-sm ${isOnline ? 'ring-1 ring-provider-primary/20' : ''}`}>
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">
@@ -367,22 +314,6 @@ export function ProviderIdleView() {
       <div className="absolute bottom-0 left-0 right-0 z-10 animate-slide-up">
         <div className="bg-card rounded-t-2xl shadow-xl p-4 space-y-3">
           
-          {/* NON-BLOCKING GPS status indicator (small, subtle) */}
-          {gpsLocating && !isOnline && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-xs text-muted-foreground animate-fade-in">
-              <MapPin className="w-3.5 h-3.5 animate-pulse" />
-              <span>Atualizando localização...</span>
-            </div>
-          )}
-          
-          {/* Show accuracy when refining */}
-          {gpsStatus === 'refining' && gpsAccuracy && !isOnline && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-provider-primary/10 rounded-lg text-xs text-provider-primary animate-fade-in">
-              <Check className="w-3.5 h-3.5" />
-              <span>Localização: ±{Math.round(gpsAccuracy)}m</span>
-            </div>
-          )}
-
           {/* 1. STATUS - Highest priority: Online/Offline toggle */}
           <div className={`flex items-center justify-between gap-3 p-3 rounded-xl ${
             isOnline ? 'bg-provider-primary/10 ring-1 ring-provider-primary/30' : 'bg-secondary/50'
@@ -395,22 +326,16 @@ export function ProviderIdleView() {
               </div>
               <div>
                 <p className="font-semibold text-sm">{isOnline ? 'Você está online' : 'Você está offline'}</p>
-                <p className="text-xs text-muted-foreground">
-                  {isOnline 
-                    ? 'Recebendo chamados' 
-                    : waitingForGps 
-                      ? 'Aguardando GPS para ficar online...'
-                      : 'Ative para receber chamados'}
-                </p>
+                <p className="text-xs text-muted-foreground">{isOnline ? 'Recebendo chamados' : 'Ative para receber chamados'}</p>
               </div>
             </div>
             <Button 
               variant={isOnline ? 'outline' : 'provider'} 
               onClick={handleToggleOnline} 
               className={`h-10 px-5 font-semibold ${isOnline ? 'border-provider-primary text-provider-primary hover:bg-provider-primary/10' : ''}`}
-              disabled={checkingStripe || waitingForGps}
+              disabled={checkingStripe || locationLoading}
             >
-              {waitingForGps ? 'Localizando...' : isOnline ? 'Ficar offline' : 'Ficar online'}
+              {locationLoading ? 'Obtendo GPS...' : isOnline ? 'Ficar offline' : 'Ficar online'}
             </Button>
           </div>
 

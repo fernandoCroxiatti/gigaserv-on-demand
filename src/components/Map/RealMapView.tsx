@@ -63,8 +63,6 @@ interface RealMapViewProps {
   onUserInteraction?: () => void;
   /** Show recenter button when in free mode */
   showRecenterButton?: boolean;
-  /** Animate camera to center with smooth flyTo transition */
-  animateToCenter?: boolean;
 }
 
 const mapContainerStyle = {
@@ -125,7 +123,6 @@ export function RealMapView({
   mode = 'free',
   onUserInteraction,
   showRecenterButton = true,
-  animateToCenter = false,
 }: RealMapViewProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -139,9 +136,6 @@ export function RealMapView({
   // Track if initial center was set
   const initialCenterSetRef = useRef(false);
   
-  // Track last animated center to detect significant position changes for flyTo
-  const lastAnimatedCenterRef = useRef<{ lat: number; lng: number } | null>(null);
-  
   // Store the center used for initial map render - prevents re-centering on prop changes
   // In 'free' mode, this is set ONCE and never updated, ensuring complete camera isolation
   const [stableCenter, setStableCenter] = useState<{ lat: number; lng: number } | null>(null);
@@ -152,61 +146,6 @@ export function RealMapView({
     if (showSearchRadius) return getZoomForRadius(searchRadius);
     return 15;
   }, [zoom, showSearchRadius, searchRadius]);
-
-  /**
-   * Smooth flyTo animation - calculates distance and animates camera
-   */
-  const flyToLocation = useCallback((targetLat: number, targetLng: number) => {
-    if (!map) return;
-    
-    const currentCenter = map.getCenter();
-    if (!currentCenter) {
-      map.panTo({ lat: targetLat, lng: targetLng });
-      return;
-    }
-    
-    const startLat = currentCenter.lat();
-    const startLng = currentCenter.lng();
-    
-    // Calculate distance to determine animation duration
-    const distance = Math.sqrt(
-      Math.pow(targetLat - startLat, 2) + Math.pow(targetLng - startLng, 2)
-    );
-    
-    // Skip animation if distance is too small (< 50m ~ 0.0005 degrees)
-    if (distance < 0.0005) {
-      map.panTo({ lat: targetLat, lng: targetLng });
-      return;
-    }
-    
-    // Duration: 400-1200ms based on distance
-    const duration = Math.min(1200, Math.max(400, distance * 50000));
-    const startTime = performance.now();
-    
-    // Easing function for smooth deceleration
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-    
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = easeOutCubic(progress);
-      
-      const lat = startLat + (targetLat - startLat) * eased;
-      const lng = startLng + (targetLng - startLng) * eased;
-      
-      map.setCenter({ lat, lng });
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        // Animation complete
-        lastAnimatedCenterRef.current = { lat: targetLat, lng: targetLng };
-        setStableCenter({ lat: targetLat, lng: targetLng });
-      }
-    };
-    
-    requestAnimationFrame(animate);
-  }, [map]);
 
   /**
    * GPS Location Updates - MARKER ONLY
@@ -232,7 +171,7 @@ export function RealMapView({
         });
       },
       (error) => console.error('Geolocation error:', error),
-      { enableHighAccuracy: true, maximumAge: 0 }
+      { enableHighAccuracy: true, maximumAge: 5000 }
     );
     
     return () => navigator.geolocation.clearWatch(watchId);
@@ -325,42 +264,21 @@ export function RealMapView({
     const targetCenter = center || userLocation;
     if (!targetCenter) return;
     
-    // FREE MODE: Handle initial center and flyTo animation
+    // FREE MODE: Only set initial center once, never auto-center after
     if (mode === 'free') {
       if (!initialCenterSetRef.current) {
-        // First center - may be fallback, just pan quickly
         map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
         setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
-        lastAnimatedCenterRef.current = { lat: targetCenter.lat, lng: targetCenter.lng };
         initialCenterSetRef.current = true;
-      } else if (animateToCenter) {
-        // Check if position changed significantly (> 100m ~ 0.001 degrees)
-        const lastCenter = lastAnimatedCenterRef.current;
-        if (lastCenter) {
-          const distance = Math.sqrt(
-            Math.pow(targetCenter.lat - lastCenter.lat, 2) + 
-            Math.pow(targetCenter.lng - lastCenter.lng, 2)
-          );
-          // Only flyTo if moved more than ~100m
-          if (distance > 0.001) {
-            console.log('[RealMapView] FlyTo animation triggered, distance:', distance);
-            flyToLocation(targetCenter.lat, targetCenter.lng);
-          }
-        }
       }
-      // In free mode, GPS updates marker but camera only moves via flyTo
+      // In free mode, GPS updates marker but NEVER moves camera
       return;
     }
     
     // FOLLOW MODE: Always auto-center
     if (mode === 'follow' && !isUserInteracting) {
-      if (animateToCenter && lastAnimatedCenterRef.current) {
-        flyToLocation(targetCenter.lat, targetCenter.lng);
-      } else {
-        map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
-        setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
-        lastAnimatedCenterRef.current = { lat: targetCenter.lat, lng: targetCenter.lng };
-      }
+      map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
+      setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
       return;
     }
     
@@ -369,9 +287,8 @@ export function RealMapView({
     if (mode === 'navigation' && !isUserInteracting) {
       map.panTo({ lat: targetCenter.lat, lng: targetCenter.lng });
       setStableCenter({ lat: targetCenter.lat, lng: targetCenter.lng });
-      lastAnimatedCenterRef.current = { lat: targetCenter.lat, lng: targetCenter.lng };
     }
-  }, [map, center, userLocation, mode, isUserInteracting, animateToCenter, flyToLocation]);
+  }, [map, center, userLocation, mode, isUserInteracting]);
 
   const handleMapClick = useCallback(
     async (e: google.maps.MapMouseEvent) => {

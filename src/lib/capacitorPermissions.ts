@@ -3,11 +3,6 @@ import { Geolocation, PermissionStatus as GeoPermissionStatus } from '@capacitor
 import { Camera, CameraResultType, CameraSource, Photo, PermissionStatus as CameraPermissionStatus } from '@capacitor/camera';
 import { PushNotifications, PermissionStatus as PushPermissionStatus } from '@capacitor/push-notifications';
 
-// Capacitor Geolocation watchPosition returns its ID asynchronously.
-// We map a sync token -> real id so callers can stop watches reliably.
-const capacitorWatchTokenToId = new Map<string, string>();
-const createCapWatchToken = () => `cap_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
 export type PermissionState = 'prompt' | 'prompt-with-rationale' | 'granted' | 'denied' | 'unavailable';
 
 export interface PermissionResult {
@@ -127,30 +122,19 @@ export const getCurrentPosition = async (): Promise<{ lat: number; lng: number }
           console.error('[CapacitorPermissions] Web geolocation error:', error.code, error.message);
           resolve(null);
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
       );
     });
   }
 
   try {
     console.log('[CapacitorPermissions] Using Capacitor geolocation');
-
-    const position = await Promise.race([
-      Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0, // CRITICAL: Never use cached position
-      }),
-      new Promise<null>((resolve) =>
-        setTimeout(() => {
-          console.warn('[CapacitorPermissions] Capacitor geolocation hard-timeout');
-          resolve(null);
-        }, 20000)
-      ),
-    ]);
-
-    if (!position) return null;
-
+    const position = await Geolocation.getCurrentPosition({
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 30000,
+    });
+    
     console.log('[CapacitorPermissions] Capacitor position:', position.coords);
     return {
       lat: position.coords.latitude,
@@ -178,13 +162,11 @@ export const watchPosition = (
         });
       },
       errorCallback,
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
   }
 
   // Use Capacitor's watch
-  const token = createCapWatchToken();
-
   Geolocation.watchPosition(
     { enableHighAccuracy: true },
     (position, err) => {
@@ -200,31 +182,18 @@ export const watchPosition = (
       }
     }
   ).then((id) => {
-    console.log('[CapacitorPermissions] Watch ID:', id, 'token:', token);
-    capacitorWatchTokenToId.set(token, id);
+    console.log('[CapacitorPermissions] Watch ID:', id);
   });
 
-  return token;
+  return 'capacitor-watch';
 };
 
 export const clearWatch = (watchId: string | number): void => {
   if (typeof watchId === 'number') {
     navigator.geolocation.clearWatch(watchId);
-    return;
+  } else if (watchId === 'capacitor-watch') {
+    Geolocation.clearWatch({ id: watchId });
   }
-
-  const token = String(watchId);
-  const realId = capacitorWatchTokenToId.get(token);
-
-  // If we have a mapped id, clear and delete.
-  if (realId) {
-    Geolocation.clearWatch({ id: realId });
-    capacitorWatchTokenToId.delete(token);
-    return;
-  }
-
-  // Fallback: if caller somehow already has the real id.
-  Geolocation.clearWatch({ id: token });
 };
 
 // ============= CAMERA PERMISSIONS =============
@@ -445,4 +414,3 @@ export const openAppSettings = async (): Promise<void> => {
   // For now, we'll just log a message
   console.log('[CapacitorPermissions] User should open device settings manually');
 };
-
