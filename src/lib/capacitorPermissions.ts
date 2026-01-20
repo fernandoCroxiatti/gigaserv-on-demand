@@ -445,3 +445,4 @@ export const openAppSettings = async (): Promise<void> => {
   // For now, we'll just log a message
   console.log('[CapacitorPermissions] User should open device settings manually');
 };
+
