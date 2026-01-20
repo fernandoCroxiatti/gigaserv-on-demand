@@ -157,23 +157,34 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
         return;
       }
 
-      // Get current position
-      console.log('[useGeolocation] Getting current position...');
-      const position = await getCurrentPosition();
-      console.log('[useGeolocation] Position result:', position);
-      
-      if (position && isMountedRef.current) {
-        await updatePosition(position);
-      } else if (isMountedRef.current) {
-        handleError({ code: 2, message: 'GPS indisponível. Verifique se o GPS está ativado.' });
-      }
-
-      // Start watching if enabled
+      // Start watching EARLY (so if GPS is slow, we'll still get the first fix later)
       if (watch && !watchIdRef.current) {
         watchIdRef.current = watchPosition(
           (pos) => updatePosition(pos),
           (err) => handleError(err)
         );
+        console.log('[useGeolocation] Watch started:', watchIdRef.current);
+      }
+
+      // Get current position (best effort). Even if it fails, we keep watch active.
+      console.log('[useGeolocation] Getting current position...');
+      const position = await getCurrentPosition();
+      console.log('[useGeolocation] Position result:', position);
+
+      if (position && isMountedRef.current) {
+        await updatePosition(position);
+        return;
+      }
+
+      // If we didn't get a fix now, don't block UI forever.
+      // Keep watch running; updatePosition will clear error once GPS responds.
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: 'Aguardando sinal de GPS. Se estiver em ambiente fechado, vá para um local aberto e tente novamente.',
+          permissionStatus: 'granted',
+        }));
       }
     } catch (error) {
       console.error('[useGeolocation] Error:', error);
@@ -189,6 +200,14 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
     
     if (state.permissionStatus === 'granted' || hasRequestedRef.current) {
       setState(prev => ({ ...prev, loading: true, error: null }));
+
+      // Ensure watch is active (so we still get the first fix even if getCurrentPosition fails)
+      if (watch && !watchIdRef.current) {
+        watchIdRef.current = watchPosition(
+          (pos) => updatePosition(pos),
+          (err) => handleError(err)
+        );
+      }
       
       const position = await getCurrentPosition();
       console.log('[useGeolocation] Refresh position:', position);
@@ -196,7 +215,12 @@ export function useGeolocation(watchOrOptions: boolean | UseGeolocationOptions =
       if (position && isMountedRef.current) {
         await updatePosition(position);
       } else if (isMountedRef.current) {
-        handleError({ code: 2, message: 'GPS indisponível. Verifique se o GPS está ativado.' });
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: 'Aguardando sinal de GPS. Tente novamente em um local aberto.',
+          permissionStatus: 'granted',
+        }));
       }
     } else {
       await requestLocation();

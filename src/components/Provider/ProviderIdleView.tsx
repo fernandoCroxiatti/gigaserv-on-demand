@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Power, Radar, Star, MapPin, Settings2, Check, AlertCircle, ChevronDown, Ban } from 'lucide-react';
 import { Slider } from '../ui/slider';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
+import { SERVICE_CONFIG, ServiceType, Location } from '@/types/chamado';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -82,6 +82,11 @@ export function ProviderIdleView() {
   // CRITICAL: Validate that location is FRESH (not from database cache)
   // A valid location must come from GPS hook, not from providerData
   const hasFreshGpsLocation = !!(location && location.lat && location.lng);
+  const latestLocationRef = useRef<Location | null>(null);
+
+  useEffect(() => {
+    latestLocationRef.current = location;
+  }, [location]);
 
   // Provider online sync - sends heartbeats with location while online
   // IMPORTANT: Does NOT force online state - respects manual toggle
@@ -174,42 +179,69 @@ export function ProviderIdleView() {
       console.log('[ProviderIdle] No fresh GPS location - cannot go online');
       setWaitingForGps(true);
       toast.info('Aguarde, obtendo sua localização atual...');
-      
-      // Request fresh location
+
+      // Ensure permission flow + watch is active
       await refreshLocation();
-      
-      // Check again after refresh
-      if (!location) {
-        // Wait up to 10 seconds for GPS to respond
-        const maxAttempts = 5;
-        gpsValidationAttemptRef.current = 0;
-        
-        while (gpsValidationAttemptRef.current < maxAttempts && !location) {
-          gpsValidationAttemptRef.current++;
-          console.log(`[ProviderIdle] Waiting for GPS (attempt ${gpsValidationAttemptRef.current}/${maxAttempts})...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-        
-        if (!location) {
-          setWaitingForGps(false);
-          toast.error('Não foi possível obter sua localização. Verifique se o GPS está ativado.');
-          return;
-        }
+
+      // Wait up to 20 seconds for the GPS hook to receive the first fix
+      const maxAttempts = 10;
+      gpsValidationAttemptRef.current = 0;
+
+      while (gpsValidationAttemptRef.current < maxAttempts && !latestLocationRef.current) {
+        gpsValidationAttemptRef.current++;
+        console.log(`[ProviderIdle] Waiting for GPS (attempt ${gpsValidationAttemptRef.current}/${maxAttempts})...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      if (!latestLocationRef.current) {
+        setWaitingForGps(false);
+        toast.error('Não foi possível obter sua localização. Verifique se o GPS está ativado e tente novamente.');
+        return;
       }
     }
-    
+
+    const loc = latestLocationRef.current;
+    if (!loc) {
+      setWaitingForGps(false);
+      toast.error('Não foi possível obter sua localização.');
+      return;
+    }
+
+    // Anti-cache: if same as last saved AND last update is old, retry once
+    const lastLat = providerData?.current_lat ?? null;
+    const lastLng = providerData?.current_lng ?? null;
+    const lastUpdatedAt = providerData?.updated_at ? Date.parse(providerData.updated_at) : null;
+    const isOld = lastUpdatedAt ? (Date.now() - lastUpdatedAt) > 10 * 60 * 1000 : true;
+    const sameAsDb = lastLat !== null && lastLng !== null &&
+      Math.abs(loc.lat - lastLat) < 0.00001 &&
+      Math.abs(loc.lng - lastLng) < 0.00001;
+
+    if (sameAsDb && isOld) {
+      console.log('[ProviderIdle] GPS equals last saved and seems old - forcing one more refresh');
+      setWaitingForGps(true);
+      await refreshLocation();
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    const finalLoc = latestLocationRef.current;
+    if (!finalLoc) {
+      setWaitingForGps(false);
+      toast.error('Não foi possível obter sua localização.');
+      return;
+    }
+
     setWaitingForGps(false);
-    
+
     // CRITICAL: Update location in DB with FRESH GPS coordinates before going online
-    console.log('[ProviderIdle] Updating location with FRESH GPS before going online:', location);
-    await updateProviderLocation({ 
-      lat: location!.lat, 
-      lng: location!.lng, 
-      address: location!.address 
+    console.log('[ProviderIdle] Updating location with FRESH GPS before going online:', finalLoc);
+    await updateProviderLocation({
+      lat: finalLoc.lat,
+      lng: finalLoc.lng,
+      address: finalLoc.address,
     });
-    
+
     await toggleProviderOnline();
-    
+
     console.log('[ProviderIdle] Toggle online complete with fresh location');
   };
 
@@ -291,7 +323,7 @@ export function ProviderIdleView() {
       <RealMapView className="absolute inset-0" center={location || undefined} showSearchRadius={isOnline} searchRadius={radarRange} />
 
       {/* GPS Loading Overlay - shown when waiting for fresh GPS */}
-      {!hasFreshGpsLocation && !geoError && !locationDenied && (
+      {!hasFreshGpsLocation && !locationDenied && (
         <div className="absolute inset-0 z-30 bg-background/80 flex items-center justify-center">
           <div className="bg-card rounded-2xl p-6 shadow-lg text-center space-y-3 max-w-xs mx-4">
             <div className="w-12 h-12 rounded-full bg-provider-primary/10 flex items-center justify-center mx-auto animate-pulse">
@@ -299,7 +331,7 @@ export function ProviderIdleView() {
             </div>
             <h3 className="font-semibold text-base">Obtendo sua localização...</h3>
             <p className="text-sm text-muted-foreground">
-              Aguarde enquanto obtemos sua posição atual via GPS
+              {geoError || 'Aguarde enquanto obtemos sua posição atual via GPS'}
             </p>
             <Button 
               variant="outline" 
