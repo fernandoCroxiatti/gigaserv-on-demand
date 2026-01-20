@@ -306,11 +306,13 @@ export function ProviderIdleView() {
   return (
     <div className="relative h-full provider-theme">
       {/* Map opens instantly with fallback center (last DB position) until real GPS arrives */}
+      {/* animateToCenter enables smooth flyTo when GPS location arrives */}
       <RealMapView 
         className="absolute inset-0" 
         center={location || fallbackCenter} 
         showSearchRadius={isOnline} 
-        searchRadius={radarRange} 
+        searchRadius={radarRange}
+        animateToCenter={gpsReady}
       />
 
       {/* Notification CTA - Solicita permissão em gesto explícito */}
