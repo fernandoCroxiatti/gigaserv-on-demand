@@ -171,7 +171,7 @@ export function RealMapView({
         });
       },
       (error) => console.error('Geolocation error:', error),
-      { enableHighAccuracy: true, maximumAge: 5000 }
+      { enableHighAccuracy: true, maximumAge: 0 }
     );
     
     return () => navigator.geolocation.clearWatch(watchId);

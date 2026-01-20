@@ -69,7 +69,7 @@ export function useProviderOnlineSync({
         {
           enableHighAccuracy: true,
           timeout: 10000,
-          maximumAge: 5000
+          maximumAge: 0 // CRITICAL: Never use cached position
         }
       );
     });
@@ -183,7 +183,7 @@ export function useProviderOnlineSync({
       {
         enableHighAccuracy: true,
         timeout: 15000,
-        maximumAge: 5000
+        maximumAge: 0 // CRITICAL: Never use cached position
       }
     );
 
