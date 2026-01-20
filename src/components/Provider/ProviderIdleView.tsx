@@ -84,9 +84,32 @@ export function ProviderIdleView() {
   const hasFreshGpsLocation = !!(location && location.lat && location.lng);
   const latestLocationRef = useRef<Location | null>(null);
 
+  // Fallback center (visual only): last known DB position so the map can render instantly.
+  // IMPORTANT: This MUST NOT be used to go online or receive chamados.
+  const fallbackCenter: Location | undefined = !hasFreshGpsLocation && providerData?.current_lat && providerData?.current_lng
+    ? {
+        lat: Number(providerData.current_lat),
+        lng: Number(providerData.current_lng),
+        address: providerData.current_address || 'Última localização',
+      }
+    : undefined;
+
+  const gpsStatus: 'locating' | 'ready' | 'error' = locationDenied
+    ? 'error'
+    : hasFreshGpsLocation
+      ? 'ready'
+      : geoError
+        ? 'error'
+        : 'locating';
+
   useEffect(() => {
     latestLocationRef.current = location;
   }, [location]);
+
+  // Stop any "waiting" UI once we have a real fix (background GPS succeeded)
+  useEffect(() => {
+    if (hasFreshGpsLocation) setWaitingForGps(false);
+  }, [hasFreshGpsLocation]);
 
   // Provider online sync - sends heartbeats with location while online
   // IMPORTANT: Does NOT force online state - respects manual toggle
@@ -109,11 +132,10 @@ export function ProviderIdleView() {
     isOnline
   });
 
-  // CRITICAL: Auto-request fresh GPS location on mount if permission already granted
-  // This ensures we get real GPS on first app open, not cached data
+  // GPS em background: se já tem permissão, inicia captura automaticamente sem bloquear UI
   useEffect(() => {
     if (locationGranted && !hasFreshGpsLocation && !locationLoading) {
-      console.log('[ProviderIdle] Auto-requesting fresh GPS location on mount');
+      console.log('[ProviderIdle] Auto-requesting GPS in background on mount');
       requestLocation();
     }
   }, [locationGranted, hasFreshGpsLocation, locationLoading, requestLocation]);
@@ -174,40 +196,21 @@ export function ProviderIdleView() {
   };
 
   const proceedWithToggleOnline = async () => {
-    // CRITICAL: Only proceed if we have FRESH GPS location (not cached/old)
+    // RULE: never go online without a confirmed real GPS fix.
     if (!hasFreshGpsLocation) {
-      console.log('[ProviderIdle] No fresh GPS location - cannot go online');
       setWaitingForGps(true);
-      toast.info('Aguarde, obtendo sua localização atual...');
-
-      // Ensure permission flow + watch is active
-      await refreshLocation();
-
-      // Wait up to 20 seconds for the GPS hook to receive the first fix
-      const maxAttempts = 10;
-      gpsValidationAttemptRef.current = 0;
-
-      while (gpsValidationAttemptRef.current < maxAttempts && !latestLocationRef.current) {
-        gpsValidationAttemptRef.current++;
-        console.log(`[ProviderIdle] Waiting for GPS (attempt ${gpsValidationAttemptRef.current}/${maxAttempts})...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-
-      if (!latestLocationRef.current) {
-        setWaitingForGps(false);
-        toast.error('Não foi possível obter sua localização. Verifique se o GPS está ativado e tente novamente.');
-        return;
-      }
+      void refreshLocation();
+      return;
     }
 
     const loc = latestLocationRef.current;
     if (!loc) {
-      setWaitingForGps(false);
-      toast.error('Não foi possível obter sua localização.');
+      setWaitingForGps(true);
+      void refreshLocation();
       return;
     }
 
-    // Anti-cache: if same as last saved AND last update is old, retry once
+    // Anti-cache: if same as last saved AND last update is old, force a new fix (background) and keep offline.
     const lastLat = providerData?.current_lat ?? null;
     const lastLng = providerData?.current_lng ?? null;
     const lastUpdatedAt = providerData?.updated_at ? Date.parse(providerData.updated_at) : null;
@@ -217,27 +220,19 @@ export function ProviderIdleView() {
       Math.abs(loc.lng - lastLng) < 0.00001;
 
     if (sameAsDb && isOld) {
-      console.log('[ProviderIdle] GPS equals last saved and seems old - forcing one more refresh');
       setWaitingForGps(true);
-      await refreshLocation();
-      await new Promise(resolve => setTimeout(resolve, 1500));
-    }
-
-    const finalLoc = latestLocationRef.current;
-    if (!finalLoc) {
-      setWaitingForGps(false);
-      toast.error('Não foi possível obter sua localização.');
+      void refreshLocation();
       return;
     }
 
     setWaitingForGps(false);
 
-    // CRITICAL: Update location in DB with FRESH GPS coordinates before going online
-    console.log('[ProviderIdle] Updating location with FRESH GPS before going online:', finalLoc);
+    // Update location in DB with FRESH GPS coordinates before going online
+    console.log('[ProviderIdle] Updating location with FRESH GPS before going online:', loc);
     await updateProviderLocation({
-      lat: finalLoc.lat,
-      lng: finalLoc.lng,
-      address: finalLoc.address,
+      lat: loc.lat,
+      lng: loc.lng,
+      address: loc.address,
     });
 
     await toggleProviderOnline();
