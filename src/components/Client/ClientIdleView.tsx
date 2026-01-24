@@ -238,7 +238,7 @@ export function ClientIdleView() {
 
   return (
     <>
-      <div className="relative h-full">
+      <div className="relative h-full w-full max-w-full overflow-hidden">
       {/* Map - free mode, no auto-centering on user interaction */}
       <RealMapView 
         center={searchLocation}
@@ -248,14 +248,14 @@ export function ClientIdleView() {
         providers={mapProviders}
         showUserLocation={!origem && locationGranted}
         animateProviders={true}
-        className="absolute inset-0" 
+        className="absolute inset-0 w-full" 
         zoom={origem ? 14 : 13}
         mode="free"
         showRecenterButton={true}
       />
       
       {/* Provider status - Compact floating card */}
-      <div className="absolute top-3 left-3 right-3 z-10 space-y-2">
+      <div className="absolute top-3 left-3 right-3 z-10 space-y-2 max-w-full">
         {/* Notification CTA - Solicita permissão em gesto explícito */}
         {shouldShowNotifCTA && (
           <NotificationCTA
@@ -320,18 +320,18 @@ export function ClientIdleView() {
 
       {/* Bottom panel - Progressive UX */}
       <motion.div 
-        className="absolute bottom-0 left-0 right-0 z-10"
+        className="absolute bottom-0 left-0 right-0 z-10 w-full max-w-full"
         initial="hidden"
         animate="visible"
         variants={panelVariants}
       >
-        <div className="bg-card rounded-t-3xl shadow-2xl border-t border-border/20">
+        <div className="bg-card rounded-t-3xl shadow-2xl border-t border-border/20 w-full max-w-full">
           {/* Handle indicator */}
           <div className="flex justify-center pt-3 pb-2">
             <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
           </div>
           
-          <div className="px-5 pb-5 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="px-5 pb-5 space-y-4 max-h-[60vh] overflow-y-auto w-full max-w-full">
           
             {/* 1. ORIGEM - Always visible */}
             <div className="space-y-3">

@@ -57,9 +57,9 @@ const Index = () => {
   const isClient = effectiveProfile === 'client';
 
   return (
-    <div className={`flex flex-col ${!isClient ? 'provider-theme' : ''}`} style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className={`flex flex-col w-full max-w-full overflow-x-hidden ${!isClient ? 'provider-theme' : ''}`} style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <Header />
-      <main className="flex-1 min-h-0 relative">
+      <main className="flex-1 min-h-0 relative w-full max-w-full overflow-x-hidden">
         {isClient ? <ClientView /> : <ProviderView />}
       </main>
       
