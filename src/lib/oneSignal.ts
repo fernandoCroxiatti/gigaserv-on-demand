@@ -24,6 +24,7 @@ interface OneSignalInstance {
       optedIn: boolean;
       optIn: () => Promise<void>;
       optOut: () => Promise<void>;
+      addEventListener: (event: 'change', callback: (event: unknown) => void) => void;
     };
     addTag: (key: string, value: string) => void;
     addTags: (tags: Record<string, string>) => void;
@@ -281,10 +282,34 @@ export async function isOneSignalPermissionGranted(): Promise<boolean> {
 export async function getOneSignalPlayerId(): Promise<string | null> {
   try {
     return await withOneSignal((OneSignal) => {
-      return OneSignal.User.PushSubscription.id;
+      const id = OneSignal.User.PushSubscription.id;
+      const optedIn = OneSignal.User.PushSubscription.optedIn;
+      console.log('[OneSignal] getPlayerId - id:', id, 'optedIn:', optedIn);
+      return id;
     });
-  } catch {
+  } catch (error) {
+    console.error('[OneSignal] Error getting playerId:', error);
     return null;
+  }
+}
+
+/**
+ * Listen for subscription changes
+ */
+export async function addSubscriptionChangeListener(
+  callback: (subscriptionId: string | null) => void
+): Promise<void> {
+  try {
+    await withOneSignal((OneSignal) => {
+      OneSignal.User.PushSubscription.addEventListener('change', (event: unknown) => {
+        const changeEvent = event as { current?: { id?: string | null } };
+        const newId = changeEvent?.current?.id || null;
+        console.log('[OneSignal] Subscription changed, new id:', newId);
+        callback(newId);
+      });
+    });
+  } catch (error) {
+    console.error('[OneSignal] Error adding subscription listener:', error);
   }
 }
 

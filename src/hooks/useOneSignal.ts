@@ -9,6 +9,7 @@ import {
   setOneSignalTags,
   addOneSignalNotificationListener,
   getOneSignalPlayerId,
+  addSubscriptionChangeListener,
 } from '@/lib/oneSignal';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -116,6 +117,19 @@ export function useOneSignal(options?: UseOneSignalOptions) {
             console.log('[useOneSignal] Initial playerId:', id);
             setPlayerId(id);
           }
+          
+          // Listen for subscription changes to capture playerId
+          addSubscriptionChangeListener(async (newId) => {
+            if (mounted && newId) {
+              console.log('[useOneSignal] Subscription changed, new playerId:', newId);
+              setPlayerId(newId);
+              
+              // Save to database if user is logged in
+              if (lastUserIdRef.current) {
+                await savePlayerIdToDatabase(lastUserIdRef.current, newId);
+              }
+            }
+          });
         }
       } catch (error) {
         console.error('[useOneSignal] Init error:', error);
@@ -127,7 +141,7 @@ export function useOneSignal(options?: UseOneSignalOptions) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [savePlayerIdToDatabase]);
 
   // Handle user login/logout
   useEffect(() => {

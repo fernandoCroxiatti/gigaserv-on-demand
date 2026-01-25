@@ -283,8 +283,8 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               action: "chamada",
-              user_id: providerId,
-              chamado_id: chamado.id,
+              userId: providerId, // Fixed: was user_id, onesignal-push expects userId
+              chamadoId: chamado.id, // Fixed: was chamado_id, onesignal-push expects chamadoId
               title: `Nova Chamada de ${serviceLabel}!`,
               body: origemAddress || "Cliente aguardando atendimento",
               data: {
