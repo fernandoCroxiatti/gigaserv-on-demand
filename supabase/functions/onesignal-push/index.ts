@@ -281,8 +281,7 @@ serve(async (req) => {
         },
         // Normal priority for promotions
         priority: 5,
-        android_channel_id: CHANNEL_PROMOCOES,
-        // No explicit sound for promotions (uses channel default)
+        // Note: android_channel_id removed - only works for native apps with pre-configured channels
         // Scheduled send if specified
         ...(scheduled_at && { send_after: scheduled_at }),
       };
