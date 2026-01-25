@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
@@ -7,6 +7,7 @@ interface NotificationStatus {
   browserPermission: 'granted' | 'denied' | 'default' | 'unsupported';
   hasSubscription: boolean;
   loading: boolean;
+  refetch: () => void;
 }
 
 /**
@@ -17,61 +18,61 @@ interface NotificationStatus {
  */
 export function useNotificationStatus(): NotificationStatus {
   const { user } = useAuth();
-  const [status, setStatus] = useState<NotificationStatus>({
+  const [status, setStatus] = useState<Omit<NotificationStatus, 'refetch'>>({
     isEnabled: false,
     browserPermission: 'default',
     hasSubscription: false,
     loading: true,
   });
 
-  useEffect(() => {
+  const checkStatus = useCallback(async () => {
     if (!user?.id) {
       setStatus(prev => ({ ...prev, loading: false }));
       return;
     }
 
-    const checkStatus = async () => {
-      try {
-        // Check browser permission
-        const browserPermission = typeof Notification !== 'undefined' 
-          ? Notification.permission 
-          : 'unsupported';
+    try {
+      // Check browser permission
+      const browserPermission = typeof Notification !== 'undefined' 
+        ? Notification.permission 
+        : 'unsupported';
 
-        console.log('[NotificationStatus] Browser permission:', browserPermission);
+      console.log('[NotificationStatus] Browser permission:', browserPermission);
 
-        // Check for subscription in database - THIS IS THE SOURCE OF TRUTH
-        const { data: subs, error } = await supabase
-          .from('notification_subscriptions')
-          .select('id, endpoint')
-          .eq('user_id', user.id)
-          .limit(1);
+      // Check for subscription in database - THIS IS THE SOURCE OF TRUTH
+      const { data: subs, error } = await supabase
+        .from('notification_subscriptions')
+        .select('id, endpoint')
+        .eq('user_id', user.id)
+        .limit(1);
 
-        if (error) {
-          console.error('[NotificationStatus] Error fetching subscriptions:', error);
-        }
-
-        const hasSubscription = (subs && subs.length > 0) || false;
-        
-        console.log('[NotificationStatus] Has subscription in DB:', hasSubscription, subs);
-
-        // CRITICAL: User is ONLY enabled if they have a subscription in the database
-        // Browser permission alone doesn't mean we can send them notifications
-        const isEnabled = browserPermission === 'granted' && hasSubscription;
-
-        console.log('[NotificationStatus] Final status - isEnabled:', isEnabled);
-
-        setStatus({
-          isEnabled,
-          browserPermission: browserPermission as NotificationStatus['browserPermission'],
-          hasSubscription,
-          loading: false,
-        });
-      } catch (error) {
-        console.error('[NotificationStatus] Error checking status:', error);
-        setStatus(prev => ({ ...prev, loading: false }));
+      if (error) {
+        console.error('[NotificationStatus] Error fetching subscriptions:', error);
       }
-    };
 
+      const hasSubscription = (subs && subs.length > 0) || false;
+      
+      console.log('[NotificationStatus] Has subscription in DB:', hasSubscription, subs);
+
+      // CRITICAL: User is ONLY enabled if they have a subscription in the database
+      // Browser permission alone doesn't mean we can send them notifications
+      const isEnabled = browserPermission === 'granted' && hasSubscription;
+
+      console.log('[NotificationStatus] Final status - isEnabled:', isEnabled);
+
+      setStatus({
+        isEnabled,
+        browserPermission: browserPermission as NotificationStatus['browserPermission'],
+        hasSubscription,
+        loading: false,
+      });
+    } catch (error) {
+      console.error('[NotificationStatus] Error checking status:', error);
+      setStatus(prev => ({ ...prev, loading: false }));
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
     checkStatus();
 
     // Re-check when visibility changes (user might have accepted notifications in another tab)
@@ -86,7 +87,7 @@ export function useNotificationStatus(): NotificationStatus {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user?.id]);
+  }, [checkStatus]);
 
-  return status;
+  return { ...status, refetch: checkStatus };
 }
