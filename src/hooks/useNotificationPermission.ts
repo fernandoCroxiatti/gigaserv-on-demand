@@ -206,22 +206,24 @@ export function useNotificationPermission(activeProfile?: 'client' | 'provider')
   
   // Solicitar permissão - DEVE ser chamado em gesto explícito do usuário
   const requestPermission = useCallback(async (): Promise<boolean> => {
+    console.log('[useNotificationPermission] 🚀 requestPermission called');
+    console.log('[useNotificationPermission] State:', { isSupported, isReady, permission, userId: user?.id });
+    
     if (!isSupported) {
-      console.log('[useNotificationPermission] Cannot request - unsupported');
+      console.log('[useNotificationPermission] ❌ Cannot request - unsupported');
       return false;
     }
 
-    // User may click before the SDK finishes initializing (especially after clearing cache).
-    // In that case, initialize on-demand instead of failing silently.
-    if (!isReady) {
-      try {
-        console.log('[useNotificationPermission] SDK not ready yet - initializing on demand...');
-        await initOneSignal();
-        setIsReady(true);
-      } catch (error) {
-        console.error('[useNotificationPermission] Failed to init OneSignal on demand:', error);
-        return false;
-      }
+    // ALWAYS initialize OneSignal on-demand to ensure SDK is ready.
+    // This is critical after cache clearing when background init may not have completed.
+    try {
+      console.log('[useNotificationPermission] 🔄 Initializing OneSignal on demand...');
+      await initOneSignal();
+      setIsReady(true);
+      console.log('[useNotificationPermission] ✅ OneSignal initialized');
+    } catch (error) {
+      console.error('[useNotificationPermission] ❌ Failed to init OneSignal on demand:', error);
+      return false;
     }
     
     if (permission === 'denied') {

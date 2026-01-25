@@ -251,45 +251,55 @@ export async function oneSignalLogout(): Promise<void> {
  */
 export async function requestOneSignalPermission(): Promise<boolean> {
   try {
+    console.log('[OneSignal] 🚀 requestOneSignalPermission called');
+    
     await initOneSignal();
+    console.log('[OneSignal] ✅ SDK initialized for permission request');
     
     return await withOneSignal(async (OneSignal) => {
-      console.log('[OneSignal] Requesting permission...');
+      console.log('[OneSignal] 🔍 Checking current permission...');
       
       // Check current permission
       const currentPermission = OneSignal.Notifications.permissionNative;
-      console.log('[OneSignal] Current native permission:', currentPermission);
+      const currentOptedIn = OneSignal.User.PushSubscription.optedIn;
+      console.log('[OneSignal] Current state:', { permissionNative: currentPermission, optedIn: currentOptedIn });
       
       if (currentPermission === 'granted') {
         // Already granted, just opt in
+        console.log('[OneSignal] Already granted, calling optIn()...');
         await OneSignal.User.PushSubscription.optIn();
-        console.log('[OneSignal] Already granted, opted in');
+        console.log('[OneSignal] ✅ Opted in successfully');
         return true;
       }
       
       if (currentPermission === 'denied') {
-        console.log('[OneSignal] Permission denied by browser');
+        console.log('[OneSignal] ❌ Permission denied by browser - cannot request');
         return false;
       }
       
       // Request permission via native browser prompt
+      console.log('[OneSignal] 📢 Requesting permission via native prompt...');
       await OneSignal.Notifications.requestPermission();
+      console.log('[OneSignal] ✅ requestPermission() completed');
       
       // Check result
       const newPermission = OneSignal.Notifications.permissionNative;
       const granted = newPermission === 'granted';
       
+      console.log('[OneSignal] Permission result:', { newPermission, granted });
+      
       if (granted) {
+        console.log('[OneSignal] Calling optIn() after grant...');
         await OneSignal.User.PushSubscription.optIn();
-        console.log('[OneSignal] Permission granted and opted in');
+        console.log('[OneSignal] ✅ Permission granted and opted in');
       } else {
-        console.log('[OneSignal] Permission not granted');
+        console.log('[OneSignal] ⚠️ Permission not granted');
       }
       
       return granted;
     });
   } catch (error) {
-    console.error('[OneSignal] Permission request error:', error);
+    console.error('[OneSignal] ❌ Permission request error:', error);
     return false;
   }
 }
