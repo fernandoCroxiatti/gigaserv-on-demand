@@ -6,6 +6,7 @@
  * - CRITICAL: canAccessProviderFeatures enforces backend permission check
  * - Users without provider permissions are ALWAYS shown ClientView
  * - useWakeLock prevents screen from sleeping during active sessions
+ * - NotificationPromptWrapper: Exibe prompt automático para aceitar notificações
  * 
  * SECURITY: 
  * - Never trust activeProfile alone - always check canAccessProviderFeatures
@@ -20,6 +21,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useHighlightNotification } from '@/hooks/useHighlightNotification';
 import { HighlightNotificationModal } from '@/components/Notifications/HighlightNotificationModal';
+import { NotificationPromptWrapper } from '@/components/Notifications/NotificationPromptWrapper';
 import { Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
@@ -69,6 +71,9 @@ const Index = () => {
         onClose={closeModal}
         notification={highlightNotification}
       />
+      
+      {/* Prompt automático para aceitar notificações */}
+      <NotificationPromptWrapper />
     </div>
   );
 };
