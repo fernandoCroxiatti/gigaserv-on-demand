@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { AvatarUpload } from '@/components/Profile/AvatarUpload';
+import { NotificationStatusIndicator } from '@/components/Profile/NotificationStatusIndicator';
 
 interface ClientProfileTabProps {
   totalRides: number;
@@ -126,6 +127,9 @@ export function ClientProfileTab({ totalRides, averageRating }: ClientProfileTab
               <p className="font-medium">{user?.email}</p>
             </div>
           </div>
+
+          {/* Notification Status */}
+          <NotificationStatusIndicator />
         </div>
 
         {editMode && (

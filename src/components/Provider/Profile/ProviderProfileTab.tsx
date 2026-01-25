@@ -1,7 +1,8 @@
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Star, User, Phone, Mail, MapPin, Car } from 'lucide-react';
+import { Star, User, Phone, Mail, Car } from 'lucide-react';
 import { AvatarUpload } from '@/components/Profile/AvatarUpload';
+import { NotificationStatusIndicator } from '@/components/Profile/NotificationStatusIndicator';
 
 interface ProviderProfileTabProps {
   rating?: number;
@@ -98,6 +99,9 @@ export function ProviderProfileTab({ rating = 5.0, totalServices = 0 }: Provider
               </div>
             </div>
           )}
+
+          {/* Notification Status */}
+          <NotificationStatusIndicator />
         </div>
       </div>
     </div>
