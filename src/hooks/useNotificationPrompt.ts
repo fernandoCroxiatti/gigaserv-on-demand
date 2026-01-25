@@ -91,18 +91,27 @@ export function useNotificationPrompt(): UseNotificationPromptReturn {
         }
         
         const hasSubscription = subs && subs.length > 0;
-        console.log('[NotificationPrompt] Has subscription:', hasSubscription);
+        console.log('[NotificationPrompt] Has subscription in DB:', hasSubscription);
         
         if (!mounted) return;
         
-        // Se já aceitou e tem subscription, não mostrar
-        if ((browserPermission === 'granted' && oneSignalGranted) || hasSubscription) {
-          console.log('[NotificationPrompt] User already has notifications enabled');
+        // CRITICAL: Only consider as "accepted" if has subscription in database
+        // Browser permission or OneSignal permission alone is NOT enough
+        // We NEED the playerId saved to send notifications
+        if (hasSubscription) {
+          console.log('[NotificationPrompt] User has subscription in DB, notifications enabled');
           setHasAcceptedNotifications(true);
           setShowPrompt(false);
           hasCheckedRef.current = true;
           setLoading(false);
           return;
+        }
+        
+        // If browser permission is granted but no subscription, we should re-prompt
+        // This handles the case where user accepted browser permission but playerId wasn't saved
+        if (browserPermission === 'granted' && !hasSubscription) {
+          console.log('[NotificationPrompt] Browser granted but no subscription - will re-register');
+          // Don't return - continue to show prompt to try to get subscription
         }
         
         // Se o navegador negou permanentemente
