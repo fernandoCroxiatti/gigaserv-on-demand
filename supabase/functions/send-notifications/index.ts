@@ -78,7 +78,7 @@ async function sendOneSignalNotification(
         },
         body: JSON.stringify({
           action: notificationType === 'chamada' ? 'chamada' : 'promocao',
-          user_id: userId,
+          userId: userId, // Changed from user_id to userId to match onesignal-push expectation
           title,
           body,
           data,

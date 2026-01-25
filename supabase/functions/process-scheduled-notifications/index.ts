@@ -27,7 +27,7 @@ async function sendOneSignalNotification(
         },
         body: JSON.stringify({
           action: 'promocao',
-          user_id: userId,
+          userId: userId, // Fixed: was user_id, onesignal-push expects userId
           title,
           body,
           data,
