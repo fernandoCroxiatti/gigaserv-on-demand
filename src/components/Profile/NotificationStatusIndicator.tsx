@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { Bell, BellOff, Settings, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNotificationStatus } from '@/hooks/useNotificationStatus';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,6 +18,7 @@ export function NotificationStatusIndicator({
   const { isEnabled, browserPermission, hasSubscription, loading, refetch } = useNotificationStatus();
   const { requestPermission } = useNotificationPermission();
   const [isActivating, setIsActivating] = useState(false);
+  const [showBlockedGuide, setShowBlockedGuide] = useState(false);
 
   const handleActivate = async () => {
     console.log('[NotificationStatusIndicator] 🔔 handleActivate called');
@@ -61,19 +62,19 @@ export function NotificationStatusIndicator({
   let statusColor = 'bg-status-finished text-white';
   let canActivate = false;
   let activateText = 'Ativar';
+  let isBlocked = false;
   
   if (!isEnabled) {
     if (browserPermission === 'denied') {
       statusText = 'Bloqueadas';
       statusColor = 'bg-destructive text-destructive-foreground';
-      canActivate = false; // Precisa desbloquear no navegador
+      canActivate = false;
+      isBlocked = true;
     } else if (browserPermission === 'unsupported') {
       statusText = 'Indisponível';
       statusColor = 'bg-muted text-muted-foreground';
       canActivate = false;
     } else if (browserPermission === 'granted' && !hasSubscription) {
-      // Browser already allowed notifications, but we still don't have a subscription in the DB.
-      // In this case, the action is to "finish activation" (sync playerId), not re-ask permission.
       statusText = 'Quase lá';
       statusColor = 'bg-status-searching text-white';
       canActivate = true;
@@ -110,6 +111,75 @@ export function NotificationStatusIndicator({
         )}
         {statusText}
       </Badge>
+    );
+  }
+
+  // Special UI for blocked notifications - show guide
+  if (isBlocked) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 overflow-hidden">
+        <button
+          onClick={() => setShowBlockedGuide(!showBlockedGuide)}
+          className="w-full flex items-center gap-4 p-3 text-left hover:bg-destructive/10 transition-colors"
+        >
+          <BellOff className="w-5 h-5 text-destructive" />
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground">Notificações Push</p>
+            <p className="font-medium text-destructive">Bloqueadas no navegador</p>
+          </div>
+          {showBlockedGuide ? (
+            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          )}
+        </button>
+        
+        {showBlockedGuide && (
+          <div className="px-4 pb-4 pt-2 border-t border-destructive/20">
+            <p className="text-sm text-muted-foreground mb-3">
+              Para ativar as notificações, você precisa desbloquear no seu navegador:
+            </p>
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex items-start gap-2">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">1</span>
+                <span>Toque no ícone de <strong>cadeado</strong> ou <strong>configurações</strong> na barra de endereço</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">2</span>
+                <span>Procure por <strong>"Notificações"</strong> ou <strong>"Permissões do site"</strong></span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">3</span>
+                <span>Mude de <strong>"Bloqueado"</strong> para <strong>"Permitir"</strong></span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">4</span>
+                <span>Recarregue a página e volte aqui</span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-2"
+                onClick={() => {
+                  // Força um refresh para detectar se o usuário desbloqueou
+                  window.location.reload();
+                }}
+              >
+                <ExternalLink className="w-4 h-4" />
+                Recarregar página
+              </Button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground mt-3 text-center">
+              Após desbloquear, a opção de ativar aparecerá automaticamente.
+            </p>
+          </div>
+        )}
+      </div>
     );
   }
 
