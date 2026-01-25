@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Bell, BellOff } from 'lucide-react';
 import { useNotificationStatus } from '@/hooks/useNotificationStatus';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 
 interface NotificationStatusIndicatorProps {
   showLabel?: boolean;
@@ -13,7 +15,23 @@ export function NotificationStatusIndicator({
   showLabel = true, 
   variant = 'row' 
 }: NotificationStatusIndicatorProps) {
-  const { isEnabled, browserPermission, loading } = useNotificationStatus();
+  const { isEnabled, browserPermission, loading, refetch } = useNotificationStatus();
+  const { requestPermission } = useNotificationPermission();
+  const [isActivating, setIsActivating] = useState(false);
+
+  const handleActivate = async () => {
+    setIsActivating(true);
+    try {
+      await requestPermission();
+      // Aguarda um pouco para o playerId ser salvo
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      refetch();
+    } catch (error) {
+      console.error('Erro ao ativar notificações:', error);
+    } finally {
+      setIsActivating(false);
+    }
+  };
 
   if (loading) {
     if (variant === 'badge') {
@@ -33,21 +51,39 @@ export function NotificationStatusIndicator({
   // Determine status text and style
   let statusText = 'Ativas';
   let statusColor = 'bg-status-finished text-white';
+  let canActivate = false;
   
   if (!isEnabled) {
     if (browserPermission === 'denied') {
       statusText = 'Bloqueadas';
       statusColor = 'bg-destructive text-destructive-foreground';
+      canActivate = false; // Precisa desbloquear no navegador
     } else if (browserPermission === 'unsupported') {
       statusText = 'Indisponível';
       statusColor = 'bg-muted text-muted-foreground';
+      canActivate = false;
     } else {
       statusText = 'Desativadas';
       statusColor = 'bg-status-searching text-white';
+      canActivate = true;
     }
   }
 
   if (variant === 'badge') {
+    if (canActivate) {
+      return (
+        <Button 
+          size="sm" 
+          variant="outline"
+          onClick={handleActivate}
+          disabled={isActivating}
+          className="gap-1 h-6 px-2 text-xs"
+        >
+          <BellOff className="w-3 h-3" />
+          {isActivating ? 'Ativando...' : 'Ativar'}
+        </Button>
+      );
+    }
     return (
       <Badge className={`${statusColor} gap-1`}>
         {isEnabled ? (
@@ -57,6 +93,27 @@ export function NotificationStatusIndicator({
         )}
         {statusText}
       </Badge>
+    );
+  }
+
+  // Row variant - mostrar como botão se pode ativar
+  if (canActivate) {
+    return (
+      <Button
+        variant="outline"
+        onClick={handleActivate}
+        disabled={isActivating}
+        className="w-full justify-start gap-4 p-3 h-auto rounded-xl border-dashed border-2 border-primary/30 hover:border-primary hover:bg-primary/5"
+      >
+        <BellOff className="w-5 h-5 text-muted-foreground" />
+        <div className="flex-1 text-left">
+          <p className="text-xs text-muted-foreground">Notificações Push</p>
+          <p className="font-medium text-primary">
+            {isActivating ? 'Ativando...' : 'Toque para ativar'}
+          </p>
+        </div>
+        <span className="w-2 h-2 rounded-full bg-status-searching animate-pulse" />
+      </Button>
     );
   }
 
