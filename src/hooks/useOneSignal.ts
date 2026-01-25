@@ -33,6 +33,68 @@ export function useOneSignal(options?: UseOneSignalOptions) {
   const hasLoggedInRef = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
   const permissionRequestedRef = useRef(false);
+  const saveAttemptRef = useRef(0);
+
+  // Save player ID to database
+  const savePlayerIdToDatabase = useCallback(async (userId: string, playerIdToSave: string) => {
+    try {
+      console.log('[useOneSignal] Saving playerId to database:', { userId, playerId: playerIdToSave });
+      
+      const endpoint = `onesignal://${playerIdToSave}`;
+      
+      const { error } = await supabase
+        .from('notification_subscriptions')
+        .upsert({
+          user_id: userId,
+          endpoint: endpoint,
+          p256dh: 'onesignal',
+          auth: 'onesignal',
+          user_agent: navigator.userAgent,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,endpoint',
+        });
+      
+      if (error) {
+        console.error('[useOneSignal] Error saving playerId to database:', error);
+        return false;
+      }
+      
+      console.log('[useOneSignal] PlayerId saved successfully to database');
+      return true;
+    } catch (error) {
+      console.error('[useOneSignal] Exception saving playerId:', error);
+      return false;
+    }
+  }, []);
+
+  // Poll for player ID with retries
+  const pollForPlayerId = useCallback(async (userId: string, maxAttempts = 10): Promise<string | null> => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`[useOneSignal] Polling for playerId, attempt ${attempt}/${maxAttempts}`);
+      
+      const id = await getOneSignalPlayerId();
+      
+      if (id) {
+        console.log('[useOneSignal] Got playerId:', id);
+        setPlayerId(id);
+        
+        // Save to database
+        const saved = await savePlayerIdToDatabase(userId, id);
+        if (saved) {
+          return id;
+        }
+      }
+      
+      // Wait before next attempt (exponential backoff)
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, Math.min(1000 * attempt, 5000)));
+      }
+    }
+    
+    console.warn('[useOneSignal] Failed to get playerId after max attempts');
+    return null;
+  }, [savePlayerIdToDatabase]);
 
   // Initialize OneSignal on mount
   useEffect(() => {
@@ -50,7 +112,10 @@ export function useOneSignal(options?: UseOneSignalOptions) {
           
           // Get player ID if available
           const id = await getOneSignalPlayerId();
-          if (id) setPlayerId(id);
+          if (id) {
+            console.log('[useOneSignal] Initial playerId:', id);
+            setPlayerId(id);
+          }
         }
       } catch (error) {
         console.error('[useOneSignal] Init error:', error);
@@ -75,6 +140,7 @@ export function useOneSignal(options?: UseOneSignalOptions) {
         lastUserIdRef.current = null;
         hasLoggedInRef.current = false;
         permissionRequestedRef.current = false;
+        saveAttemptRef.current = 0;
         await oneSignalLogout();
         return;
       }
@@ -100,30 +166,22 @@ export function useOneSignal(options?: UseOneSignalOptions) {
         
         await setOneSignalTags(tags);
         
-        // Get and save player ID
-        const id = await getOneSignalPlayerId();
-        if (id) {
-          setPlayerId(id);
-          
-          // Save player ID to database for backend notifications
-          await supabase
-            .from('notification_subscriptions')
-            .upsert({
-              user_id: user.id,
-              endpoint: `onesignal://${id}`,
-              p256dh: 'onesignal',
-              auth: 'onesignal',
-              user_agent: navigator.userAgent,
-              updated_at: new Date().toISOString(),
-            }, {
-              onConflict: 'user_id,endpoint',
-            });
+        // Try to get and save player ID immediately
+        const currentPlayerId = await getOneSignalPlayerId();
+        if (currentPlayerId) {
+          console.log('[useOneSignal] PlayerId available on login:', currentPlayerId);
+          setPlayerId(currentPlayerId);
+          await savePlayerIdToDatabase(user.id, currentPlayerId);
+        } else {
+          // Poll for player ID in background (may not be available immediately)
+          console.log('[useOneSignal] PlayerId not available yet, starting poll...');
+          pollForPlayerId(user.id, 5);
         }
       }
     };
 
     handleUserChange();
-  }, [isReady, user?.id, activeProfile]);
+  }, [isReady, user?.id, activeProfile, savePlayerIdToDatabase, pollForPlayerId]);
 
   // Request permission - call this after explicit user action
   const requestPermission = useCallback(async (): Promise<boolean> => {
@@ -139,30 +197,17 @@ export function useOneSignal(options?: UseOneSignalOptions) {
     setPermission(granted ? 'granted' : 'denied');
     
     // Update player ID after permission grant
-    if (granted) {
-      const id = await getOneSignalPlayerId();
-      if (id) {
-        setPlayerId(id);
-        
-        // Save to database
-        if (user?.id) {
-          await supabase
-            .from('notification_subscriptions')
-            .upsert({
-              user_id: user.id,
-              endpoint: `onesignal://${id}`,
-              p256dh: 'onesignal',
-              auth: 'onesignal',
-              user_agent: navigator.userAgent,
-              updated_at: new Date().toISOString(),
-            }, {
-              onConflict: 'user_id,endpoint',
-            });
-        }
-      }
+    if (granted && user?.id) {
+      console.log('[useOneSignal] Permission granted, polling for playerId...');
       
-      // Update preferences in database
-      if (user?.id) {
+      // Give OneSignal time to generate the subscription
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Poll with more attempts after permission grant
+      const id = await pollForPlayerId(user.id, 10);
+      
+      if (id) {
+        // Update preferences in database
         const { error: prefError } = await supabase
           .from('notification_preferences')
           .upsert({
@@ -179,12 +224,14 @@ export function useOneSignal(options?: UseOneSignalOptions) {
         
         if (prefError) {
           console.error('[useOneSignal] Error saving preferences:', prefError);
+        } else {
+          console.log('[useOneSignal] Preferences saved successfully');
         }
       }
     }
     
     return granted;
-  }, [permission, user?.id]);
+  }, [permission, user?.id, pollForPlayerId]);
 
   // Setup notification click listener for navigation
   useEffect(() => {
