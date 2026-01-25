@@ -36,64 +36,93 @@ export function useOneSignal(options?: UseOneSignalOptions) {
   const permissionRequestedRef = useRef(false);
   const saveAttemptRef = useRef(0);
 
-  // Save player ID to database
+  // Save player ID to database - CRITICAL: This must succeed for notifications to work
   const savePlayerIdToDatabase = useCallback(async (userId: string, playerIdToSave: string) => {
     try {
-      console.log('[useOneSignal] Saving playerId to database:', { userId, playerId: playerIdToSave });
+      console.log('[useOneSignal] 🔥 SAVING playerId to database:', { userId, playerId: playerIdToSave });
+      
+      if (!playerIdToSave || playerIdToSave.trim() === '') {
+        console.error('[useOneSignal] ❌ Invalid playerId - empty or null');
+        return false;
+      }
       
       const endpoint = `onesignal://${playerIdToSave}`;
       
-      const { error } = await supabase
+      // First, try to delete any existing subscriptions for this user to avoid conflicts
+      const { error: deleteError } = await supabase
         .from('notification_subscriptions')
-        .upsert({
+        .delete()
+        .eq('user_id', userId);
+      
+      if (deleteError) {
+        console.warn('[useOneSignal] ⚠️ Error deleting old subscriptions:', deleteError);
+        // Continue anyway - insert might still work
+      }
+      
+      // Now insert the new subscription
+      const { data, error } = await supabase
+        .from('notification_subscriptions')
+        .insert({
           user_id: userId,
           endpoint: endpoint,
           p256dh: 'onesignal',
           auth: 'onesignal',
           user_agent: navigator.userAgent,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id,endpoint',
-        });
+        })
+        .select();
       
       if (error) {
-        console.error('[useOneSignal] Error saving playerId to database:', error);
+        console.error('[useOneSignal] ❌ Error inserting playerId to database:', error);
         return false;
       }
       
-      console.log('[useOneSignal] PlayerId saved successfully to database');
+      console.log('[useOneSignal] ✅ PlayerId saved successfully to database:', data);
       return true;
     } catch (error) {
-      console.error('[useOneSignal] Exception saving playerId:', error);
+      console.error('[useOneSignal] ❌ Exception saving playerId:', error);
       return false;
     }
   }, []);
 
-  // Poll for player ID with retries
-  const pollForPlayerId = useCallback(async (userId: string, maxAttempts = 10): Promise<string | null> => {
+  // Poll for player ID with retries - CRITICAL for notification delivery
+  const pollForPlayerId = useCallback(async (userId: string, maxAttempts = 15): Promise<string | null> => {
+    console.log(`[useOneSignal] 🔄 Starting poll for playerId, max attempts: ${maxAttempts}`);
+    
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      console.log(`[useOneSignal] Polling for playerId, attempt ${attempt}/${maxAttempts}`);
+      console.log(`[useOneSignal] 🔄 Polling for playerId, attempt ${attempt}/${maxAttempts}`);
       
       const id = await getOneSignalPlayerId();
       
-      if (id) {
-        console.log('[useOneSignal] Got playerId:', id);
+      console.log(`[useOneSignal] Poll result - id: ${id || 'null'}`);
+      
+      if (id && id.trim() !== '') {
+        console.log('[useOneSignal] ✅ Got valid playerId:', id);
         setPlayerId(id);
         
-        // Save to database
-        const saved = await savePlayerIdToDatabase(userId, id);
-        if (saved) {
-          return id;
+        // Save to database - retry if fails
+        for (let saveAttempt = 1; saveAttempt <= 3; saveAttempt++) {
+          const saved = await savePlayerIdToDatabase(userId, id);
+          if (saved) {
+            console.log('[useOneSignal] ✅ PlayerId saved on attempt:', saveAttempt);
+            return id;
+          }
+          console.log(`[useOneSignal] ⚠️ Save attempt ${saveAttempt} failed, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
+        
+        console.error('[useOneSignal] ❌ Failed to save playerId after 3 attempts');
+        return id; // Return the ID even if save failed
       }
       
-      // Wait before next attempt (exponential backoff)
+      // Wait before next attempt (shorter intervals for better UX)
       if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, Math.min(1000 * attempt, 5000)));
+        const delay = Math.min(500 + (attempt * 300), 3000);
+        console.log(`[useOneSignal] ⏳ Waiting ${delay}ms before next attempt...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     
-    console.warn('[useOneSignal] Failed to get playerId after max attempts');
+    console.warn('[useOneSignal] ❌ Failed to get playerId after max attempts');
     return null;
   }, [savePlayerIdToDatabase]);
 

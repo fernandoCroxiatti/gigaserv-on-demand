@@ -283,8 +283,19 @@ export async function getOneSignalPlayerId(): Promise<string | null> {
   try {
     return await withOneSignal((OneSignal) => {
       const id = OneSignal.User.PushSubscription.id;
+      const token = OneSignal.User.PushSubscription.token;
       const optedIn = OneSignal.User.PushSubscription.optedIn;
-      console.log('[OneSignal] getPlayerId - id:', id, 'optedIn:', optedIn);
+      const onesignalId = OneSignal.User.onesignalId;
+      
+      console.log('[OneSignal] 🔍 getPlayerId details:', {
+        subscriptionId: id,
+        token: token ? 'present' : 'null',
+        optedIn,
+        onesignalId,
+        permission: OneSignal.Notifications.permission,
+        permissionNative: OneSignal.Notifications.permissionNative,
+      });
+      
       return id;
     });
   } catch (error) {
