@@ -76,6 +76,8 @@ interface OneSignalInitOptions {
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
 
+const ONESIGNAL_READY_TIMEOUT_MS = 8000;
+
 /**
  * Load OneSignal SDK script
  */
@@ -111,49 +113,67 @@ export async function initOneSignal(): Promise<void> {
       // Initialize deferred array
       window.OneSignalDeferred = window.OneSignalDeferred || [];
 
-      // Load SDK script
-      await loadOneSignalScript();
+      const doInit = async (OneSignal: OneSignalInstance) => {
+        await OneSignal.init({
+          appId: ONESIGNAL_APP_ID,
+          allowLocalhostAsSecureOrigin: true,
+          autoResubscribe: true,
+          notifyButton: {
+            enable: false, // We handle our own UI
+          },
+          welcomeNotification: {
+            disable: true, // We send our own welcome notification
+          },
+          promptOptions: {
+            slidedown: {
+              prompts: [
+                {
+                  type: 'push',
+                  autoPrompt: false, // We control when to prompt
+                  text: {
+                    actionMessage:
+                      'Ative as notificações para receber alertas de chamadas e atualizações importantes.',
+                    acceptButton: 'Permitir',
+                    cancelButton: 'Agora não',
+                  },
+                },
+              ],
+            },
+          },
+        });
+      };
 
-      // Wait for SDK to be ready and initialize
-      await new Promise<void>((resolve, reject) => {
+      // If SDK already available, init immediately.
+      if (window.OneSignal) {
+        await doInit(window.OneSignal);
+        console.log('[OneSignal] Initialized successfully (already loaded)');
+        isInitialized = true;
+        return;
+      }
+
+      // CRITICAL: register init callback BEFORE loading the script.
+      const ready = new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+          reject(new Error('OneSignal init timeout: SDK did not become ready'));
+        }, ONESIGNAL_READY_TIMEOUT_MS);
+
         window.OneSignalDeferred.push(async (OneSignal) => {
           try {
-            await OneSignal.init({
-              appId: ONESIGNAL_APP_ID,
-              allowLocalhostAsSecureOrigin: true,
-              autoResubscribe: true,
-              notifyButton: {
-                enable: false, // We handle our own UI
-              },
-              welcomeNotification: {
-                disable: true, // We send our own welcome notification
-              },
-              promptOptions: {
-                slidedown: {
-                  prompts: [
-                    {
-                      type: 'push',
-                      autoPrompt: false, // We control when to prompt
-                      text: {
-                        actionMessage: 'Ative as notificações para receber alertas de chamadas e atualizações importantes.',
-                        acceptButton: 'Permitir',
-                        cancelButton: 'Agora não',
-                      },
-                    },
-                  ],
-                },
-              },
-            });
-
+            window.clearTimeout(timeout);
+            await doInit(OneSignal);
             console.log('[OneSignal] Initialized successfully');
             isInitialized = true;
             resolve();
           } catch (error) {
+            window.clearTimeout(timeout);
             console.error('[OneSignal] Init error:', error);
             reject(error);
           }
         });
       });
+
+      await loadOneSignalScript();
+      await ready;
     } catch (error) {
       console.error('[OneSignal] Failed to initialize:', error);
       initPromise = null;
@@ -168,9 +188,20 @@ export async function initOneSignal(): Promise<void> {
  * Execute code with OneSignal SDK ready
  */
 export function withOneSignal<T>(callback: (OneSignal: OneSignalInstance) => T | Promise<T>): Promise<T> {
+  // Fast path: if SDK is already available, run immediately.
+  if (window.OneSignal) {
+    return Promise.resolve().then(() => callback(window.OneSignal!));
+  }
+
   return new Promise((resolve, reject) => {
     window.OneSignalDeferred = window.OneSignalDeferred || [];
+
+    const timeout = window.setTimeout(() => {
+      reject(new Error('OneSignal not ready (timeout)'));
+    }, ONESIGNAL_READY_TIMEOUT_MS);
+
     window.OneSignalDeferred.push(async (OneSignal) => {
+      window.clearTimeout(timeout);
       try {
         const result = await callback(OneSignal);
         resolve(result);
