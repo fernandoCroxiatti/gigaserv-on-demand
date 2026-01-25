@@ -20,16 +20,24 @@ export function NotificationStatusIndicator({
   const [isActivating, setIsActivating] = useState(false);
 
   const handleActivate = async () => {
+    console.log('[NotificationStatusIndicator] 🔔 handleActivate called');
+    console.log('[NotificationStatusIndicator] Current state:', { isEnabled, browserPermission, hasSubscription, loading });
+    
     setIsActivating(true);
     try {
-      await requestPermission();
+      console.log('[NotificationStatusIndicator] Calling requestPermission...');
+      const result = await requestPermission();
+      console.log('[NotificationStatusIndicator] requestPermission returned:', result);
+      
       // Aguarda um pouco para o playerId ser salvo
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      console.log('[NotificationStatusIndicator] Calling refetch...');
       refetch();
     } catch (error) {
-      console.error('Erro ao ativar notificações:', error);
+      console.error('[NotificationStatusIndicator] ❌ Error activating notifications:', error);
     } finally {
       setIsActivating(false);
+      console.log('[NotificationStatusIndicator] ✅ Activation flow finished');
     }
   };
 
