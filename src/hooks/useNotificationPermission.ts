@@ -163,21 +163,38 @@ export function useNotificationPermission(activeProfile?: 'client' | 'provider')
         // Obter e salvar Player ID
         const id = await getOneSignalPlayerId();
         if (id) {
+          console.log('[useNotificationPermission] Got playerId on login:', id);
           setPlayerId(id);
           
-          // Salvar no banco de dados
-          await supabase
-            .from('notification_subscriptions')
-            .upsert({
-              user_id: user.id,
-              endpoint: `onesignal://${id}`,
-              p256dh: 'onesignal',
-              auth: 'onesignal',
-              user_agent: navigator.userAgent,
-              updated_at: new Date().toISOString(),
-            }, {
-              onConflict: 'user_id,endpoint',
-            });
+          // Salvar no banco de dados - delete old subscriptions first to avoid duplicates
+          try {
+            // Delete any existing subscriptions for this user
+            await supabase
+              .from('notification_subscriptions')
+              .delete()
+              .eq('user_id', user.id);
+            
+            // Insert new subscription
+            const { error: insertError } = await supabase
+              .from('notification_subscriptions')
+              .insert({
+                user_id: user.id,
+                endpoint: `onesignal://${id}`,
+                p256dh: 'onesignal',
+                auth: 'onesignal',
+                user_agent: navigator.userAgent,
+              });
+            
+            if (insertError) {
+              console.error('[useNotificationPermission] Error saving subscription:', insertError);
+            } else {
+              console.log('[useNotificationPermission] Subscription saved successfully');
+            }
+          } catch (error) {
+            console.error('[useNotificationPermission] Exception saving subscription:', error);
+          }
+        } else {
+          console.log('[useNotificationPermission] No playerId available yet on login');
         }
       } catch (error) {
         console.error('[useNotificationPermission] Error associating user:', error);
@@ -220,24 +237,43 @@ export function useNotificationPermission(activeProfile?: 'client' | 'provider')
         setCtaDismissed(false);
         
         // Obter e salvar Player ID
+        // Wait a bit for OneSignal to generate the subscription
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
         const id = await getOneSignalPlayerId();
+        console.log('[useNotificationPermission] Got playerId after permission:', id);
+        
         if (id) {
           setPlayerId(id);
           
           // Salvar no banco de dados
           if (user?.id) {
-            await supabase
-              .from('notification_subscriptions')
-              .upsert({
-                user_id: user.id,
-                endpoint: `onesignal://${id}`,
-                p256dh: 'onesignal',
-                auth: 'onesignal',
-                user_agent: navigator.userAgent,
-                updated_at: new Date().toISOString(),
-              }, {
-                onConflict: 'user_id,endpoint',
-              });
+            try {
+              // Delete any existing subscriptions for this user
+              await supabase
+                .from('notification_subscriptions')
+                .delete()
+                .eq('user_id', user.id);
+              
+              // Insert new subscription
+              const { error: insertError } = await supabase
+                .from('notification_subscriptions')
+                .insert({
+                  user_id: user.id,
+                  endpoint: `onesignal://${id}`,
+                  p256dh: 'onesignal',
+                  auth: 'onesignal',
+                  user_agent: navigator.userAgent,
+                });
+              
+              if (insertError) {
+                console.error('[useNotificationPermission] Error saving subscription after permission:', insertError);
+              } else {
+                console.log('[useNotificationPermission] Subscription saved successfully after permission');
+              }
+            } catch (error) {
+              console.error('[useNotificationPermission] Exception saving subscription:', error);
+            }
             
             // Atualizar preferências
             const { error: prefError } = await supabase

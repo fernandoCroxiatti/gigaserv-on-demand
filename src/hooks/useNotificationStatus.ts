@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { isOneSignalPermissionGranted } from '@/lib/oneSignal';
 
 interface NotificationStatus {
   isEnabled: boolean;
@@ -10,6 +9,12 @@ interface NotificationStatus {
   loading: boolean;
 }
 
+/**
+ * Hook to check the real notification status
+ * 
+ * CRITICAL: Only considers user as "enabled" if they have a subscription in the database
+ * Browser permission alone is NOT enough - we need the playerId saved to send notifications
+ */
 export function useNotificationStatus(): NotificationStatus {
   const { user } = useAuth();
   const [status, setStatus] = useState<NotificationStatus>({
@@ -32,20 +37,28 @@ export function useNotificationStatus(): NotificationStatus {
           ? Notification.permission 
           : 'unsupported';
 
-        // Check OneSignal permission
-        const oneSignalGranted = await isOneSignalPermissionGranted();
+        console.log('[NotificationStatus] Browser permission:', browserPermission);
 
-        // Check for subscription in database
-        const { data: subs } = await supabase
+        // Check for subscription in database - THIS IS THE SOURCE OF TRUTH
+        const { data: subs, error } = await supabase
           .from('notification_subscriptions')
-          .select('id')
+          .select('id, endpoint')
           .eq('user_id', user.id)
           .limit(1);
 
-        const hasSubscription = (subs && subs.length > 0) || false;
+        if (error) {
+          console.error('[NotificationStatus] Error fetching subscriptions:', error);
+        }
 
-        // User is enabled if browser permission is granted AND (OneSignal granted OR has subscription)
-        const isEnabled = browserPermission === 'granted' && (oneSignalGranted || hasSubscription);
+        const hasSubscription = (subs && subs.length > 0) || false;
+        
+        console.log('[NotificationStatus] Has subscription in DB:', hasSubscription, subs);
+
+        // CRITICAL: User is ONLY enabled if they have a subscription in the database
+        // Browser permission alone doesn't mean we can send them notifications
+        const isEnabled = browserPermission === 'granted' && hasSubscription;
+
+        console.log('[NotificationStatus] Final status - isEnabled:', isEnabled);
 
         setStatus({
           isEnabled,
@@ -60,6 +73,19 @@ export function useNotificationStatus(): NotificationStatus {
     };
 
     checkStatus();
+
+    // Re-check when visibility changes (user might have accepted notifications in another tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkStatus();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user?.id]);
 
   return status;
