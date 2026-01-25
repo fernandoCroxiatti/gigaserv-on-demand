@@ -15,7 +15,7 @@ export function NotificationStatusIndicator({
   showLabel = true, 
   variant = 'row' 
 }: NotificationStatusIndicatorProps) {
-  const { isEnabled, browserPermission, loading, refetch } = useNotificationStatus();
+  const { isEnabled, browserPermission, hasSubscription, loading, refetch } = useNotificationStatus();
   const { requestPermission } = useNotificationPermission();
   const [isActivating, setIsActivating] = useState(false);
 
@@ -52,6 +52,7 @@ export function NotificationStatusIndicator({
   let statusText = 'Ativas';
   let statusColor = 'bg-status-finished text-white';
   let canActivate = false;
+  let activateText = 'Ativar';
   
   if (!isEnabled) {
     if (browserPermission === 'denied') {
@@ -62,10 +63,18 @@ export function NotificationStatusIndicator({
       statusText = 'Indisponível';
       statusColor = 'bg-muted text-muted-foreground';
       canActivate = false;
+    } else if (browserPermission === 'granted' && !hasSubscription) {
+      // Browser already allowed notifications, but we still don't have a subscription in the DB.
+      // In this case, the action is to "finish activation" (sync playerId), not re-ask permission.
+      statusText = 'Quase lá';
+      statusColor = 'bg-status-searching text-white';
+      canActivate = true;
+      activateText = 'Concluir ativação';
     } else {
       statusText = 'Desativadas';
       statusColor = 'bg-status-searching text-white';
       canActivate = true;
+      activateText = 'Toque para ativar';
     }
   }
 
@@ -80,7 +89,7 @@ export function NotificationStatusIndicator({
           className="gap-1 h-6 px-2 text-xs"
         >
           <BellOff className="w-3 h-3" />
-          {isActivating ? 'Ativando...' : 'Ativar'}
+          {isActivating ? 'Ativando...' : activateText}
         </Button>
       );
     }
@@ -109,7 +118,7 @@ export function NotificationStatusIndicator({
         <div className="flex-1 text-left">
           <p className="text-xs text-muted-foreground">Notificações Push</p>
           <p className="font-medium text-primary">
-            {isActivating ? 'Ativando...' : 'Toque para ativar'}
+            {isActivating ? 'Ativando...' : activateText}
           </p>
         </div>
         <span className="w-2 h-2 rounded-full bg-status-searching animate-pulse" />
