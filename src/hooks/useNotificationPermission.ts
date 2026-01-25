@@ -229,9 +229,79 @@ export function useNotificationPermission(activeProfile?: 'client' | 'provider')
       return false;
     }
     
+    // IMPORTANT:
+    // After clearing cache, the browser permission can remain "granted" while the DB subscription
+    // is missing (no playerId saved). In that case we must re-sync the playerId to the database.
     if (permission === 'granted') {
-      console.log('[useNotificationPermission] Permission already granted');
-      return true;
+      console.log('[useNotificationPermission] Permission already granted - ensuring subscription is saved...');
+      try {
+        // Ensure OneSignal is opted-in (won't re-prompt when already granted)
+        await requestOneSignalPermission();
+
+        // Give OneSignal time to populate the subscription id
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        let id = await getOneSignalPlayerId();
+        console.log('[useNotificationPermission] PlayerId check (already granted):', id);
+
+        // Quick polling in case the ID is not ready yet
+        for (let i = 0; !id && i < 8; i++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          id = await getOneSignalPlayerId();
+        }
+
+        if (id && user?.id) {
+          setPlayerId(id);
+
+          // Delete any existing subscriptions for this user
+          await supabase
+            .from('notification_subscriptions')
+            .delete()
+            .eq('user_id', user.id);
+
+          // Insert new subscription
+          const { error: insertError } = await supabase
+            .from('notification_subscriptions')
+            .insert({
+              user_id: user.id,
+              endpoint: `onesignal://${id}`,
+              p256dh: 'onesignal',
+              auth: 'onesignal',
+              user_agent: navigator.userAgent,
+            });
+
+          if (insertError) {
+            console.error('[useNotificationPermission] Error saving subscription (already granted):', insertError);
+          } else {
+            console.log('[useNotificationPermission] Subscription saved successfully (already granted)');
+          }
+
+          const { error: prefError } = await supabase
+            .from('notification_preferences')
+            .upsert({
+              user_id: user.id,
+              permission_asked_at: new Date().toISOString(),
+              permission_granted: true,
+              enabled: true,
+              chamado_updates: true,
+              promotional: true,
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'user_id',
+            });
+
+          if (prefError) {
+            console.error('[useNotificationPermission] Error saving preferences (already granted):', prefError);
+          }
+        } else {
+          console.warn('[useNotificationPermission] Permission granted but playerId not available yet');
+        }
+
+        return true;
+      } catch (error) {
+        console.error('[useNotificationPermission] Error ensuring subscription (already granted):', error);
+        return true; // permission is granted, even if sync failed
+      }
     }
     
     hasAskedThisSessionRef.current = true;
