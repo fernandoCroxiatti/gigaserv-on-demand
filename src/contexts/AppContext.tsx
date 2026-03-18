@@ -161,6 +161,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rating: Number(providerData.rating) || 5.0,
       totalServices: providerData.total_services || 0,
       services: (providerData.services_offered as ServiceType[]) || ['guincho'],
+      approval_status: (providerData as any).approval_status || 'pending',
+      rejection_reason: (providerData as any).rejection_reason || null,
     } : undefined,
   } : null;
 
@@ -184,7 +186,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .maybeSingle(),
           supabase
             .from('provider_data')
-            .select('*')
+          .select('*, approval_status, rejection_reason')
             .eq('user_id', authUser.id)
             .maybeSingle()
         ]);

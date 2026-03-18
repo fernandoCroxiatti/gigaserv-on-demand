@@ -638,10 +638,12 @@ export type Database = {
       }
       provider_data: {
         Row: {
+          approval_status: Database["public"]["Enums"]["provider_approval_status"] | null
           block_reason: string | null
           blocked_at: string | null
           blocked_by: string | null
           cancellations_after_accept: number | null
+          cnh_url: string | null
           created_at: string
           current_address: string | null
           current_lat: number | null
@@ -694,6 +696,7 @@ export type Database = {
           terms_version_required: string | null
           total_accepted_services: number | null
           total_completed_services: number | null
+          rejection_reason: string | null
           total_services: number | null
           updated_at: string
           user_id: string
@@ -701,10 +704,12 @@ export type Database = {
           vehicle_type: string | null
         }
         Insert: {
+          approval_status?: Database["public"]["Enums"]["provider_approval_status"] | null
           block_reason?: string | null
           blocked_at?: string | null
           blocked_by?: string | null
           cancellations_after_accept?: number | null
+          cnh_url?: string | null
           created_at?: string
           current_address?: string | null
           current_lat?: number | null
@@ -759,6 +764,7 @@ export type Database = {
           terms_version_required?: string | null
           total_accepted_services?: number | null
           total_completed_services?: number | null
+          rejection_reason?: string | null
           total_services?: number | null
           updated_at?: string
           user_id: string
@@ -766,10 +772,12 @@ export type Database = {
           vehicle_type?: string | null
         }
         Update: {
+          approval_status?: Database["public"]["Enums"]["provider_approval_status"] | null
           block_reason?: string | null
           blocked_at?: string | null
           blocked_by?: string | null
           cancellations_after_accept?: number | null
+          cnh_url?: string | null
           created_at?: string
           current_address?: string | null
           current_lat?: number | null
@@ -824,6 +832,7 @@ export type Database = {
           terms_version_required?: string | null
           total_accepted_services?: number | null
           total_completed_services?: number | null
+          rejection_reason?: string | null
           total_services?: number | null
           updated_at?: string
           user_id?: string
@@ -1302,6 +1311,7 @@ export type Database = {
         | "paid_stripe"
         | "failed"
         | "refunded"
+      provider_approval_status: "pending" | "approved" | "rejected"
       service_type: "guincho" | "borracharia" | "mecanica" | "chaveiro"
       user_profile_type: "client" | "provider"
       vehicle_type:
@@ -1473,6 +1483,7 @@ export const Constants = {
         "failed",
         "refunded",
       ],
+      provider_approval_status: ["pending", "approved", "rejected"],
       service_type: ["guincho", "borracharia", "mecanica", "chaveiro"],
       user_profile_type: ["client", "provider"],
       vehicle_type: [

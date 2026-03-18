@@ -9,6 +9,7 @@ import { Loader2, Phone, Lock, User, FileText, Eye, EyeOff, ArrowLeft, Check } f
 import { SERVICE_CONFIG, ServiceType } from '@/types/chamado';
 import { ForgotPasswordModal } from '@/components/Auth/ForgotPasswordModal';
 import { requestOneSignalPermission, oneSignalLogin } from '@/lib/oneSignal';
+import { CNHUpload } from '@/components/Provider/Onboarding/CNHUpload';
 
 type ProfileType = 'client' | 'provider';
 type AuthStep = 'select' | 'phone' | 'password' | 'register';
@@ -62,6 +63,7 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [cpf, setCpf] = useState('');
+  const [cnhUrl, setCnhUrl] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [selectedServices, setSelectedServices] = useState<ServiceType[]>(['guincho']);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -305,6 +307,7 @@ export default function Auth() {
             phone: phone.replace(/\D/g, ''),
             perfil_principal: profileType,
             cpf: profileType === 'provider' ? cpf.replace(/\D/g, '') : null,
+              approval_status: profileType === 'provider' ? 'pending' : 'approved',
             services_offered: profileType === 'provider' ? selectedServices : null,
             vehicle_plate: profileType === 'provider' && vehiclePlate ? vehiclePlate.toUpperCase() : null,
           },
@@ -678,6 +681,7 @@ export default function Auth() {
                           />
                         </div>
                       </div>
+
 
                       <div className="space-y-1.5">
                         <Label htmlFor="vehiclePlate" className="text-foreground text-sm">Placa do veículo <span className="text-muted-foreground text-[10px] font-normal">(opcional)</span></Label>

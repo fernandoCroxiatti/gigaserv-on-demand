@@ -518,7 +518,45 @@ export function useAdminProviders() {
     }
   };
 
-  return { providers, loading, onlineNow, onlineToday, blockProvider, unblockProvider, togglePayout, refetch: fetchProviders };
+  const updateApprovalStatus = async (userId: string, status: 'approved' | 'rejected', adminId: string, reason?: string) => {
+    try {
+      const { error } = await supabase
+        .from('provider_data')
+        .update({
+          approval_status: status,
+          rejection_reason: reason || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      await supabase.from('admin_logs').insert({
+        admin_id: adminId,
+        action: status === 'approved' ? 'approve_provider' : 'reject_provider',
+        target_type: 'provider',
+        target_id: userId,
+        details: { reason },
+      });
+
+      await fetchProviders();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err };
+    }
+  };
+
+  return {
+    providers,
+    loading,
+    onlineNow,
+    onlineToday,
+    blockProvider,
+    unblockProvider,
+    togglePayout,
+    updateApprovalStatus,
+    refetch: fetchProviders
+  };
 }
 
 export function useAdminClients() {
