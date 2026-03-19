@@ -145,6 +145,8 @@ export interface Provider {
   vehiclePlate?: string; // Vehicle plate (optional)
 }
 
+export type ProviderApprovalStatus = 'pending' | 'approved' | 'rejected';
+
 export interface User {
   id: string;
   name: string;
@@ -158,6 +160,8 @@ export interface User {
     rating: number;
     totalServices: number;
     services: ServiceType[];
+    approval_status?: ProviderApprovalStatus;
+    rejection_reason?: string | null;
   };
 }
 

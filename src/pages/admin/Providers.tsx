@@ -20,7 +20,11 @@ import {
   Calendar,
   ChevronDown,
   Percent,
-  Settings
+  Settings,
+  FileText,
+  Clock,
+  XCircle,
+  ExternalLink
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -185,10 +189,22 @@ function ProviderFeeConfig({ provider, onUpdate }: { provider: any; onUpdate: ()
 
 export default function AdminProviders() {
   const { user } = useAuth();
-  const { providers, loading, onlineNow, onlineToday, blockProvider, unblockProvider, togglePayout, refetch: fetchProviders } = useAdminProviders();
+  const {
+    providers,
+    loading,
+    onlineNow,
+    onlineToday,
+    blockProvider,
+    unblockProvider,
+    togglePayout,
+    updateApprovalStatus,
+    refetch: fetchProviders
+  } = useAdminProviders();
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [blockDialog, setBlockDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
+  const [rejectionDialog, setRejectionDialog] = useState<{ open: boolean; provider?: any }>({ open: false });
   const [blockReason, setBlockReason] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -263,6 +279,28 @@ export default function AdminProviders() {
     }
   };
 
+  const handleApprove = async (userId: string) => {
+    if (!user) return;
+    const result = await updateApprovalStatus(userId, 'approved', user.id);
+    if (result.success) {
+      toast.success('Prestador aprovado com sucesso');
+    } else {
+      toast.error('Erro ao aprovar prestador');
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectionDialog.provider || !user) return;
+    const result = await updateApprovalStatus(rejectionDialog.provider.user_id, 'rejected', user.id, rejectionReason);
+    if (result.success) {
+      toast.success('Prestador rejeitado');
+      setRejectionDialog({ open: false });
+      setRejectionReason('');
+    } else {
+      toast.error('Erro ao rejeitar prestador');
+    }
+  };
+
   const loadMore = useCallback(() => {
     setVisibleCount(prev => prev + PAGE_SIZE);
   }, []);
@@ -326,11 +364,11 @@ export default function AdminProviders() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Stripe Conectado</CardTitle>
+            <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">
-              {providers.filter(p => p.stripe_connected).length}
+            <div className="text-2xl font-bold text-amber-500">
+              {providers.filter(p => p.approval_status === 'pending').length}
             </div>
           </CardContent>
         </Card>
@@ -363,7 +401,9 @@ export default function AdminProviders() {
                   <div className="flex items-center gap-2">
                     <Truck className="w-4 h-4" />
                     <span>{selectedProvider.profile?.name || 'Sem nome'}</span>
-                    {selectedProvider.is_online ? (
+                    {selectedProvider.approval_status === 'pending' ? (
+                      <Badge className="bg-amber-500 text-white ml-2 text-xs">Pendente</Badge>
+                    ) : selectedProvider.is_online ? (
                       <Badge className="bg-status-finished text-white ml-2 text-xs">Online</Badge>
                     ) : selectedProvider.is_blocked ? (
                       <Badge variant="destructive" className="ml-2 text-xs">Bloqueado</Badge>
@@ -410,7 +450,9 @@ export default function AdminProviders() {
                           {provider.profile?.phone && (
                             <span className="text-muted-foreground text-xs">({provider.profile.phone})</span>
                           )}
-                          {provider.is_online ? (
+                          {provider.approval_status === 'pending' ? (
+                            <Badge className="bg-amber-500 text-white ml-auto text-xs">Pendente</Badge>
+                          ) : provider.is_online ? (
                             <Badge className="bg-status-finished text-white ml-auto text-xs">Online</Badge>
                           ) : provider.is_blocked ? (
                             <Badge variant="destructive" className="ml-auto text-xs">Bloqueado</Badge>
@@ -441,7 +483,11 @@ export default function AdminProviders() {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">{selectedProvider.profile?.name || 'Sem nome'}</h3>
                 <div className="flex items-center gap-2">
-                  {selectedProvider.is_blocked ? (
+                  {selectedProvider.approval_status === 'pending' ? (
+                    <Badge className="bg-amber-500 text-white">Pendente de Aprovação</Badge>
+                  ) : selectedProvider.approval_status === 'rejected' ? (
+                    <Badge variant="destructive">Reprovado</Badge>
+                  ) : selectedProvider.is_blocked ? (
                     <Badge variant="destructive">Bloqueado</Badge>
                   ) : selectedProvider.is_online ? (
                     <Badge className="bg-status-finished text-white">Online</Badge>
@@ -500,6 +546,76 @@ export default function AdminProviders() {
                   ))}
                 </div>
               </div>
+
+              {selectedProvider.approval_status === 'pending' && selectedProvider.cnh_url && (
+                <div className="border border-amber-200 rounded-xl p-5 bg-amber-50/50 space-y-4">
+                  <div className="flex items-center gap-2 text-amber-700 font-semibold">
+                    <FileText className="w-5 h-5" />
+                    <span>Documento Pendente (CNH)</span>
+                  </div>
+
+                  <div className="relative aspect-video rounded-lg overflow-hidden border border-border bg-black/5 flex items-center justify-center">
+                    {selectedProvider.cnh_url.startsWith('http') ? (
+                      <img
+                        src={selectedProvider.cnh_url}
+                        alt="CNH"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <FileText className="w-10 h-10 opacity-20" />
+                        <p className="text-sm">O documento está armazenado no bucket</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            const { data } = await supabase.storage
+                              .from('provider-documents')
+                              .createSignedUrl(selectedProvider.cnh_url, 300);
+                            if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                          }}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Visualizar Original
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button
+                      variant="outline"
+                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => setRejectionDialog({ open: true, provider: selectedProvider })}
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Reprovar Cadastro
+                    </Button>
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => handleApprove(selectedProvider.user_id)}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Aprovar Prestador
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {selectedProvider.approval_status === 'rejected' && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-sm text-destructive">
+                    <strong>Motivo da reprovação:</strong> {selectedProvider.rejection_reason || 'Não informado'}
+                  </p>
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-destructive text-xs mt-2"
+                    onClick={() => handleApprove(selectedProvider.user_id)}
+                  >
+                    Reverter e Aprovar
+                  </Button>
+                </div>
+              )}
 
               {selectedProvider.is_blocked && selectedProvider.block_reason && (
                 <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
@@ -571,6 +687,36 @@ export default function AdminProviders() {
             <Button variant="destructive" onClick={handleBlock} disabled={!blockReason}>
               <Ban className="w-4 h-4 mr-1" />
               Bloquear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectionDialog.open} onOpenChange={(open) => setRejectionDialog({ open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reprovar Cadastro</DialogTitle>
+            <DialogDescription>
+              Informe o motivo da reprovação para o prestador {rejectionDialog.provider?.profile?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Motivo da reprovação</Label>
+              <Textarea
+                placeholder="Ex: Foto da CNH está ilegível, Documento vencido..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectionDialog({ open: false })}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleReject} disabled={!rejectionReason}>
+              <XCircle className="w-4 h-4 mr-1" />
+              Confirmar Reprovação
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { redirectExternal } from '@/lib/openExternal';
 
@@ -43,10 +44,11 @@ export default function StripeCallback() {
         setStatus('refresh');
         setMessage('Não foi possível verificar a conta. Tente novamente.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error checking status:', err);
       setStatus('error');
       setMessage('Erro ao verificar status da conta.');
+      toast.error('Erro na verificação do Stripe: ' + (err.message || 'Erro desconhecido'));
     }
   };
 
@@ -66,10 +68,11 @@ export default function StripeCallback() {
       } else {
         throw new Error('URL não retornada');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error:', err);
       setStatus('error');
       setMessage('Erro ao gerar link. Tente novamente pelo perfil.');
+      toast.error('Erro ao conectar com Stripe: ' + (err.message || 'Erro de conexão'));
     }
   };
 
